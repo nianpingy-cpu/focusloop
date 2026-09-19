@@ -1,6 +1,7 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import type { Course } from '@focusloop/shared-types';
 import { I18nService } from '../core/i18n/i18n.service';
+import { AppStateService } from '../core/app-state.service';
 import { buildKnowledgeMap, recallScore } from '../core/knowledge-map';
 
 /**
@@ -72,6 +73,7 @@ import { buildKnowledgeMap, recallScore } from '../core/knowledge-map';
             <textarea
               rows="5"
               data-testid="recall-draft"
+              [attr.lang]="locale()"
               [value]="draft()"
               (input)="onDraft($event)"
             ></textarea>
@@ -98,6 +100,7 @@ import { buildKnowledgeMap, recallScore } from '../core/knowledge-map';
 })
 export class CourseMapComponent {
   private readonly i18n = inject(I18nService);
+  private readonly state = inject(AppStateService);
 
   readonly course = input.required<Course>();
   /** The ids the session has completed, so the map can tell whether the course is finished. */
@@ -108,6 +111,14 @@ export class CourseMapComponent {
     buildKnowledgeMap(this.course().title, this.course().concepts),
   );
   protected readonly draft = signal('');
+  /**
+   * The interface language, on the element itself.
+   *
+   * Dictation picks its recognition language from the element it is typing into, so without this a
+   * learner using the Chinese interface would get English recognition and a page of nonsense. This
+   * is the difference between dictation working and appearing to be broken.
+   */
+  protected readonly locale = this.state.locale;
   protected readonly score = computed(() => recallScore(this.course().concepts, this.draft()));
   protected readonly total = computed(() => this.course().concepts.length);
   protected readonly finished = computed(() => {
