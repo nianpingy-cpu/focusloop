@@ -1,6 +1,7 @@
 import {
   isInsightRange,
   isLocale,
+  isStuckReason,
   isThemePreference,
   LEARNING_EVENT_TYPES,
   SESSION_END_REASONS,
@@ -83,6 +84,25 @@ export function parseDispatchRequest(channel: string, value: unknown): DispatchE
   }
   if (JSON.stringify(payload).length > MAX_PAYLOAD_BYTES) {
     fail(channel, 'payload is too large');
+  }
+  const fields = payload as Record<string, unknown>;
+
+  /*
+   * Most event payloads are carried, not read, so the boundary leaves them opaque rather than
+   * learning the shape of every event. `HELP_REQUESTED` is the exception: the policy turns its
+   * `reason` into a decision about what the agent does next, so the value is acted on — and a value
+   * that is only rejected later by `isStuckReason` has already been written verbatim into the
+   * learner's event log by then.
+   */
+  if (type === 'HELP_REQUESTED') {
+    asOptionalString(channel, fields, 'taskId');
+    // `null` is rejected along with everything else: the renderer leaves the field out to mean "they
+    // would rather not say", and two spellings for one absence is how a silent press starts being
+    // read as an answer.
+    const reason = fields['reason'];
+    if (reason !== undefined && !isStuckReason(reason)) {
+      fail(channel, '"reason" must be a known stuck reason when present');
+    }
   }
 
   const at = asOptionalString(channel, record, 'at');

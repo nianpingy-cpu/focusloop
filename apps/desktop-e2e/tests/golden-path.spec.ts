@@ -738,6 +738,23 @@ test('the import form asks for a file name instead of failing on the channel', a
   await expect(submit).toBeEnabled();
   await expect(reason).toBeHidden();
 
+  /*
+   * The developer inspector is laid over this corner of the screen, and over this button in
+   * particular once a running session has pushed the form down. A press has to land on the button:
+   * `elementFromPoint` asks the document what is actually at that pixel, which no z-order or
+   * `pointer-events` mistake can talk its way out of.
+   */
+  await submit.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      submit.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        const under = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return under === el || el.contains(under);
+      }),
+    )
+    .toBe(true);
+
   // And the import it guards actually goes through: no channel error, and a result to show.
   await submit.click();
   await expect(window.locator('.banner--error')).toHaveCount(0);
@@ -790,4 +807,64 @@ test('a file on the machine can be imported without typing any of it out', async
   await expect(notice).toBeVisible();
   await expect(name).toHaveValue('rotations.md');
   await expect(window.getByTestId('import-summary')).toBeVisible();
+});
+
+/*
+ * Last on purpose too, and for the same reason the fold test is: a reasoned help request spends part
+ * of the intervention policy's session budget, and running this earlier left the Chinese test with
+ * nothing to show. Nothing after it, and it ends the session it started so nothing is left current.
+ */
+test('the reason the learner gives is answered according to which kind of stuck it is', async () => {
+  /*
+   * The one producer of the reason this whole slice acts on.
+   *
+   * The policy's own tests prove the *rule* by handing it an event they wrote themselves, which is how
+   * a rule can be right while the app can never reach it: the reason has to be produced by something a
+   * learner can press. Deleting the six reason buttons leaves every unit suite green, so the button is
+   * pressed here, in the built app, and the answer is read back off the panel.
+   */
+  await clickSidebarLink('Home');
+  await window.getByTestId('course-card').first().getByTestId('start-session').click();
+  await window.getByTestId('start-task').first().click();
+
+  // Escape is a way out. A learner who opened this by mistake must not have to send an event to close
+  // it, and the focus has to land somewhere they can see rather than nowhere.
+  await window.getByTestId('focus-stuck').click();
+  await expect(window.getByTestId('stuck-tired')).toBeVisible();
+  await window.keyboard.press('Escape');
+  await expect(window.getByTestId('stuck-tired')).toBeHidden();
+  await expect(window.getByTestId('focus-stuck')).toBeFocused();
+
+  // "Tired" is answered with a rest, and with the learner's own words in the second person — not the
+  // first-person label of the button that was pressed.
+  await window.getByTestId('focus-stuck').click();
+  await window.getByTestId('stuck-tired').click();
+  await expect(window.getByTestId('stuck-tired')).toBeHidden();
+
+  const agent = window.locator('.agent');
+  await expect(agent).toBeVisible();
+  await expect(agent).toHaveAttribute('data-action', 'BREAK');
+  await expect(agent).toContainText('You said you had not got the energy for it.');
+  await expect(agent).not.toContainText("I haven't got the energy for it");
+
+  // A different kind of stuck is answered differently, which is the premise of asking at all.
+  await agent.getByRole('button', { name: 'Not now' }).click();
+  await expect(agent).toBeHidden();
+
+  await window.getByTestId('focus-stuck').click();
+  await window.getByTestId('stuck-do-not-understand').click();
+  await expect(agent).toBeVisible();
+  await expect(agent).toHaveAttribute('data-action', 'EXAMPLE');
+  await expect(agent).toContainText('You said reading it was not making sense.');
+
+  await expect(window.locator('.banner--error')).toHaveCount(0);
+
+  // The chooser does not come back on its own: it was answered, and the answer is a thing that has
+  // happened rather than a mode the control stays in.
+  await expect(window.getByTestId('stuck-tired')).toBeHidden();
+  await expect(window.getByTestId('focus-stuck')).toBeVisible();
+
+  // Left as it was found, so a re-run of this file does not start from a session.
+  await window.getByTestId('end-session').click();
+  await expect(window.getByRole('heading', { name: 'No session running' })).toBeVisible();
 });

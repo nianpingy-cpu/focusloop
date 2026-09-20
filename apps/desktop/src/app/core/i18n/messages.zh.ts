@@ -151,7 +151,6 @@ export const zh: Record<MessageKey, string> = {
   'focus.paused': '已暂停',
   'focus.timeUp': '时间到了',
   'focus.complete': '完成任务',
-  'focus.needHelp': '我需要帮助',
   'focus.noTask': '当前没有进行中的任务。',
   'focus.upNext': '接下来',
   'focus.startTask': '开始',

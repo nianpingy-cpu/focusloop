@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, inject, signal, viewChild } from '@angular/core';
 import type { ElementRef, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import type { MicroTask, MicroTaskKind, StuckReason } from '@focusloop/shared-types';
@@ -23,6 +23,7 @@ import { formatSpan } from '../core/insights-view';
 import { KIND_GLYPHS, buildPlan } from '../core/session-plan';
 import { keepsRail, type FocusPhase } from '../core/focus-phase';
 import { PLAN_INITIAL_OPEN, nextPlanOpen, type PlanEvent } from '../core/plan-visibility';
+import { helpRequestPayload } from '../core/stuck-picker';
 
 const CLOCK_RADIUS = 86;
 const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
@@ -37,7 +38,7 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
    * click that lands outside the panel never reaches it at all.
    */
   host: {
-    '(document:keydown.escape)': 'dismissPlan()',
+    '(document:keydown.escape)': 'onEscape()',
     '(document:click)': 'onDocumentClick($event)',
   },
   template: `
@@ -192,6 +193,10 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                   The reason is asked for here, because this is the only place it can come from. What
                   the agent should do next turns on which kind of stuck this is — shrink the task,
                   explain it another way, or stop — and the learning state cannot tell those apart.
+
+                  Escape closes it again. "I would rather not say" is a real answer and deliberately
+                  not the way back, so without that a learner who opened this by mistake would have to
+                  send an event to escape — which is the interruption this control exists to avoid.
                 -->
                 @if (stuckOpen()) {
                   <div class="stuck-reasons" role="group" [attr.aria-label]="t('focus.stuck.aria')">
@@ -223,6 +228,7 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                   <button
                     type="button"
                     class="btn btn--quiet"
+                    #stuckTrigger
                     data-testid="focus-stuck"
                     (click)="openStuck()"
                   >
@@ -325,6 +331,7 @@ export class FocusPage implements OnDestroy {
   protected readonly planOpen = this.planOpenState.asReadonly();
   private readonly planRoot = viewChild<ElementRef<HTMLElement>>('planRoot');
   private readonly planTrigger = viewChild<ElementRef<HTMLButtonElement>>('planTrigger');
+  private readonly stuckTrigger = viewChild<ElementRef<HTMLButtonElement>>('stuckTrigger');
 
   protected readonly t = this.i18n.t;
   protected readonly snapshot = this.state.snapshot;
@@ -350,6 +357,34 @@ export class FocusPage implements OnDestroy {
   protected readonly railAttr = computed(() => (this.rail() ? '' : null));
   protected readonly plan = computed(() => buildPlan(this.openTasks()));
   protected readonly nextTask = computed<MicroTask | null>(() => this.openTasks()[0] ?? null);
+
+  /** Set while the chooser is open, so closing it knows the trigger is owed the focus back. */
+  private stuckReturnFocus = false;
+
+  /**
+   * Handing focus back to the button that opened the chooser.
+   *
+   * An effect rather than a call inside the handler, because the trigger sits in the `@else` of the
+   * chooser: while the chooser is open the button does not exist, so focusing it as the Escape is
+   * handled reads a `viewChild` that is still empty and the focus goes nowhere. This is the same
+   * arrangement the resume card uses to move focus into and out of a card that only exists while it
+   * is shown.
+   *
+   * The flag is cleared only once the focus has actually been given, so an effect run that arrives
+   * before the button is in the view leaves it set for the run that comes after.
+   */
+  private readonly manageStuckFocus = effect(() => {
+    if (this.stuckOpen()) {
+      this.stuckReturnFocus = true;
+      return;
+    }
+
+    const trigger = this.stuckTrigger()?.nativeElement;
+    if (this.stuckReturnFocus && trigger !== undefined) {
+      this.stuckReturnFocus = false;
+      trigger.focus();
+    }
+  });
 
   protected glyph(kind: MicroTaskKind): string {
     return KIND_GLYPHS[kind];
@@ -384,6 +419,24 @@ export class FocusPage implements OnDestroy {
 
   protected togglePlan(): void {
     this.applyPlanEvent('toggle');
+  }
+
+  /**
+   * Escape, which belongs to whatever is open. The chooser first: it is the more recent thing the
+   * learner raised, and closing the plan underneath it would leave six buttons over a screen the
+   * learner has just asked to tidy up.
+   */
+  protected onEscape(): void {
+    if (this.stuckOpen()) {
+      this.dismissStuck();
+      return;
+    }
+    this.dismissPlan();
+  }
+
+  /** Escape out of the chooser: focus goes back to the control that opened it, not into the void. */
+  protected dismissStuck(): void {
+    this.stuckOpen.set(false);
   }
 
   /** Escape. Focus goes back to the trigger so the keyboard is not left with nowhere to be. */
@@ -466,7 +519,7 @@ export class FocusPage implements OnDestroy {
    */
   protected async sayStuck(taskId: string, reason: StuckReason | null): Promise<void> {
     this.stuckOpen.set(false);
-    await this.state.dispatch('HELP_REQUESTED', reason === null ? { taskId } : { taskId, reason });
+    await this.state.dispatch('HELP_REQUESTED', helpRequestPayload(taskId, reason));
   }
   protected async end(): Promise<void> {
     this.clearTimer();
@@ -477,6 +530,7 @@ export class FocusPage implements OnDestroy {
   }
   ngOnDestroy(): void {
     this.clearTimer();
+    this.manageStuckFocus.destroy();
   }
 
   protected openTasks(): readonly MicroTask[] {

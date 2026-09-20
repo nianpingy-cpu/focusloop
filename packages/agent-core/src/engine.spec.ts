@@ -301,6 +301,32 @@ describe('FocusLoopEngine', () => {
       expect(first.decision?.action).toBe('SIMPLIFY');
       expect(second.decision?.action).not.toBe('SIMPLIFY');
     });
+
+    it('records which request the answer answered', () => {
+      /*
+       * The link between the answer and the request, as the store actually keeps it. The policy's own
+       * test asserts the decision carries the id; this asserts the round trip — decision → saved
+       * intervention → read back — because that is the part a wrong column name would break, and it is
+       * the only thing standing between the learner and the same request being answered for ever.
+       */
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      const response = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { reason: 'tired' },
+      });
+
+      const request = ctx.engine.listEvents(session.id).at(-1);
+      expect(request?.type).toBe('HELP_REQUESTED');
+
+      const shown = ctx.engine
+        .listInterventions(session.id)
+        .filter((item) => item.action !== 'RESUME');
+      expect(shown).toHaveLength(1);
+      expect(shown[0]?.answersRequestId).toBe(request?.id);
+      expect(shown[0]?.id).toBe(response.interventionId);
+    });
   });
 
   describe('session lifecycle', () => {

@@ -123,46 +123,37 @@ const REASON_CODE_FOR_STUCK: Record<StuckReason, InterventionReasonCode> = {
 };
 
 /**
- * The reason from a help request the learner has made and that has not been answered yet, or null.
+ * The learner's most recent help request, when it has a stated reason and has not been answered yet.
  *
  * `null` covers three different situations on purpose, because the caller treats them the same:
  * nobody asked; somebody asked without saying why; somebody asked and has already had an answer. Each
  * falls through to the state-based rules, which is the right answer in all three.
  *
- * The "already answered" test is what stops this repeating for ever. An intervention is persisted as an
- * intervention, not as an event, so a help request stays the most recent event after it has been
- * answered — without this, the same request would be answered again on every tick.
+ * "Already answered" is *recorded*, not inferred from timestamps. An intervention that was produced
+ * in answer to a request carries that request's event id (`answersRequestId`), so the test is an
+ * identity comparison. Inferring it from `shownAt >= asked.at` instead would swallow a genuine
+ * request whenever anything — the resume card, a state rule, an unrelated escalation — happened to
+ * be shown in the same millisecond, and the learner's press would be answered with silence.
+ *
+ * Rows written before `answersRequestId` existed carry no id and are read as answering nothing, so a
+ * request straddling the upgrade is answered once more and then marked. That is bounded at one extra
+ * answer per request, which is why it is acceptable; a timestamp comparison is the version that is
+ * not, because the same confusion recurs every time the two coincide.
  */
-function unansweredStuckReason(
+function unansweredStuckRequest(
   events: readonly LearningEvent[],
   shownInterventions: readonly Intervention[],
-): StuckReason | null {
+): { readonly requestId: string; readonly reason: StuckReason } | null {
   const asked = lastEventOfType(events, 'HELP_REQUESTED');
   if (asked === null || asked.type !== 'HELP_REQUESTED') return null;
 
-  /*
-   * At-or-after, and the choice is a trade-off rather than a detail.
-   *
-   * Strictly-after looks more correct — "answered" should mean an intervention shown *after* the
-   * request — and it is worse. The answer to a request lands in the same millisecond as the request,
-   * because both come from the same clock, so strictly-after reads a request that has just been
-   * answered as unanswered and answers it again on every dispatch, for ever. `engine.spec.ts` has the
-   * test that catches this.
-   *
-   * At-or-after can instead swallow a genuine request that shares a millisecond with an unrelated
-   * intervention. That costs the learner one unanswered press; the other costs an unbounded loop.
-   *
-   * Neither is right, because "was this request answered" is being inferred from timestamps rather
-   * than recorded. The fix is for an intervention to carry the id of the request it answered; that is
-   * a schema change across `shared-types` and the store, and it is not this change.
-   */
-  const answered = shownInterventions.some((shown) => shown.shownAt >= asked.at);
+  const answered = shownInterventions.some((shown) => shown.answersRequestId === asked.id);
   if (answered) return null;
 
   const { reason } = asked.payload;
   // Validated rather than trusted: events come back out of the store, and a hand-edited row should not
   // be able to name a reason this build has never heard of.
-  return isStuckReason(reason) ? reason : null;
+  return isStuckReason(reason) ? { requestId: asked.id, reason } : null;
 }
 
 /** The state rules, in priority order. First match wins. */
@@ -261,13 +252,16 @@ export function decideIntervention(
    * With no reason given this falls through to the state rules below: "they did not say" is not one of
    * the reasons and must not be answered as though it were.
    */
-  const askedReason = unansweredStuckReason(recentEvents, shownInterventions);
-  if (askedReason !== null) {
-    return decision(
-      REASON_CODE_FOR_STUCK[askedReason],
-      ACTION_FOR_STUCK_REASON[askedReason],
-      state,
-    );
+  const asked = unansweredStuckRequest(recentEvents, shownInterventions);
+  if (asked !== null) {
+    return {
+      ...decision(
+        REASON_CODE_FOR_STUCK[asked.reason],
+        ACTION_FOR_STUCK_REASON[asked.reason],
+        state,
+      ),
+      answersRequestId: asked.requestId,
+    };
   }
 
   const candidate = candidateFor(engineState, input.currentTask, now, config);
@@ -299,6 +293,9 @@ export function createIntervention(
     action: decision.action,
     reason: decision.reason,
     shownAt: seed.at,
+    ...(decision.answersRequestId === undefined
+      ? {}
+      : { answersRequestId: decision.answersRequestId }),
   };
 }
 

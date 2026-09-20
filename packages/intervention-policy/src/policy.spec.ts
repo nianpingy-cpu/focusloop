@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Intervention, LearningEvent } from '@focusloop/shared-types';
-import { DOMAIN_MESSAGE_KEYS } from '@focusloop/shared-types';
-import { createIntervention, decideIntervention, type DecideInterventionInput } from './policy';
+import { DOMAIN_MESSAGE_KEYS, STUCK_REASONS } from '@focusloop/shared-types';
+import {
+  ACTION_FOR_STUCK_REASON,
+  createIntervention,
+  decideIntervention,
+  type DecideInterventionInput,
+} from './policy';
 import { resolvePolicyConfig, type InterventionPolicyConfig } from './config';
 import { at, engineWith, eventWith, interventionWith, T0, taskWith } from './fixtures';
 
@@ -61,28 +66,58 @@ describe('intervention policy — the learner asks for help (AG2)', () => {
     expect(decision.action).toBe(action);
   });
 
-  it('says which kind of stuck it was answering', () => {
+  /**
+   * The whole table, both halves of every row.
+   *
+   * The premise of the feature is that what happens next *and* what the learner is told depend on the
+   * kind of stuck. Asserting the action alone leaves the wording unpinned: swapping two reasons that
+   * share an action — `went-wrong` and `cannot-recall` both land on HINT — would show the learner the
+   * wrong explanation with every test still green.
+   *
+   * `STUCK_REASONS` is the list the picker offers, so a reason that is in the vocabulary and missing
+   * from a table is a failure here rather than a NO_ACTION the learner discovers.
+   */
+  it.each([...STUCK_REASONS])('answers %s with its own action and its own words', (reason) => {
+    const decision = decide({
+      engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+      recentEvents: asked({ reason }),
+      now: T0,
+    });
+
+    expect(decision).toMatchObject({
+      action: ACTION_FOR_STUCK_REASON[reason],
+      reason: { key: `reason.stuck.${reason}` },
+    });
+  });
+
+  it('marks the answer with the request it is answering', () => {
     /*
-     * The premise of the feature is that what happens next depends on the kind of stuck. A single
-     * sentence for every kind would leave that premise out of the one place the learner is told what was
-     * decided and why — which is what this review finding was about.
-     *
-     * The two reasons chosen here also share nothing else: different action and different wording.
+     * The record that makes "has this been answered" a fact rather than a guess. Without it the only
+     * evidence is a timestamp, and a timestamp cannot tell an answer from anything else shown in the
+     * same millisecond.
      */
-    const tired = decide({
+    const decision = decide({
       engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
       recentEvents: asked({ reason: 'tired' }),
       now: T0,
     });
-    const tooBig = decide({
-      engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
-      recentEvents: asked({ reason: 'too-big' }),
-      now: T0,
-    });
 
-    expect(tired.reason.key).toBe('reason.stuck.tired');
-    expect(tooBig.reason.key).toBe('reason.stuck.too-big');
-    expect(tired.reason.key).not.toBe(tooBig.reason.key);
+    expect(decision.answersRequestId).toBe(`HELP_REQUESTED:${T0}`);
+  });
+
+  it('answers every kind differently in words', () => {
+    // Six reasons, six sentences. A reason that reads back the same as another is a learner who cannot
+    // tell what the agent thought they meant.
+    const keys = STUCK_REASONS.map(
+      (reason) =>
+        decide({
+          engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+          recentEvents: asked({ reason }),
+          now: T0,
+        }).reason.key,
+    );
+
+    expect(new Set(keys).size).toBe(STUCK_REASONS.length);
   });
 
   it('does not answer the same request twice', () => {
@@ -92,11 +127,41 @@ describe('intervention policy — the learner asks for help (AG2)', () => {
     const decision = decide({
       engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
       recentEvents: asked({ reason: 'tired' }),
-      shownInterventions: [interventionWith(T0)],
+      shownInterventions: [interventionWith(T0, 'BREAK', `HELP_REQUESTED:${T0}`)],
       now: at(1_000),
     });
 
     expect(decision.action).toBe('NO_ACTION');
+  });
+
+  it('still answers a request that shares its millisecond with something unrelated', () => {
+    /*
+     * The defect the id exists to remove. Answering a request happens inside the same dispatch that
+     * wrote it, and anything else shown in that dispatch carries the same timestamp — so a comparison
+     * on `shownAt` reads the request as already answered and the learner's press is met with silence.
+     * An intervention that does not record this request cannot have been its answer.
+     */
+    const decision = decide({
+      engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+      recentEvents: asked({ reason: 'tired' }),
+      shownInterventions: [interventionWith(T0, 'HINT')],
+      now: T0,
+    });
+
+    expect(decision.action).toBe('BREAK');
+    expect(decision.reason.key).toBe('reason.stuck.tired');
+  });
+
+  it('does not treat an answer to a different request as an answer to this one', () => {
+    // Two presses, one answer: the second press is still owed an answer of its own.
+    const decision = decide({
+      engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+      recentEvents: asked({ reason: 'tired' }),
+      shownInterventions: [interventionWith(T0, 'BREAK', `HELP_REQUESTED:${at(-5_000)}`)],
+      now: at(1_000),
+    });
+
+    expect(decision.action).toBe('BREAK');
   });
 
   it('falls back to the state rules when no reason was given', () => {

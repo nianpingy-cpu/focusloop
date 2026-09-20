@@ -159,7 +159,6 @@ const en = {
   'focus.paused': 'paused',
   'focus.timeUp': 'time is up',
   'focus.complete': 'Complete task',
-  'focus.needHelp': 'Need help',
   'focus.noTask': 'No task in progress.',
   'focus.upNext': 'Up next',
   'focus.startTask': 'Start',
