@@ -310,6 +310,7 @@ const en = {
   'reason.simplify': 'This task is carrying too much at once.',
   'reason.question': 'A question to check your own understanding.',
   'reason.distracted': 'You have been away. No interruption — just noting it.',
+  'reason.stuck': 'You said you were stuck, so here is the help that goes with it.',
   'reason.none': 'Nothing needs a suggestion right now.',
 } as const;
 

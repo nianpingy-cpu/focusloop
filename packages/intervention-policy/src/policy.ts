@@ -7,8 +7,9 @@ import type {
   LearningState,
   MessageParams,
   MicroTask,
+  StuckReason,
 } from '@focusloop/shared-types';
-import { message } from '@focusloop/shared-types';
+import { isStuckReason, message } from '@focusloop/shared-types';
 import type { StateEngineState } from '@focusloop/learning-state';
 import type { InterventionPolicyConfig } from './config';
 import { resolvePolicyConfig } from './config';
@@ -75,6 +76,59 @@ function lastEventOfType(
     if (event !== undefined && event.type === type) return event;
   }
   return null;
+}
+
+/**
+ * The action a stated reason asks for (AG2).
+ *
+ * A table, not a model call, for the same reason `decideIntervention` is rule-based: the learner has
+ * just told us something specific, and turning that into a decision about what happens next is
+ * exactly the kind of choice they have to be able to predict and trust.
+ *
+ * Two reasons share an action deliberately. `went-wrong` and `cannot-recall` both land on HINT: in
+ * both, the learner has most of it and needs the missing piece — not a smaller task, and not a rest.
+ * They stay separate reasons because the *content* of the help differs, which is later work, not
+ * because the choice of action does.
+ *
+ * `do-not-understand` lands on EXAMPLE rather than HINT. A hint is for somebody who nearly has it;
+ * this learner has said that reading it is not producing understanding, and a worked example is the
+ * form that most reliably does. Offering all three is the learner's own choice to make in the
+ * interface, not something to guess at here.
+ */
+export const ACTION_FOR_STUCK_REASON: Record<StuckReason, InterventionAction> = {
+  'cannot-start': 'MICRO_START',
+  'do-not-understand': 'EXAMPLE',
+  'too-big': 'SIMPLIFY',
+  'went-wrong': 'HINT',
+  'cannot-recall': 'HINT',
+  tired: 'BREAK',
+};
+
+/**
+ * The reason from a help request the learner has made and that has not been answered yet, or null.
+ *
+ * `null` covers three different situations on purpose, because the caller treats them the same:
+ * nobody asked; somebody asked without saying why; somebody asked and has already had an answer. Each
+ * falls through to the state-based rules, which is the right answer in all three.
+ *
+ * The "already answered" test is what stops this repeating for ever. An intervention is persisted as an
+ * intervention, not as an event, so a help request stays the most recent event after it has been
+ * answered — without this, the same request would be answered again on every tick.
+ */
+function unansweredStuckReason(
+  events: readonly LearningEvent[],
+  shownInterventions: readonly Intervention[],
+): StuckReason | null {
+  const asked = lastEventOfType(events, 'HELP_REQUESTED');
+  if (asked === null || asked.type !== 'HELP_REQUESTED') return null;
+
+  const answered = shownInterventions.some((shown) => shown.shownAt >= asked.at);
+  if (answered) return null;
+
+  const { reason } = asked.payload;
+  // Validated rather than trusted: events come back out of the store, and a hand-edited row should not
+  // be able to name a reason this build has never heard of.
+  return isStuckReason(reason) ? reason : null;
 }
 
 /** The state rules, in priority order. First match wins. */
@@ -162,10 +216,26 @@ export function decideIntervention(
     return decision('reason.resume.interruption', 'RESUME', state);
   }
 
+  /*
+   * 4. The learner asked. A request is not an interruption.
+   *
+   * The cooldown below exists to stop the agent speaking up unasked; this is the opposite of that, and
+   * answering it late — because something unrelated was shown recently — is how a help button stops
+   * being worth pressing. The budget in step 1 still applies, so asking repeatedly is not a way to be
+   * shown something every few seconds.
+   *
+   * With no reason given this falls through to the state rules below: "they did not say" is not one of
+   * the reasons and must not be answered as though it were.
+   */
+  const askedReason = unansweredStuckReason(recentEvents, shownInterventions);
+  if (askedReason !== null) {
+    return decision('reason.stuck', ACTION_FOR_STUCK_REASON[askedReason], state);
+  }
+
   const candidate = candidateFor(engineState, input.currentTask, now, config);
   if (candidate.action === 'NO_ACTION') return candidate;
 
-  // 4. Cooldown, except when the situation has become more urgent.
+  // 5. Cooldown, except when the situation has become more urgent.
   const lastShown = shownInterventions[shownInterventions.length - 1];
   const sinceLastShown = msSince(lastShown?.shownAt, now);
   if (sinceLastShown !== null && sinceLastShown < config.cooldownMs && lastShown !== undefined) {

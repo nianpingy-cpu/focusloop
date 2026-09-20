@@ -297,5 +297,6 @@ export const zh: Record<MessageKey, string> = {
   'reason.simplify': '这个任务一次承载得太多了。',
   'reason.question': '用一个问题来检查你自己的理解。',
   'reason.distracted': '你离开了一段时间。不打断你，只是记一下。',
+  'reason.stuck': '你说你卡住了，所以给你对应的帮助。',
   'reason.none': '现在不需要任何建议。',
 };

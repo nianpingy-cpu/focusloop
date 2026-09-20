@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Intervention } from '@focusloop/shared-types';
+import type { Intervention, LearningEvent } from '@focusloop/shared-types';
 import { DOMAIN_MESSAGE_KEYS } from '@focusloop/shared-types';
 import { createIntervention, decideIntervention, type DecideInterventionInput } from './policy';
 import { resolvePolicyConfig, type InterventionPolicyConfig } from './config';
@@ -21,6 +21,101 @@ function decide(
     config,
   );
 }
+
+describe('intervention policy — the learner asks for help (AG2)', () => {
+  const asked = (payload: Record<string, unknown>, atIso = T0): LearningEvent[] => [
+    eventWith('HELP_REQUESTED', atIso, payload),
+  ];
+
+  it('answers a request that lands inside the cooldown', () => {
+    /*
+     * The cooldown exists to stop the agent speaking up unasked. A request is the opposite of that, and
+     * this fails if the request handling is ever moved below the cooldown: with an intervention shown a
+     * second earlier, the cooldown would return NO_ACTION first.
+     */
+    const decision = decide({
+      engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+      recentEvents: asked({ taskId: 't1', reason: 'too-big' }),
+      shownInterventions: [interventionWith(at(-1_000))],
+      now: T0,
+    });
+
+    expect(decision.action).toBe('SIMPLIFY');
+    expect(decision.reason.key).toBe('reason.stuck');
+  });
+
+  it.each([
+    ['cannot-start', 'MICRO_START'],
+    ['do-not-understand', 'EXAMPLE'],
+    ['too-big', 'SIMPLIFY'],
+    ['went-wrong', 'HINT'],
+    ['cannot-recall', 'HINT'],
+    ['tired', 'BREAK'],
+  ])('answers %s with %s', (reason, action) => {
+    const decision = decide({
+      engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+      recentEvents: asked({ reason }),
+      now: T0,
+    });
+
+    expect(decision.action).toBe(action);
+  });
+
+  it('does not answer the same request twice', () => {
+    // An intervention is persisted as an intervention, not as an event, so the request stays the most
+    // recent event after it has been answered. Without the "already answered" test this answers on
+    // every tick, for ever.
+    const decision = decide({
+      engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+      recentEvents: asked({ reason: 'tired' }),
+      shownInterventions: [interventionWith(T0)],
+      now: at(1_000),
+    });
+
+    expect(decision.action).toBe('NO_ACTION');
+  });
+
+  it('falls back to the state rules when no reason was given', () => {
+    // "They did not say" is not one of the reasons. CONFUSED with two wrong answers has a rule of its
+    // own, and that rule has to be what answers.
+    const decision = decide({
+      engineState: engineWith({ state: 'CONFUSED', consecutiveIncorrect: 2, currentTaskId: 't1' }),
+      recentEvents: asked({ taskId: 't1' }),
+      now: T0,
+    });
+
+    expect(decision.action).toBe('EXAMPLE');
+    expect(decision.reason.key).toBe('reason.confused.example');
+  });
+
+  it('ignores a reason it does not recognise', () => {
+    // Events are read back out of the store. A hand-edited row must not be able to name a reason this
+    // build has never heard of and get an action for it.
+    const decision = decide({
+      engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+      recentEvents: asked({ reason: 'cannot_start' }),
+      now: T0,
+    });
+
+    expect(decision.action).toBe('NO_ACTION');
+  });
+
+  it('is still bounded by the session budget', () => {
+    // Asking is not a way around the thing that stops the agent becoming the distraction.
+    const decision = decide(
+      {
+        engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+        recentEvents: asked({ reason: 'tired' }),
+        shownInterventions: [interventionWith(at(-60_000))],
+        now: T0,
+      },
+      { maxInterventionsPerSession: 1 },
+    );
+
+    expect(decision.action).toBe('NO_ACTION');
+    expect(decision.reason.key).toBe('reason.budget');
+  });
+});
 
 describe('intervention policy — quiet by default', () => {
   it('does nothing while the learner is focused', () => {

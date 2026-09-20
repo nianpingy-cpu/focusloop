@@ -52,6 +52,7 @@ export const INTERVENTION_REASON_CODES = [
   'reason.simplify',
   'reason.question',
   'reason.distracted',
+  'reason.stuck',
   'reason.none',
 ] as const;
 
