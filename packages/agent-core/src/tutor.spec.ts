@@ -187,15 +187,15 @@ describe('buildTutorPrompt', () => {
     expect(report.omitted.some((entry) => entry.field === 'material')).toBe(true);
   });
 
-  it('never sends a question block with no question in it', () => {
+  it('keeps the ceiling and the question through a context driven at a hostile length', () => {
     /*
-     * The failure the `room >= 0` guard used to allow, and this test is the one that reaches it.
+     * Formerly named "never sends a question block with no question in it", which was the wrong name on
+     * the wrong test: `TITLE_CHARACTERS` clips titles on both paths, so a 3600-character title can no
+     * longer drive the remainder negative, and both assertions here are guaranteed by the current code.
+     * It also passed with the `questionText.length === 0` guard deleted — the guard for the artefact its
+     * name promised. What actually guards that is the label-only case below.
      *
-     * With the remainder driven negative by an unbounded `task.title`, the old guard skipped the clip
-     * and left the full question in — a prompt up to fourteen characters over the ceiling — and once it
-     * went further negative the assembled prompt carried the `[question]` *label* with nothing after
-     * it. Asserting `toContain('[question]')` passes in that state, which is why the assertion is on the
-     * learner's words. A paid call that asks the model to explain nothing is worse than a refusal.
+     * Kept because a long title is still worth driving through the builder, and named for what it does.
      */
     const hostile = contextWith({
       task: {
@@ -277,12 +277,29 @@ describe('buildTutorPrompt', () => {
 
       const label = `title ${title} / question ${question}`;
 
+      /*
+       * What each input earns, said once, from the input.
+       *
+       * This is the assertion the code's own comment points at: `request-too-long` is documented as an
+       * unreachable backstop and the sweep is named as what would say otherwise, and until this line the
+       * sweep accepted a refusal for a question with text in it without comment — which made that claim
+       * untested in the one place it was made. A question with nothing in it cannot be built, and a
+       * question with text in it is never refused here. Both halves can fail.
+       */
+      expect(result.status, label).toBe(question === 0 ? 'refused' : 'built');
+
       if (result.status === 'refused') {
+        /*
+         * Reachable only when `question === 0`, by the assertion above — so this pins the opposite
+         * direction from the one it looks like: not "the length refusal lands on an empty question"
+         * (the status line makes that impossible), but "an empty question refuses for the reason that
+         * means there was nothing to ask". A refusal for `request-too-long` here fails.
+         */
+        expect(result.reason, label).toBe('no-question');
         // Nothing is sent, and the account says nothing was rather than reporting a length for a call
         // that never happened.
         expect(result.report.sent.inputCharacters, label).toBe(0);
         expect(result.report.omitted.length, label).toBeGreaterThan(0);
-        if (question === 0) expect(result.reason, label).toBe('no-question');
         continue;
       }
 
@@ -315,8 +332,9 @@ describe('buildTutorPrompt', () => {
      * question never comes within a hundred of the ceiling, which is how the first version of this test
      * passed with the separator uncharged.
      */
+    const excerptText = 'm'.repeat(1200);
     const context = contextWith({
-      material: { ...EXCERPT, text: 'm'.repeat(1200) },
+      material: { ...EXCERPT, text: excerptText },
     });
 
     for (let length = 1; length <= 2400; length += 1) {
@@ -326,15 +344,31 @@ describe('buildTutorPrompt', () => {
         question: 'q'.repeat(length),
         turns: [],
       });
+      /*
+       * The skip is named rather than silent: past the reduction the excerpt is dropped and the ceiling
+       * stops binding, so there is nothing here to assert and the 800-plus lengths that refuse are not
+       * evidence about the separator either way. The sweep above is what covers refusals; this one is
+       * about a two-character charge, and it says so instead of looking like it passed everything.
+       */
       if (result.status !== 'built') continue;
 
       expect(
         result.prompt.length + result.system.length,
         `question of ${length} characters`,
       ).toBeLessThanOrEqual(TUTOR_LIMITS.inputCharacters);
-      // And the account is the same number as the artefact, for every one of them.
-      expect(result.report.sent.inputCharacters, `question of ${length}`).toBe(
-        result.prompt.length + result.system.length,
+      /*
+       * A real second assertion, not the definition compared to itself.
+       *
+       * The line that used to be here was `expect(report.sent.inputCharacters).toBe(prompt.length +
+       * system.length)` — true by construction, since that is how the field is computed — and it was
+       * named as a tautology two rounds ago. This one pins the accounting against the **artefact**: the
+       * excerpt count must be the excerpt's length exactly when the excerpt is in the string, and zero
+       * when it was given up for space. It also pins the reduction's onset as a side effect, without
+       * naming the boundary.
+       */
+      const excerptInPrompt = result.prompt.includes(excerptText);
+      expect(result.report.sent.excerptCharacters, `question of ${length}`).toBe(
+        excerptInPrompt ? excerptText.length : 0,
       );
     }
   });
@@ -354,7 +388,7 @@ describe('buildTutorPrompt', () => {
       });
 
       expect(result.status, JSON.stringify(question)).toBe('refused');
-      if (result.status !== 'refused') return;
+      if (result.status !== 'refused') continue;
       expect(result.reason).toBe('no-question');
     }
   });

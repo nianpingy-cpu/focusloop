@@ -362,8 +362,11 @@ export interface BuildTutorPromptInput {
  * Either a prompt to send, or a refusal.
  *
  * A discriminated result rather than a prompt that is sometimes empty, because the refusal has to be
- * impossible to ignore: the caller sends `prompt`, and a caller that has to handle `over-budget` cannot
+ * impossible to ignore: the caller sends `prompt`, and a caller that has to handle `refused` cannot
  * accidentally send a labelled format with no question in it.
+ *
+ * Two reasons share the variant, and neither substitutes for the other: `no-question` means there was
+ * nothing to ask, and `request-too-long` means the question did not fit beside the context.
  */
 export type TutorPromptResult =
   | {
@@ -383,12 +386,15 @@ const QUESTION_HEAD = '[question]\n';
 /**
  * What `assemble` puts between blocks, and therefore what the budget has to charge for.
  *
- * Named because two characters between the context and the question were the difference between the
- * ceiling the comments described and the one the code enforced: with no turns admitted, the string sent
- * was this much longer than the sum that had been bounded. Sharing the constant means the arithmetic and
- * the assembly cannot drift apart again.
+ * The **string**, not its length, and used by both: `assemble` joins with it and the room is charged
+ * `ASSEMBLY_JOIN.length`, so the two cannot disagree. As a number it was a second independent
+ * transcription of one fact — change the join in `assemble` and the arithmetic would have gone on
+ * charging two characters for a separator that was now three. Two characters between the context and
+ * the question were already the difference between the ceiling the comments described and the one the
+ * code enforced, which is why the constant exists; writing it as a length would have reproduced the
+ * same defect one layer up, under a comment promising it was impossible.
  */
-const ASSEMBLY_JOIN = '\n\n'.length;
+const ASSEMBLY_JOIN = '\n\n';
 
 /**
  * Titles are clipped even in the reduced context.
@@ -396,7 +402,7 @@ const ASSEMBLY_JOIN = '\n\n'.length;
  * `concept.title` and `task.title` are the same class of unbounded imported string as the two detail
  * fields, and the reduced branch has to be able to get under the ceiling on its own — a title of a few
  * thousand characters would otherwise leave no room for the question, which is the state that returns
- * `over-budget`.
+ * `request-too-long`.
  */
 const TITLE_CHARACTERS = 120;
 
@@ -414,6 +420,10 @@ const TITLE_CHARACTERS = 120;
  *
  * Three ways it gives way, in order, each reported: the excerpt and the context detail go; the question
  * is clipped to what is left; and if the question does not fit at all, nothing is sent.
+ *
+ * There is also a fourth, in front of all of them: a question with nothing in it is refused rather than
+ * sent, because a labelled block with no question under it is a paid call asking the model to explain
+ * nothing.
  */
 export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResult {
   const omissions: AgentContextOmission[] = [];
@@ -445,7 +455,15 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
   const fullContext = describeContext(input.context, full);
 
   let contextBlock = fullContext.text;
-  let system = buildSystem(input.mode, excerpt.text.length > 0);
+  /*
+   * Keyed on the same condition that decides whether `describeContext` writes a section line — a
+   * heading *and* text — rather than on the text alone. With text but no heading the block reads
+   * "no section of the material matches this concept" while the system prompt would say "the section
+   * given below", which is the contradiction this branch exists to remove, one condition to the left.
+   * Unreachable from AG1, whose shape cannot produce that pair, and wrong as a property of this code.
+   */
+  const hasSection = excerpt.heading !== null && excerpt.text.length > 0;
+  let system = buildSystem(input.mode, hasSection);
   const questionBlock = `${QUESTION_HEAD}${questionText}`;
   let block = questionBlock;
 
@@ -463,10 +481,16 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
    * and AG1 already has a "this section was clipped" concept.
    *
    * The system prompt is **rebuilt** here rather than computed before, because one of its sentences
-   * depends on whether an excerpt survived — and it is longer in the state where one did. Building it
-   * first meant the reduced prompt still said "use the material section given below" over a block with
-   * no section in it, which is the contradiction this branch exists to remove. The length that decides
-   * the room below is the length that is actually sent.
+   * depends on whether an excerpt survived — and the variant sent after the reduction is the *longer*
+   * one, by ten code units (measured: 1157 against 1167 for `CHECK_MY_ANSWER`, 774 against 784 for
+   * `EXPLAIN`). `room` therefore has to be computed after the rebuild: computing it from the
+   * pre-branch sentence charges the shorter of the two and then sends the longer, which puts every
+   * reduced prompt whose sentence changes exactly those ten units over the ceiling the comments claim.
+   * (With no section in the full context the two sentences are identical and the ten units are not
+   * there to lose — which is the case where "it is longer in the state where one did" is meaningless,
+   * and why the count is stated rather than the adjective.) Building it before the branch at all meant
+   * the reduced prompt still said "use the material section given below" over a block with no section in
+   * it, which is the contradiction this branch exists to remove.
    */
   if (system.length + contextBlock.length + block.length > limit) {
     const removed = describeContext(input.context, reduced);
@@ -491,15 +515,18 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
    * conversation — the string sent was two characters longer than the sum that had been bounded, so the
    * inspector could show 4,002 against a documented 4,000.
    *
-   * With the bounds as they stand the refusal below is **unreachable** and is kept as a backstop: the
-   * reduced context leaves the titles and the state, so the fixed parts and a full question come to
-   * roughly 3,200 against a ceiling of 4,000. Raising `contextCharacters`, `questionCharacters` or AG1's
-   * `materialCharacters`, or adding a mode with a much longer system prompt, is what would bring it back
-   * — and the sweep in the spec is what will say so.
+   * With the bounds as they stand the refusal below is **unreachable** and is kept as a backstop, and
+   * the largest total this probe could produce is the number to check that against: `CHECK_MY_ANSWER`
+   * with a 4000-character summary, a 4000-character instruction block, a title of 3600 and a question
+   * at the 2000-character cap sends 3415, and the largest total over both the spec's 2400-length scan
+   * and a probe of every question length from 1 to 4000 is 3637 — against a ceiling of 4000. Raising
+   * `contextCharacters`, `questionCharacters` or AG1's `materialCharacters`, or adding a mode with a
+   * much longer system prompt, is what would bring it back, and the sweep in the spec is what will say
+   * so.
    */
   const room = Math.max(
     0,
-    limit - system.length - contextBlock.length - QUESTION_HEAD.length - ASSEMBLY_JOIN,
+    limit - system.length - contextBlock.length - QUESTION_HEAD.length - ASSEMBLY_JOIN.length,
   );
 
   if (room === 0) {
@@ -602,7 +629,7 @@ function assemble(
 ): string {
   return [contextBlock, turnsBlock(turns), questionBlock]
     .filter((block) => block.length > 0)
-    .join('\n\n');
+    .join(ASSEMBLY_JOIN);
 }
 const MODE_INSTRUCTIONS: Record<TutorMode, string> = {
   EXPLAIN: 'Explain the idea this step depends on, in terms of the material section provided.',
@@ -833,7 +860,7 @@ function describeContext(
  * redo. Sending it on its own would leave nothing to ground an answer in — which is a fact about how
  * step two has to call it, and is therefore written here rather than assumed there.
  *
- * Three things the caller owns, and must not infer from this function:
+ * Four things the caller owns, and must not infer from this function:
  *
  * 1. **At most once per exchange.** `isRetryable` is a predicate, not a budget: it answers "is this the
  *    kind of failure worth asking again about", the same way every time. Nothing here counts.
@@ -844,6 +871,11 @@ function describeContext(
  * 3. **Do not retry an offline provider.** `MockAIProvider`'s output never parses — there is a test
  *    pinning that — so retrying it is two mock calls and no answer, on every offline question, which
  *    is the golden path. `TutorProviderInfo.degraded` and `provider.offline` are the signals.
+ * 4. **Do not spend the retry on a question that was never asked.** An empty or all-label message
+ *    sanitises to nothing, and this function will then emit no `[question]` block at all — the same
+ *    artefact the builder refuses to send. Emitting nothing is the right output and it is not a repair:
+ *    the retry exists to get a second answer to a question the learner *did* ask, so a caller that
+ *    reaches here with nothing asked has already made the mistake, and a refusal is what it wanted.
  */
 export function buildTutorRetryPrompt(input: {
   readonly mode: TutorMode;
@@ -862,11 +894,11 @@ export function buildTutorRetryPrompt(input: {
             .map((kind) => `[${kind}]`)
             .join(', ')}. Each one needs text under it — a label on its own is not an answer.`;
 
+  const asked = sanitiseQuestion(input.question, []);
+
   return [
     problem,
     'Answer the same question again, using only the allowed labels, each on a line of its own.',
-    '',
-    '[question]',
-    sanitiseQuestion(input.question, []),
+    ...(asked.length === 0 ? [] : ['', '[question]', asked]),
   ].join('\n');
 }
