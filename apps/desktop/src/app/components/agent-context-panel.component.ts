@@ -59,8 +59,13 @@ import { I18nService } from '../core/i18n/i18n.service';
           @if (report().omissions.length > 0) {
             <p class="eyebrow">{{ t('agent.inspector.omitted') }}</p>
             <ul class="agent-context__omissions" data-testid="agent-context-omissions">
+              <!--
+                The detail alone. It already says what it is ("8 earlier events are not included"), and
+                prefixing it with the raw field name printed an untranslated machine token in a panel
+                that is otherwise fully translated.
+              -->
               @for (omission of report().omissions; track omission.field + omission.detail) {
-                <li>{{ omission.field }}: {{ omission.detail }}</li>
+                <li>{{ omission.detail }}</li>
               }
             </ul>
           }

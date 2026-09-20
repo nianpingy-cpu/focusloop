@@ -76,6 +76,18 @@ export default tseslint.config(
               message:
                 'The renderer may only import @focusloop/shared-types. Anything else reaches node:, which a sandboxed renderer cannot resolve.',
             },
+            {
+              /*
+               * The rule above bans the workspace packages, not the actual problem. `tsconfig.base.json`
+               * carries `"types": ["node"]` and only `apps/desktop/tsconfig.app.json` overrides it to
+               * empty, so the day somebody removes that override a renderer file could import
+               * `node:crypto` and neither the typecheck nor the rule above would object. This is the
+               * prohibition the first one stands in for.
+               */
+              group: ['node:*'],
+              message:
+                'A sandboxed renderer cannot resolve node: modules. The tsconfig only appears to enforce this.',
+            },
           ],
         },
       ],

@@ -64,7 +64,7 @@ export function buildAgentContext(source: AgentContextSource): AgentContextRepor
   if (source.courseCount > 1) {
     omissions.push({
       field: 'courses',
-      detail: `${String(source.courseCount - 1)} other courses are not included`,
+      detail: notIncluded(source.courseCount - 1, 'other', 'course'),
     });
   }
 
@@ -173,7 +173,7 @@ function excerptMaterial(
   if (otherSections > 0) {
     omissions.push({
       field: 'material',
-      detail: `${String(otherSections)} other sections of the material are not included`,
+      detail: notIncluded(otherSections, 'other', 'section', ' of the material'),
     });
   }
 
@@ -195,7 +195,18 @@ function takeRecentEvents(
   const kept = events.slice(-AGENT_CONTEXT_LIMITS.events);
   omissions.push({
     field: 'events',
-    detail: `${String(events.length - kept.length)} earlier events are not included`,
+    detail: notIncluded(events.length - kept.length, 'earlier', 'event'),
   });
   return kept;
+}
+
+/**
+ * "1 other courses are not included" is not English, and these strings are read by people in the
+ * developer inspector. A count of one is not hypothetical either: it is what the panel shows the
+ * moment a second course exists, which is the ordinary case, not the edge one.
+ */
+function notIncluded(count: number, adjective: string, noun: string, of = ''): string {
+  const plural = count === 1 ? '' : 's';
+  const verb = count === 1 ? 'is' : 'are';
+  return `${String(count)} ${adjective} ${noun}${plural}${of} ${verb} not included`;
 }

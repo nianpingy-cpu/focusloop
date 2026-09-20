@@ -221,11 +221,19 @@ describe('FocusLoopEngine', () => {
         source: 'user',
         payload: { taskId: firstTask.id },
       });
+      const checkpoint = ctx.engine.createCheckpoint(session.id);
 
       const report = ctx.engine.getAgentContext();
 
       expect(report.context?.session.sessionId).toBe(session.id);
       expect(report.context?.task.taskId).toBe(firstTask.id);
+      /*
+       * Asserted against a real checkpoint. The commit that added these tests claimed they covered
+       * "the only place the material lookup, the event log and the checkpoint are joined up" while no
+       * assertion read the checkpoint at all — a regression passing `null` through would have left
+       * every other line here green, and the resume capability would lose its input silently.
+       */
+      expect(report.context?.checkpoint?.id).toBe(checkpoint.id);
       // The point of the wiring test: a real document is found, and its text reaches the agent.
       expect(report.context?.material.materialId).not.toBeNull();
       expect(report.context?.material.text.length).toBeGreaterThan(0);

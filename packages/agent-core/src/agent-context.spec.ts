@@ -214,7 +214,9 @@ describe('buildAgentContext', () => {
 
     const report = buildAgentContext(source({ material: document }));
 
-    expect(report.context?.material.text).toHaveLength(AGENT_CONTEXT_LIMITS.materialCharacters);
+    // The literal, not the constant. Using the constant on both sides made this green for any value
+    // of it — including one large enough to stop being a bound at all.
+    expect(report.context?.material.text).toHaveLength(1200);
     expect(report.context?.material.truncated).toBe(true);
     expect(report.omissions).toContainEqual({
       field: 'material',
@@ -226,7 +228,8 @@ describe('buildAgentContext', () => {
     const report = buildAgentContext(source({ events: events(20) }));
     const kept = report.context?.recentEvents ?? [];
 
-    expect(kept).toHaveLength(AGENT_CONTEXT_LIMITS.events);
+    // The literal, for the same reason as the material bound above.
+    expect(kept).toHaveLength(12);
     // Newest last, so "what just happened" is at the end where it is read.
     expect(kept.at(-1)?.id).toBe('e19');
     expect(kept[0]?.id).toBe('e8');
@@ -249,6 +252,17 @@ describe('buildAgentContext', () => {
     expect(report.omissions).toContainEqual({
       field: 'courses',
       detail: '3 other courses are not included',
+    });
+  });
+
+  it('says it in English when there is exactly one of them', () => {
+    // Not the edge case: a second course existing is the ordinary state, and "1 other courses" was
+    // what the panel printed for it.
+    const report = buildAgentContext(source({ courseCount: 2 }));
+
+    expect(report.omissions).toContainEqual({
+      field: 'courses',
+      detail: '1 other course is not included',
     });
   });
 
