@@ -11,6 +11,7 @@ export * from './events';
 export * from './session';
 export * from './material';
 export * from './course';
+export * from './agent-context';
 export * from './checkpoint';
 export * from './resume';
 export * from './intervention';

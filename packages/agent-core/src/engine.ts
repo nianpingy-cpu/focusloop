@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  AgentContextReport,
   Course,
   DashboardSummary,
   DispatchEventRequest,
@@ -25,6 +26,7 @@ import type {
   ThemePreference,
 } from '@focusloop/shared-types';
 import { message } from '@focusloop/shared-types';
+import { buildAgentContext } from './agent-context';
 import {
   DEFAULT_INSIGHT_RANGE,
   coerceLocale,
@@ -240,6 +242,58 @@ export class FocusLoopEngine {
     const record = this.store.getActiveSession();
     if (record === null) return null;
     return this.snapshot(record);
+  }
+
+  /**
+   * What the agent would be given about the current moment, and what it would not (AG1).
+   *
+   * This belongs here rather than in the renderer. The builder needs the course, the material and the
+   * event log, and the renderer has none of them directly — it has only what it was sent. Assembling
+   * the context in the renderer would also mean the debug view could show something the agent never
+   * receives, which is the one failure an inspector must not have.
+   */
+  getAgentContext(): AgentContextReport {
+    const snapshot = this.getCurrentSession();
+    if (snapshot === null) {
+      return buildAgentContext({
+        session: null,
+        progress: null,
+        course: null,
+        courseCount: this.listCourses().length,
+        material: null,
+        events: [],
+        checkpoint: null,
+        learningState: 'READY',
+      });
+    }
+
+    const { session } = snapshot;
+    const course = this.getCourse(session.courseId);
+    return buildAgentContext({
+      session,
+      progress: snapshot.progress,
+      course,
+      courseCount: this.listCourses().length,
+      material: this.materialFor(session.courseId),
+      events: this.listEvents(session.id),
+      checkpoint: this.getLatestCheckpoint(session.id),
+      learningState: session.state,
+    });
+  }
+
+  /**
+   * The material a generated course came from.
+   *
+   * The generator names a course `course-<hash>` and the parser names the document `material-<hash>`
+   * from the same content hash, so the link is the hash and nothing else. The renderer resolves the
+   * same link in `material-lookup` for the course page — one convention, written twice, because one
+   * side is a package and the other is the application.
+   */
+  private materialFor(courseId: string): MaterialDocument | null {
+    const prefix = 'course-';
+    if (!courseId.startsWith(prefix)) return null;
+    const id = `material-${courseId.slice(prefix.length)}`;
+    return this.listMaterials().find((document) => document.id === id) ?? null;
   }
 
   getSessionProgress(sessionId: string) {

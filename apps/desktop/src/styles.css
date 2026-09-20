@@ -991,6 +991,75 @@ textarea:focus {
   cursor: pointer;
 }
 
+/* ------------------------------------------------- agent context inspector */
+
+/*
+ * Developer-mode only, and collapsed to one line until it is asked for.
+ *
+ * It sits *above* the simulator bar rather than beside it. That strip at the bottom is already shared
+ * by the simulator and the plan sheet, and this is the third thing to want a place on it — which is
+ * the argument in #85 for folding the simulator away, made again by accident.
+ */
+.agent-context {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 11;
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(60vh, 460px);
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+}
+
+body:has(.simulator) .agent-context {
+  bottom: 72px;
+}
+
+.agent-context__summary {
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.agent-context__grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 10px;
+  margin: 10px 0;
+}
+
+.agent-context__grid dt {
+  color: var(--text-muted);
+}
+
+.agent-context__grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-context__text {
+  max-height: 120px;
+  overflow: auto;
+  margin: 0 0 10px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.agent-context__omissions {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 /* ---------------------------------------------------------------- buttons */
 
 .btn {

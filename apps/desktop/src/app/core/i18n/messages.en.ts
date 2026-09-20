@@ -262,6 +262,18 @@ const en = {
   'agent.action.NO_ACTION': 'No suggestion right now',
 
   // ----------------------------------------------------------- simulator
+  // --------------------------------------------------------------- agent
+  'agent.inspector.title': 'What the agent sees',
+  'agent.inspector.state': 'State',
+  'agent.inspector.concept': 'Concept',
+  'agent.inspector.task': 'Task',
+  'agent.inspector.material': 'Material',
+  'agent.inspector.events': 'Recent events',
+  'agent.inspector.omitted': 'Not included',
+  'agent.inspector.none': 'No session is running.',
+  'agent.inspector.of': 'of',
+  'agent.inspector.truncated': 'truncated',
+  'agent.inspector.chars': 'chars',
   'sim.aria': 'Demo event simulator',
   'sim.label': 'Simulator',
   'sim.distraction': 'Distraction',

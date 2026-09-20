@@ -208,6 +208,11 @@ export function createHandlers(service: FocusLoopService) {
       parse: parseInsightsRequest,
       handle: (request) => engine.getInsights(request.range),
     }),
+    defineHandler({
+      channel: IPC_CHANNELS.getAgentContext,
+      parse: parseNoArgs,
+      handle: () => engine.getAgentContext(),
+    }),
   ] as const;
 }
 

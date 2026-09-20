@@ -250,6 +250,18 @@ export const zh: Record<MessageKey, string> = {
   'agent.action.NO_ACTION': '暂时没有建议',
 
   // ----------------------------------------------------------- simulator
+  // --------------------------------------------------------------- agent
+  'agent.inspector.title': '智能体看到了什么',
+  'agent.inspector.state': '状态',
+  'agent.inspector.concept': '概念',
+  'agent.inspector.task': '任务',
+  'agent.inspector.material': '材料',
+  'agent.inspector.events': '最近事件',
+  'agent.inspector.omitted': '未包含',
+  'agent.inspector.none': '当前没有进行中的会话。',
+  'agent.inspector.of': '/',
+  'agent.inspector.truncated': '已截断',
+  'agent.inspector.chars': '字符',
   'sim.aria': '演示事件模拟器',
   'sim.label': '模拟器',
   'sim.distraction': '分心',
