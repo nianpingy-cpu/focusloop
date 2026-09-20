@@ -41,7 +41,7 @@ describe('intervention policy — the learner asks for help (AG2)', () => {
     });
 
     expect(decision.action).toBe('SIMPLIFY');
-    expect(decision.reason.key).toBe('reason.stuck');
+    expect(decision.reason.key).toBe('reason.stuck.too-big');
   });
 
   it.each([
@@ -59,6 +59,30 @@ describe('intervention policy — the learner asks for help (AG2)', () => {
     });
 
     expect(decision.action).toBe(action);
+  });
+
+  it('says which kind of stuck it was answering', () => {
+    /*
+     * The premise of the feature is that what happens next depends on the kind of stuck. A single
+     * sentence for every kind would leave that premise out of the one place the learner is told what was
+     * decided and why — which is what this review finding was about.
+     *
+     * The two reasons chosen here also share nothing else: different action and different wording.
+     */
+    const tired = decide({
+      engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+      recentEvents: asked({ reason: 'tired' }),
+      now: T0,
+    });
+    const tooBig = decide({
+      engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
+      recentEvents: asked({ reason: 'too-big' }),
+      now: T0,
+    });
+
+    expect(tired.reason.key).toBe('reason.stuck.tired');
+    expect(tooBig.reason.key).toBe('reason.stuck.too-big');
+    expect(tired.reason.key).not.toBe(tooBig.reason.key);
   });
 
   it('does not answer the same request twice', () => {

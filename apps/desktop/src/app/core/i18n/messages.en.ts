@@ -318,7 +318,12 @@ const en = {
   'reason.simplify': 'This task is carrying too much at once.',
   'reason.question': 'A question to check your own understanding.',
   'reason.distracted': 'You have been away. No interruption — just noting it.',
-  'reason.stuck': 'You said you were stuck, so here is the help that goes with it.',
+  'reason.stuck.cannot-start': 'You said you could not see where to start.',
+  'reason.stuck.do-not-understand': 'You said reading it was not making sense.',
+  'reason.stuck.too-big': 'You said it was too much at once.',
+  'reason.stuck.went-wrong': 'You said you tried and it came out wrong.',
+  'reason.stuck.cannot-recall': 'You said you knew this and it had gone.',
+  'reason.stuck.tired': 'You said you had not got the energy for it.',
   'reason.none': 'Nothing needs a suggestion right now.',
 } as const;
 

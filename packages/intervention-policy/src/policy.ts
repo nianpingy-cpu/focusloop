@@ -105,6 +105,24 @@ export const ACTION_FOR_STUCK_REASON: Record<StuckReason, InterventionAction> = 
 };
 
 /**
+ * How each reason reads back to the learner when the policy has acted on it.
+ *
+ * Deliberately a second table rather than reusing the labels on the buttons that offered the reasons.
+ * Those are in the learner's own voice — "I can't see where to start" — and these explain what was done
+ * about it: "You said you could not see where to start." One string serving both places would read
+ * wrong in one of them, and the reason message is the only place the learner is told what the agent
+ * decided *and why*, which is the whole point of asking.
+ */
+const REASON_CODE_FOR_STUCK: Record<StuckReason, InterventionReasonCode> = {
+  'cannot-start': 'reason.stuck.cannot-start',
+  'do-not-understand': 'reason.stuck.do-not-understand',
+  'too-big': 'reason.stuck.too-big',
+  'went-wrong': 'reason.stuck.went-wrong',
+  'cannot-recall': 'reason.stuck.cannot-recall',
+  tired: 'reason.stuck.tired',
+};
+
+/**
  * The reason from a help request the learner has made and that has not been answered yet, or null.
  *
  * `null` covers three different situations on purpose, because the caller treats them the same:
@@ -245,7 +263,11 @@ export function decideIntervention(
    */
   const askedReason = unansweredStuckReason(recentEvents, shownInterventions);
   if (askedReason !== null) {
-    return decision('reason.stuck', ACTION_FOR_STUCK_REASON[askedReason], state);
+    return decision(
+      REASON_CODE_FOR_STUCK[askedReason],
+      ACTION_FOR_STUCK_REASON[askedReason],
+      state,
+    );
   }
 
   const candidate = candidateFor(engineState, input.currentTask, now, config);

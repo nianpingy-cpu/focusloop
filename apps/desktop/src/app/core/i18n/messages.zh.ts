@@ -305,6 +305,11 @@ export const zh: Record<MessageKey, string> = {
   'reason.simplify': '这个任务一次承载得太多了。',
   'reason.question': '用一个问题来检查你自己的理解。',
   'reason.distracted': '你离开了一段时间。不打断你，只是记一下。',
-  'reason.stuck': '你说你卡住了，所以给你对应的帮助。',
+  'reason.stuck.cannot-start': '你说你不知道从哪开始。',
+  'reason.stuck.do-not-understand': '你说读了但没看懂。',
+  'reason.stuck.too-big': '你说一次太多了。',
+  'reason.stuck.went-wrong': '你说做了但做错了。',
+  'reason.stuck.cannot-recall': '你说本来会的、想不起来了。',
+  'reason.stuck.tired': '你说没力气了。',
   'reason.none': '现在不需要任何建议。',
 };
