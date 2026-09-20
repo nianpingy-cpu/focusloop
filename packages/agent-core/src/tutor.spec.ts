@@ -372,6 +372,155 @@ describe('buildTutorPrompt', () => {
       );
     }
   });
+  it('returns the question as it was sent, so a caller does not have to reconstruct it', () => {
+    /*
+     * Two callers act on this and both are wrong under reconstruction: the transcript stores it (and
+     * storing the raw text puts a label the *learner* typed into the next prompt as though the model had
+     * written it), and a retry passes it back to be sanitised again.
+     */
+    const withLabel = built({
+      mode: 'HINT',
+      context: contextWith(),
+      question: '[hint]\nwhy does the colour change?',
+      turns: [],
+    });
+    expect(withLabel.question).toBe('why does the colour change?');
+
+    // And it is the *clipped* text when the clip fired, not the text that went in. Asserted against the
+    // prompt rather than against a length I worked out, because the prompt is the artefact.
+    const long = 'q'.repeat(2400);
+    const clipped = built({
+      mode: 'EXPLAIN',
+      context: contextWith({ material: { ...EXCERPT, text: 'm'.repeat(1200) } }),
+      question: long,
+      turns: [],
+    });
+    expect(clipped.question.length).toBeLessThan(long.length);
+    expect(clipped.question).toBe(long.slice(0, clipped.question.length));
+    expect(clipped.prompt.endsWith(clipped.question)).toBe(true);
+  });
+
+  it('returns the excerpt only when the prompt actually contains it', () => {
+    const full = built({ mode: 'EXPLAIN', context: contextWith(), question: 'why?', turns: [] });
+    expect(full.excerpt).toEqual(EXCERPT);
+    expect(full.report.sent.excerptCharacters).toBe(EXCERPT.text.length);
+
+    // The reduction fired, so the model was not shown the section — and a reader handed the excerpt here
+    // would resolve a `[section]` citation against a section the model never saw. Both detail fields are
+    // long: `EXPLAIN`'s system prompt is shorter than `CHECK_MY_ANSWER`'s, and one field alone leaves the
+    // prompt under the ceiling.
+    const reduced = built({
+      mode: 'EXPLAIN',
+      context: contextWith({
+        concept: { conceptId: 'c1', title: 'Rotations', summary: 's'.repeat(4000), keyPoints: [] },
+        task: {
+          taskId: 't1',
+          title: 'Read section 3',
+          instructions: 'i'.repeat(4000),
+          kind: 'read',
+          estimatedMinutes: 5,
+          step: 2,
+          totalSteps: 5,
+        },
+      }),
+      question: 'q'.repeat(2000),
+      turns: [],
+    });
+    expect(reduced.excerpt).toBeNull();
+    expect(reduced.report.sent.excerptCharacters).toBe(0);
+  });
+
+  it('returns a preamble that is exactly the prompt without its question block', () => {
+    /*
+     * The relation the retry rests on, and the only place it is written down. `composeRetryPrompt`
+     * composes `[preamble, answer, complaint]` and is correct only if the preamble is the prompt minus
+     * the question — which is true today because `assemble` filters empty blocks and the question block is
+     * always non-empty and always last, and is enforced by nothing. A refactor that made `assemble`
+     * non-compositional would break the retry silently; the only other test that would notice fails as
+     * "refused a retry" rather than as "composed the wrong string".
+     *
+     * Both ends of the turn range, because the preamble's shape depends on whether the transcript block
+     * is there at all.
+     */
+    const noTurns = built({ mode: 'EXPLAIN', context: contextWith(), question: 'why?', turns: [] });
+    expect(noTurns.prompt).toBe(`${noTurns.preamble}\n\n[question]\n${noTurns.question}`);
+
+    const withTurns = built({
+      mode: 'EXPLAIN',
+      context: contextWith(),
+      question: 'why?',
+      turns: [{ role: 'learner', text: 'I said earlier' }],
+    });
+    expect(withTurns.prompt).toBe(`${withTurns.preamble}\n\n[question]\n${withTurns.question}`);
+    expect(withTurns.preamble).not.toBe(noTurns.preamble);
+  });
+
+  it('refuses only when the fixed parts land on the ceiling, which is what makes it a backstop', () => {
+    /*
+     * `request-too-long` needs `room === 0`, and `room` is computed from the system prompt and the context
+     * block alone — no turn appears in it, and the turn loop runs after the refusal — so the route is not a
+     * transcript and not a hostile input. It is a fixed part sized to land within thirteen characters of
+     * the ceiling: the branch only skips the reduction when `system + contextBlock + 13 + Q <= 4000`, and
+     * `room === 0` needs `system + contextBlock >= 3987`, so the two together need `Q <= 2`.
+     *
+     * Found rather than worked out, and asserted rather than described: growing the summary one character
+     * at a time with everything else at its cap passes through every size the fixed part can take, and the
+     * three assertions below are that the boundary exists, that it refuses for the spatial reason, and that
+     * one character less builds. Measured: 676 builds with a room of 1, 677 refuses at `system +
+     * contextBlock` of 3987, and 678 fires the reduction instead. The failure message names the constants,
+     * because a search that stops finding a boundary is how a constant change announces itself here.
+     */
+    const build = (summary: number) =>
+      buildTutorPrompt({
+        mode: 'CHECK_MY_ANSWER',
+        context: contextWith({
+          // AG1's bound, and it has to be here: `room` is the system prompt plus the context block, and
+          // without the excerpt at its cap the fixed part cannot reach the ceiling at any summary size —
+          // which is what the first version of this test found, by failing at the search.
+          material: { ...EXCERPT, text: 'm'.repeat(1200) },
+          concept: {
+            conceptId: 'c1',
+            title: 'Rotations',
+            summary: 's'.repeat(summary),
+            keyPoints: [],
+          },
+          task: {
+            taskId: 't1',
+            title: 'Read section 3',
+            instructions: 'i'.repeat(4000),
+            kind: 'read',
+            estimatedMinutes: 5,
+            step: 2,
+            totalSteps: 5,
+          },
+        }),
+        question: 'qq',
+        turns: [],
+      });
+
+    let boundary = -1;
+    for (let summary = 0; summary <= 4000; summary += 1) {
+      if (build(summary).status === 'refused') {
+        boundary = summary;
+        break;
+      }
+    }
+
+    expect(
+      boundary,
+      'no context size reaches room === 0: check TUTOR_LIMITS.inputCharacters, contextCharacters and ' +
+        'materialCharacters against the system prompt lengths',
+    ).toBeGreaterThan(-1);
+    if (boundary === -1) return;
+    const refused = build(boundary);
+    expect(refused.status).toBe('refused');
+    if (refused.status !== 'refused') return;
+    expect(refused.reason).toBe('request-too-long');
+    // And one character of context less builds, so the refusal is a boundary rather than a size the
+    // context cannot avoid.
+    expect(build(boundary - 1).status).toBe('built');
+  });
+
   it("refuses a question that is nothing but the format's own labels", () => {
     /*
      * The reachable route to the artefact the clamp exists to prevent, and it needed no misbehaviour
@@ -768,9 +917,9 @@ describe('readTutorReply', () => {
     expect(result.reply.parts[0]?.text.length).toBe(TUTOR_LIMITS.partCharacters);
     // Reported, because a clip the caller cannot see is prose that stops mid-sentence for no stated
     // reason. The first version of this module claimed to report it and did not.
-    expect(result.omissions.some((entry) => entry.detail.includes('longer than is shown'))).toBe(
-      true,
-    );
+    expect(
+      result.reply.omissions.some((entry) => entry.detail.includes('longer than is shown')),
+    ).toBe(true);
   });
 
   it('clips by code point rather than by UTF-16 unit', () => {
@@ -792,7 +941,9 @@ describe('readTutorReply', () => {
       'EXPLAIN',
       '[explanation]\nIt moves.\n[section]\nLeft rotation\nand this second line is lost',
     );
-    expect(result.omissions.some((entry) => entry.detail.includes('after the heading'))).toBe(true);
+    expect(result.reply.omissions.some((entry) => entry.detail.includes('after the heading'))).toBe(
+      true,
+    );
   });
 
   it('matches a heading that differs only in spacing or case', () => {
