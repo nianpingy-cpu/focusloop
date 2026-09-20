@@ -1321,6 +1321,79 @@ describe('FocusLoopEngine', () => {
       }
     });
 
+    it('keeps the first reading’s omissions when a retry replaces it', async () => {
+      /*
+       * Two readings are produced on a retry and the second overwrites the first, so appending the
+       * current `reading.omissions` at the return reported the retry's and dropped the first one's — and
+       * the degraded-retry path appended nothing at all, dropping both. The contract says `omitted` is the
+       * complete account on every outcome, and this is the input that says so: the first reply cites a
+       * section across two lines (so a line is dropped and reported) and omits a required part (so it is
+       * retryable), and the second reply is a good one.
+       */
+      const { scripted, sessionId } = withProvider([
+        '[question]\nWhy does it change?\n[section]\nLeft rotation\nand a second line',
+        '[confirmed]\nYou wrote "the order does not change"\n\n[question]\nWhat happens to the parent pointer?',
+      ]);
+      try {
+        const answer = await scripted.engine.askTutor({
+          sessionId,
+          mode: 'CHECK_MY_ANSWER',
+          question: 'I think the order does not change. Is that right?',
+        });
+
+        expect(answer.outcome.status).toBe('answered');
+        expect(
+          answer.context.omitted.some((entry) => entry.detail.includes('after the heading')),
+        ).toBe(true);
+      } finally {
+        scripted.close();
+      }
+    });
+
+    it('lets a confirmation quote the question just asked, and still refuses one that quotes nothing', async () => {
+      /*
+       * The transcript does not hold the current question — it is recorded only once an answer comes back —
+       * so a caller that passed only the recorded turns made `CHECK_MY_ANSWER` unable to confirm anything
+       * the learner had just said. It could pass only by confirming an *earlier* exchange, which on the
+       * first ask means never.
+       *
+       * Both directions are asserted, because including the question must not make the check vacuous: the
+       * second case is a confirmation of words the learner never wrote, and it is still refused.
+       */
+      const quoting = withProvider([
+        '[confirmed]\nYou wrote "the order does not change"\n\n[question]\nWhat happens to the parent pointer?',
+      ]);
+      try {
+        const answer = await quoting.scripted.engine.askTutor({
+          sessionId: quoting.sessionId,
+          mode: 'CHECK_MY_ANSWER',
+          question: 'I think the order does not change. Is that right?',
+        });
+
+        expect(quoting.provider.prompts).toHaveLength(1);
+        expect(answer.outcome.status).toBe('answered');
+      } finally {
+        quoting.scripted.close();
+      }
+
+      const fabricating = withProvider([
+        '[confirmed]\nYou wrote "rotations preserve the in-order sequence"\n\n[question]\nWhat happens next?',
+      ]);
+      try {
+        const answer = await fabricating.scripted.engine.askTutor({
+          sessionId: fabricating.sessionId,
+          mode: 'CHECK_MY_ANSWER',
+          question: 'I think the order does not change. Is that right?',
+        });
+
+        expect(answer.outcome.status).toBe('rejected');
+        if (answer.outcome.status !== 'rejected') return;
+        expect(answer.outcome.reason).toBe('unquoted-confirmation');
+      } finally {
+        fabricating.scripted.close();
+      }
+    });
+
     it('refuses a session that has ended, and one that never existed', async () => {
       const { scripted, sessionId } = withProvider(['[hint]\nx']);
       try {

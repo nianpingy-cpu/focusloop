@@ -1,4 +1,4 @@
-﻿import { randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type {
   AgentContext,
   AgentContextReport,
@@ -91,7 +91,7 @@ export const THEME_KEY = 'theme';
 export const SHOW_MATERIAL_TEXT_KEY = 'show-material-text';
 
 /**
- * A request the engine refuses, carrying the code the caller branches on 鈥?so a rejection is a value
+ * A request the engine refuses, carrying the code the caller branches on — so a rejection is a value
  * rather than a message to parse.
  */
 export class EngineError extends Error {
@@ -212,7 +212,7 @@ export class FocusLoopEngine {
      * One session at a time.
      *
      * Starting another ends the running one first. Two active sessions made "the current
-     * session" ambiguous 鈥?`getActiveSession` picked one of them, newest first 鈥?so ending
+     * session" ambiguous — `getActiveSession` picked one of them, newest first — so ending
      * the newest silently handed the application back to the one the learner had already
      * left, which is what made "no session running" unreachable.
      *
@@ -276,7 +276,7 @@ export class FocusLoopEngine {
    * Deliberately not "the most recent session". The fallback to `getLatestSession` read as
    * a convenience, but it made a finished session look live: the workspace kept its End
    * session button, the home page offered to continue it, and its resume card was fetched
-   * again on every reload 鈥?so ending a session left the card on screen over the app.
+   * again on every reload — so ending a session left the card on screen over the app.
    */
   getCurrentSession(): SessionSnapshot | null {
     const record = this.store.getActiveSession();
@@ -288,7 +288,7 @@ export class FocusLoopEngine {
    * What the agent would be given about the current moment, and what it would not (AG1).
    *
    * This belongs here rather than in the renderer. The builder needs the course, the material and the
-   * event log, and the renderer has none of them directly 鈥?it has only what it was sent. Assembling
+   * event log, and the renderer has none of them directly — it has only what it was sent. Assembling
    * the context in the renderer would also mean the debug view could show something the agent never
    * receives, which is the one failure an inspector must not have.
    */
@@ -351,19 +351,19 @@ export class FocusLoopEngine {
    *
    * **The prompt is built before the provider is consulted.** Ordering it the other way round would
    * make an empty question unavailable *because* there is no model, which tells the learner the wrong
-   * thing about their own message 鈥?and the build is pure and free, so there is no cost to knowing
+   * thing about their own message — and the build is pure and free, so there is no cost to knowing
    * first. The report returned for an unreachable model is the built one with `sent` zeroed.
    *
    * **No learning event is emitted.** An intervention decision may not be an LLM inference (the epic's
    * invariant), and an ask is not an event either: the tutor helps with the step in front of the
    * learner, so emitting `HELP_REQUESTED` per question would make three questions in a row look like
-   * overload and trigger `OVERLOADED`/`BREAK` 鈥?the feature punishing the learner for using it. The
+   * overload and trigger `OVERLOADED`/`BREAK` — the feature punishing the learner for using it. The
    * transcript is in-memory and the log stays about the learner's work.
    *
    * **One retry, and only for the format.** `isRetryable` is the gate, and it is not a general
    * "ask again": a grounding failure teaches a model to satisfy the checker, so a rejection for
    * `unquoted-confirmation` or `not-from-the-material` is final. The retry also does not happen when
-   * the provider is offline, because the offline provider's output never parses by construction 鈥?a
+   * the provider is offline, because the offline provider's output never parses by construction — a
    * retry there is two calls and no answer on every question in the golden path.
    */
   async askTutor(request: TutorAskRequest): Promise<TutorAnswer> {
@@ -374,7 +374,7 @@ export class FocusLoopEngine {
     /*
      * An ask about a session that is over is refused rather than answered.
      *
-     * The answer is grounded in "the step you are on", and after the session ends there is no step 鈥?the
+     * The answer is grounded in "the step you are on", and after the session ends there is no step — the
      * context would be the last moment of a finished session presented as the current one, which is the
      * same failure `getCurrentSession` was fixed not to have. `dispatch` still accepts events on an ended
      * session (the state machine records them), and the difference is deliberate: an event is a fact
@@ -387,7 +387,7 @@ export class FocusLoopEngine {
     const report = this.contextFor(record);
     const context = report.context;
     /*
-     * A null context has exactly one producer 鈥?`buildAgentContext` with no session 鈥?and this method
+     * A null context has exactly one producer — `buildAgentContext` with no session — and this method
      * has already refused that case, so this is the same refusal one step later rather than a second
      * kind of failure. It is written rather than asserted because `AgentContext | null` is what the
      * builder hands back, and this is the only place a missing session could reach a prompt.
@@ -412,12 +412,21 @@ export class FocusLoopEngine {
       );
     }
 
+    /*
+     * The question as the model was given it, named once.
+     *
+     * It is needed in three places — the quote check, the retry's complaint and the transcript — and all
+     * three must be the *sent* text rather than `request.question`: the sanitiser may have trimmed it, and
+     * a learner cannot be quoted on a line the model never saw.
+     */
+    const asked = built.question;
+
     const provider = this.providers.primary;
     if (provider.offline) {
       /*
        * Not "the model answered badly": the configured provider cannot answer at all, and the mock's
        * output is documented never to parse. Calling it would produce a rejection and then a retry,
-       * which is two calls and no answer 鈥?so the honest outcome is the one the learner can act on.
+       * which is two calls and no answer — so the honest outcome is the one the learner can act on.
        */
       return this.unavailable(
         'no-model',
@@ -451,20 +460,41 @@ export class FocusLoopEngine {
        * The excerpt **the builder says is in the prompt**, not `context.material`.
        *
        * They differ exactly when the reduction dropped the excerpt for space, and passing the material
-       * there would let a model's `[section]` citation resolve against a section it was never given 鈥?       * which is the one thing `resolveSource` exists to catch. Derived from the builder's return rather
+       * there would let a model's `[section]` citation resolve against a section it was never given —       * which is the one thing `resolveSource` exists to catch. Derived from the builder's return rather
        * than from `report.sent.excerptCharacters > 0`, because the report is a number about the prompt
        * and this is the object that went into it.
        */
       excerpt: built.excerpt,
-      learnerText: this.transcript.learnerText(request.sessionId),
+      /*
+       * The question that was just asked, **and** everything said before it.
+       *
+       * The transcript does not hold this question yet — it is recorded only when an answer comes back — so
+       * passing the transcript alone made a confirmation of the learner's own message unquotable, which is
+       * the whole of what `CHECK_MY_ANSWER` is for: the mode could never pass its quote check on the first
+       * ask, and could only ever confirm something said in an *earlier* exchange.
+       *
+       * `built.question` rather than `request.question`: the text the model was given. A learner whose
+       * message the sanitiser trimmed cannot be quoted on the trimmed line, because the model never saw it.
+       */
+      learnerText: [...this.transcript.learnerText(request.sessionId), built.question],
     });
 
     const omissions = [...built.report.omitted];
     /*
+     * A rejected reading's omissions are collected **when they happen**, not at the return.
+     *
+     * A retry produces two readings and the second overwrites `reading`, so appending `reading.omissions`
+     * at the end reports the retry's and drops the first one's — which is what the rejected path did, and
+     * the degraded-retry path dropped both because it appends nothing. The contract says `omitted` is the
+     * complete account on every outcome, so each reading is pushed as it arrives and the returns below add
+     * only what is genuinely theirs.
+     */
+    if (reading.status === 'rejected') omissions.push(...reading.omissions);
+    /*
      * What has actually been sent, which a retry changes.
      *
      * The first version reported `built.report.sent` on every path, so the one call that sends two
-     * prompts reported the size of the smaller one 鈥?and the degraded-retry path reported zero, for an
+     * prompts reported the size of the smaller one — and the degraded-retry path reported zero, for an
      * exchange in which a prompt was handed over and answered by nobody. The sum is the honest number: a
      * retry is a second payment, and the inspector's job is to show the total the tutor is spending.
      */
@@ -481,7 +511,7 @@ export class FocusLoopEngine {
       const composed = composeRetryPrompt({
         system: built.system,
         // The preamble, not the prompt: the prompt ends with the `[question]` block and the retry
-        // restates the question, so composing from the prompt sends it twice 鈥?which is what made the
+        // restates the question, so composing from the prompt sends it twice — which is what made the
         // retry unaffordable for exactly the long questions it is most needed for.
         preamble: built.preamble,
         answer: completion.text,
@@ -491,7 +521,7 @@ export class FocusLoopEngine {
       if (composed.status === 'does-not-fit') {
         /*
          * Reported rather than skipped in silence. The retry is a second call and the ceiling bounds
-         * every call, so this is the correct outcome 鈥?but the learner is owed the reason their answer
+         * every call, so this is the correct outcome — but the learner is owed the reason their answer
          * came back as a fallback rather than as a repaired one.
          */
         omissions.push({
@@ -519,8 +549,9 @@ export class FocusLoopEngine {
           mode: request.mode,
           text: completion.text,
           excerpt: built.excerpt,
-          learnerText: this.transcript.learnerText(request.sessionId),
+          learnerText: [...this.transcript.learnerText(request.sessionId), asked],
         });
+        if (reading.status === 'rejected') omissions.push(...reading.omissions);
       }
     }
 
@@ -532,7 +563,7 @@ export class FocusLoopEngine {
           provider: providerInfo(provider, false, null),
           fallback: fallbackFor(describeRejection(reading.reason), context),
         },
-        context: { sent, omitted: [...omissions, ...reading.omissions] },
+        context: { sent, omitted: [...omissions] },
       };
     }
 
@@ -541,7 +572,7 @@ export class FocusLoopEngine {
      * Recorded only on an answer.
      *
      * A rejected reply is model prose that failed the mode's shape, and putting it in the transcript
-     * would make the next prompt carry text the tutor refused to show the learner 鈥?with the tutor's
+     * would make the next prompt carry text the tutor refused to show the learner — with the tutor's
      * own role on it.
      *
      * The omissions this returns describe the transcript as it is now, and every other omission here
@@ -556,10 +587,10 @@ export class FocusLoopEngine {
          * The question **as the model saw it**, from the builder rather than from the request.
          *
          * They differ when the learner typed something the sanitiser strips. Storing the raw text would
-         * put a `[hint]` the learner wrote into the next prompt in the learner's turn 鈥?a label the
+         * put a `[hint]` the learner wrote into the next prompt in the learner's turn — a label the
          * model is meant to produce, shown to it as input, which is what the sanitiser exists to prevent.
          */
-        question: built.question,
+        question: asked,
         answer: formatAnswer(reply.parts),
       }),
     );
@@ -598,7 +629,7 @@ export class FocusLoopEngine {
    * **The token cap is sized so the formatter is what bounds an answer, not the provider's stop.** The
    * widest answer any mode allows is `CHECK_MY_ANSWER`'s two parts at `partCharacters` each, which is
    * 1,200 characters; in the language where a character is closest to a token that is over 1,200 tokens,
-   * so 512 would truncate a legal answer 鈥?and a truncated part still has its label, so it parses as a
+   * so 512 would truncate a legal answer — and a truncated part still has its label, so it parses as a
    * complete one and nothing anywhere reports that the end went missing. 2,048 leaves room for that plus
    * the labels. Anything the model returns beyond it is caught by the clip, which reports.
    */
@@ -663,8 +694,8 @@ export class FocusLoopEngine {
     const at = request.at ?? this.clock();
 
     /*
-     * SAFETY: `type` and `source` are already members of the union 鈥?the IPC boundary and the bridge
-     * both check the type against LEARNING_EVENT_TYPES before a request reaches the engine 鈥?so the
+     * SAFETY: `type` and `source` are already members of the union — the IPC boundary and the bridge
+     * both check the type against LEARNING_EVENT_TYPES before a request reaches the engine — so the
      * only thing the compiler cannot see is that `payload` matches the member its type names. That
      * shape is the caller's contract, and the per-event payload builders are what satisfy it.
      */
@@ -945,7 +976,7 @@ export class FocusLoopEngine {
          * The request being answered is part of the identity, and has to be.
          *
          * `saveIntervention` inserts and ignores a duplicate id, so two interventions that share a
-         * session, a millisecond and an action are one row 鈥?and if the answer's row is the one that
+         * session, a millisecond and an action are one row — and if the answer's row is the one that
          * is dropped, the request is never recorded as answered and the same answer is emitted on
          * every later dispatch. Two answers in the same millisecond for the same action are exactly
          * what this produces: a tick that lands on OVERLOADED (`BREAK`) during a `tired` request
@@ -1047,13 +1078,13 @@ export class FocusLoopEngine {
 
   getSimulatorAvailability(): SimulatorAvailability {
     return this.simulatorEnabled
-      ? { enabled: true, reason: 'Development build 鈥?the simulator is available.' }
+      ? { enabled: true, reason: 'Development build — the simulator is available.' }
       : { enabled: false, reason: 'Disabled outside development builds.' };
   }
 
   /**
    * Demo Event Simulator. This is a supported fallback for the golden path when
-   * the browser extension is not installed 鈥?not a test-only hack.
+   * the browser extension is not installed — not a test-only hack.
    */
   simulate(command: SimulatorCommand): DispatchEventResponse {
     if (!this.simulatorEnabled) {
