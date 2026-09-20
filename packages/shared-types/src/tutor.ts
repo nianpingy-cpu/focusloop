@@ -184,10 +184,20 @@ export type TutorUnavailableReason =
   /** The provider was reached and failed. */
   | 'provider-failed'
   /**
+   * There was no question to ask.
+   *
+   * Reachable without anybody misbehaving: a message that is empty, whitespace, or nothing but the
+   * format's own labels sanitises to nothing — and the sanitising is itself correct. What must not
+   * happen is sending the `[question]` label with nothing under it, which is a paid call asking the
+   * model to explain nothing.
+   */
+  | 'no-question'
+  /**
    * The question and the context do not both fit inside `TUTOR_LIMITS.inputCharacters`.
    *
-   * A prompt with the question left out is not a smaller prompt, it is a different one — the learner
-   * has paid for a call that asks the model to explain nothing — so this is refused rather than sent.
+   * A prompt with the question left out is not a smaller prompt, it is a different one, so this is
+   * refused rather than sent. With the bounds as they stand it is unreachable and is kept as a
+   * backstop — `buildTutorPrompt` names the constants that would bring it back into reach.
    */
   | 'request-too-long';
 
