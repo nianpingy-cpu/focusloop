@@ -95,10 +95,12 @@ export function parseDispatchRequest(channel: string, value: unknown): DispatchE
    * learner's event log by then.
    */
   if (type === 'HELP_REQUESTED') {
-    asOptionalString(channel, fields, 'taskId');
-    // `null` is rejected along with everything else: the renderer leaves the field out to mean "they
-    // would rather not say", and two spellings for one absence is how a silent press starts being
-    // read as an answer.
+    // Absent is allowed; an explicit `null` is not, for the same reason as the reason below. A
+    // `taskId` of `null` is a second spelling of absent, and it reaches the log verbatim.
+    const taskId = fields['taskId'];
+    if (taskId !== undefined && (typeof taskId !== 'string' || taskId.length === 0)) {
+      fail(channel, '"taskId" must be a non-empty string when present');
+    }
     const reason = fields['reason'];
     if (reason !== undefined && !isStuckReason(reason)) {
       fail(channel, '"reason" must be a known stuck reason when present');

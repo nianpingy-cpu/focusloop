@@ -199,7 +199,14 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                   send an event to escape — which is the interruption this control exists to avoid.
                 -->
                 @if (stuckOpen()) {
-                  <div class="stuck-reasons" role="group" [attr.aria-label]="t('focus.stuck.aria')">
+                  <div
+                    class="stuck-reasons"
+                    role="group"
+                    tabindex="-1"
+                    #stuckGroup
+                    data-testid="stuck-reasons"
+                    [attr.aria-label]="t('focus.stuck.aria')"
+                  >
                     @for (reason of stuckReasons; track reason) {
                       <button
                         type="button"
@@ -332,6 +339,7 @@ export class FocusPage implements OnDestroy {
   private readonly planRoot = viewChild<ElementRef<HTMLElement>>('planRoot');
   private readonly planTrigger = viewChild<ElementRef<HTMLButtonElement>>('planTrigger');
   private readonly stuckTrigger = viewChild<ElementRef<HTMLButtonElement>>('stuckTrigger');
+  private readonly stuckGroup = viewChild<ElementRef<HTMLElement>>('stuckGroup');
 
   protected readonly t = this.i18n.t;
   protected readonly snapshot = this.state.snapshot;
@@ -358,27 +366,40 @@ export class FocusPage implements OnDestroy {
   protected readonly plan = computed(() => buildPlan(this.openTasks()));
   protected readonly nextTask = computed<MicroTask | null>(() => this.openTasks()[0] ?? null);
 
-  /** Set while the chooser is open, so closing it knows the trigger is owed the focus back. */
+  /** Set by Escape, and by nothing else: the one way out that owes the trigger its focus back. */
   private stuckReturnFocus = false;
+  /** Cleared when the chooser closes. While it is set, focus has already been moved into the group. */
+  private stuckFocusMoved = false;
 
   /**
-   * Handing focus back to the button that opened the chooser.
+   * Moving focus in and out of the chooser, which only exists while it is open.
    *
-   * An effect rather than a call inside the handler, because the trigger sits in the `@else` of the
-   * chooser: while the chooser is open the button does not exist, so focusing it as the Escape is
-   * handled reads a `viewChild` that is still empty and the focus goes nowhere. This is the same
-   * arrangement the resume card uses to move focus into and out of a card that only exists while it
-   * is shown.
+   * An effect rather than a call inside the handler or the template, because both ends of this are
+   * elements that do not exist at the moment the change is made: opening replaces the trigger with the
+   * group, and closing replaces the group with the trigger. Focusing either one from a handler reads a
+   * `viewChild` that is still empty, and the focus goes nowhere — which is what the e2e caught when
+   * this was a synchronous `focus()` in `dismissStuck`.
    *
-   * The flag is cleared only once the focus has actually been given, so an effect run that arrives
-   * before the button is in the view leaves it set for the run that comes after.
+   * Focus goes to the group rather than to the first reason. The group carries the label that asks the
+   * question, so the question is what gets announced, and nothing is pre-selected for the learner.
+   * This is the arrangement the resume card uses, and its comment gives the reason it is not optional:
+   * without moving focus in, the keyboard is left on the page behind.
+   *
+   * The return half only runs for the Escape, not for every close. Answering a reason and completing
+   * the task both put the chooser away, and in both the learner's attention is somewhere else — the
+   * suggestion that just appeared, or the next step.
    */
   private readonly manageStuckFocus = effect(() => {
     if (this.stuckOpen()) {
-      this.stuckReturnFocus = true;
+      const group = this.stuckGroup()?.nativeElement;
+      if (group !== undefined && !this.stuckFocusMoved) {
+        this.stuckFocusMoved = true;
+        group.focus();
+      }
       return;
     }
 
+    this.stuckFocusMoved = false;
     const trigger = this.stuckTrigger()?.nativeElement;
     if (this.stuckReturnFocus && trigger !== undefined) {
       this.stuckReturnFocus = false;
@@ -436,6 +457,7 @@ export class FocusPage implements OnDestroy {
 
   /** Escape out of the chooser: focus goes back to the control that opened it, not into the void. */
   protected dismissStuck(): void {
+    this.stuckReturnFocus = true;
     this.stuckOpen.set(false);
   }
 
@@ -467,6 +489,19 @@ export class FocusPage implements OnDestroy {
   protected async start(taskId: string, minutes?: number): Promise<void> {
     // Starting a step uncovers it: the plan is not the learner's to tidy up first.
     this.applyPlanEvent('start');
+    /*
+     * The chooser belongs to the step it was opened on, so it goes with it. Left alone it is a question
+     * about a step that is no longer on screen — and because it covers the trigger, the learner cannot
+     * even ask about the new one.
+     *
+     * This is the only place the chooser is closed for a task change, and it is enough. Finishing a step
+     * and ending a session both take the running-task branch away, so the chooser is unmounted by the
+     * phase change; `start` is where that branch comes back. Closing it in those two as well looked
+     * defensive and was worse than useless — the extra reset in `complete` made the e2e assertion below
+     * pass while this line was deleted, so the guard the test was supposed to be covering was hidden by
+     * a copy of itself that nothing needed.
+     */
+    this.stuckOpen.set(false);
     await this.state.dispatch('TASK_STARTED', { taskId });
     const task = this.findTask(taskId);
     this.completedView.set(false);

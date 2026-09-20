@@ -120,6 +120,11 @@ describe('parseDispatchRequest', () => {
       expectFailure(() =>
         parseDispatchRequest(CHANNEL, { ...help, payload: { taskId: 7, reason: 'tired' } }),
       );
+      // `null` is a second spelling of absent, and unlike the reason above it *would* have been let
+      // through and written to the log, because `asOptionalString` reads null as "not there".
+      expectFailure(() =>
+        parseDispatchRequest(CHANNEL, { ...help, payload: { taskId: null, reason: 'tired' } }),
+      );
     });
 
     it('leaves other event types opaque', () => {

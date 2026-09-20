@@ -810,9 +810,10 @@ test('a file on the machine can be imported without typing any of it out', async
 });
 
 /*
- * Last on purpose too, and for the same reason the fold test is: a reasoned help request spends part
- * of the intervention policy's session budget, and running this earlier left the Chinese test with
- * nothing to show. Nothing after it, and it ends the session it started so nothing is left current.
+ * Last, and for a different reason than the fold test above: this one starts a session of its own and
+ * finishes by ending it, so it has to run after everything that needs a session. It cannot disturb the
+ * Chinese test's intervention budget — that budget is counted per session, and this test begins a new
+ * one — but it does leave no session running, which is the state this file has to end in.
  */
 test('the reason the learner gives is answered according to which kind of stuck it is', async () => {
   /*
@@ -827,9 +828,14 @@ test('the reason the learner gives is answered according to which kind of stuck 
   await window.getByTestId('course-card').first().getByTestId('start-session').click();
   await window.getByTestId('start-task').first().click();
 
-  // Escape is a way out. A learner who opened this by mistake must not have to send an event to close
-  // it, and the focus has to land somewhere they can see rather than nowhere.
+  /*
+   * The keyboard has to be able to get in as well as out. Opening the chooser replaces the trigger with
+   * the group, so the focused element is destroyed; without moving focus, the learner is left on the
+   * body and has to tab from the top of the document to reach the six reasons. Focus goes to the group,
+   * which is what carries the question.
+   */
   await window.getByTestId('focus-stuck').click();
+  await expect(window.getByTestId('stuck-reasons')).toBeFocused();
   await expect(window.getByTestId('stuck-tired')).toBeVisible();
   await window.keyboard.press('Escape');
   await expect(window.getByTestId('stuck-tired')).toBeHidden();
@@ -862,6 +868,23 @@ test('the reason the learner gives is answered according to which kind of stuck 
   // The chooser does not come back on its own: it was answered, and the answer is a thing that has
   // happened rather than a mode the control stays in.
   await expect(window.getByTestId('stuck-tired')).toBeHidden();
+  await expect(window.getByTestId('focus-stuck')).toBeVisible();
+
+  /*
+   * And it does not outlive the step it is about. The chooser is drawn inside the running-task branch
+   * with the step's own controls, so leaving it open across a task change used to put the question on
+   * screen over the *next* step — with the trigger for asking about that step hidden behind it.
+   *
+   * The assertion is after the next step starts, and not after the button that finishes the current
+   * one: finishing a step leaves the running-task branch altogether, so the chooser is unmounted by the
+   * phase change there whether or not anything closed it, and a check made at that point passes for the
+   * wrong reason. Starting the next step is where the branch comes back.
+   */
+  await window.getByTestId('focus-stuck').click();
+  await expect(window.getByTestId('stuck-reasons')).toBeVisible();
+  await window.getByTestId('complete-task').click();
+  await window.getByTestId('start-task').first().click();
+  await expect(window.getByTestId('stuck-reasons')).toBeHidden();
   await expect(window.getByTestId('focus-stuck')).toBeVisible();
 
   // Left as it was found, so a re-run of this file does not start from a session.

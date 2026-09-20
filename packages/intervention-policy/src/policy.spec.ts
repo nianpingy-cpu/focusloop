@@ -76,6 +76,12 @@ describe('intervention policy — the learner asks for help (AG2)', () => {
    *
    * `STUCK_REASONS` is the list the picker offers, so a reason that is in the vocabulary and missing
    * from a table is a failure here rather than a NO_ACTION the learner discovers.
+   *
+   * Two things about this test are worth knowing before changing it. The reason key is asserted as a
+   * *literal*, which is what gives it teeth. The action is compared against `ACTION_FOR_STUCK_REASON`,
+   * which is the table the policy itself reads — so on its own that half is a tautology that can never
+   * fail, and the action side of the table is pinned by the hard-coded pairs in the `it.each` above.
+   * That test is not redundant with this one; do not delete it.
    */
   it.each([...STUCK_REASONS])('answers %s with its own action and its own words', (reason) => {
     const decision = decide({
@@ -103,21 +109,6 @@ describe('intervention policy — the learner asks for help (AG2)', () => {
     });
 
     expect(decision.answersRequestId).toBe(`HELP_REQUESTED:${T0}`);
-  });
-
-  it('answers every kind differently in words', () => {
-    // Six reasons, six sentences. A reason that reads back the same as another is a learner who cannot
-    // tell what the agent thought they meant.
-    const keys = STUCK_REASONS.map(
-      (reason) =>
-        decide({
-          engineState: engineWith({ state: 'FOCUSED', currentTaskId: 't1' }),
-          recentEvents: asked({ reason }),
-          now: T0,
-        }).reason.key,
-    );
-
-    expect(new Set(keys).size).toBe(STUCK_REASONS.length);
   });
 
   it('does not answer the same request twice', () => {

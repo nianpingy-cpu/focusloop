@@ -1880,6 +1880,33 @@ code {
   color: var(--focus-ink-quiet);
 }
 
+/*
+ * The reason chooser: a group inside the control row rather than a row of its own.
+ *
+ * It takes a line to itself, because seven labelled buttons beside Pause, +1 minute and Complete is
+ * a wall rather than a choice — and it has to bring its own gap, because as one flex item inside
+ * `.focus-controls` the buttons would otherwise sit flush against each other, which reads as one
+ * long string of text.
+ */
+.stuck-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex-basis: 100%;
+  padding-top: 2px;
+}
+
+/* Focused programmatically when it opens, so it must not draw as a control the learner selected. */
+.stuck-reasons:focus {
+  outline: none;
+}
+
+.stuck-reasons:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 4px;
+}
+
 .focus-progress-strip {
   display: grid;
   grid-template-columns: auto auto minmax(120px, 1fr);

@@ -327,6 +327,43 @@ describe('FocusLoopEngine', () => {
       expect(shown[0]?.answersRequestId).toBe(request?.id);
       expect(shown[0]?.id).toBe(response.interventionId);
     });
+
+    it('records the answer even when something else is shown in the same millisecond', () => {
+      /*
+       * The collision that made the fix in the previous test incomplete.
+       *
+       * `saveIntervention` inserts and ignores a duplicate id, so two interventions sharing a session,
+       * a millisecond and an action are one row. A state rule that shows a break and a `tired` request
+       * that asks for one are both `BREAK`, and the clock is frozen in these tests, so they are the
+       * same millisecond by construction rather than by contrivance. Whichever row loses, the request
+       * is never recorded as answered — and then the answer is emitted on every later dispatch for
+       * ever, which the session budget cannot stop because no new row is ever stored. The request id is
+       * part of the intervention id so that the two rows cannot be the same row.
+       */
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      const overload = ctx.engine.simulate({ command: 'overload', sessionId: session.id });
+      expect(overload.decision?.action).toBe('BREAK');
+
+      const asked = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { reason: 'tired' },
+      });
+      expect(asked.decision?.action).toBe('BREAK');
+
+      const request = ctx.engine
+        .listEvents(session.id)
+        .filter((event) => event.type === 'HELP_REQUESTED')
+        .at(-1);
+      const answer = ctx.engine
+        .listInterventions(session.id)
+        .find((item) => item.id === asked.interventionId);
+
+      // The row survived, and it names the request. Dropped, it would be `undefined` here.
+      expect(answer).toBeDefined();
+      expect(answer?.answersRequestId).toBe(request?.id);
+    });
   });
 
   describe('session lifecycle', () => {
