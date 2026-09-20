@@ -125,7 +125,7 @@ describe('buildTutorPrompt', () => {
      */
     const turns: TutorTurn[] = Array.from({ length: 20 }, (_, index) => ({
       role: index % 2 === 0 ? 'learner' : 'tutor',
-      text: 'y'.repeat(TUTOR_LIMITS.answerCharacters),
+      text: 'y'.repeat(Math.ceil(TUTOR_LIMITS.inputCharacters / 3)),
     }));
 
     const { prompt, system, report } = buildTutorPrompt({
@@ -136,8 +136,42 @@ describe('buildTutorPrompt', () => {
     });
 
     expect(prompt.length + system.length).toBeLessThanOrEqual(TUTOR_LIMITS.inputCharacters);
-    expect(report.sent.inputCharacters).toBe(prompt.length + system.length);
     expect(report.sent.turns).toBeLessThanOrEqual(TUTOR_LIMITS.turns);
+  });
+
+  it('bounds a prompt whose fixed parts alone exceed the ceiling', () => {
+    /*
+     * Reachable with every input at a documented cap and nothing adversarial: two context fields at
+     * their own limit, AG1's excerpt and a long question sum to about 4,800 before the system prompt is
+     * counted. Without a branch for it the loop breaks on its first iteration, the call returns a
+     * prompt well over the ceiling it documents, and the omission blames the transcript for a problem
+     * the transcript did not cause — a ceiling that reports rather than bounds.
+     */
+    const cramped = contextWith({
+      concept: { conceptId: 'c1', title: 'Rotations', summary: 's'.repeat(4000), keyPoints: [] },
+      task: {
+        taskId: 't1',
+        title: 'Read section 3',
+        instructions: 'i'.repeat(4000),
+        kind: 'read',
+        estimatedMinutes: 5,
+        step: 2,
+        totalSteps: 5,
+      },
+    });
+
+    const { prompt, system, report } = buildTutorPrompt({
+      mode: 'CHECK_MY_ANSWER',
+      context: cramped,
+      question: 'q'.repeat(TUTOR_LIMITS.questionCharacters),
+      turns: [{ role: 'learner', text: 'earlier' }],
+    });
+
+    expect(prompt.length + system.length).toBeLessThanOrEqual(TUTOR_LIMITS.inputCharacters);
+    // And the account names what actually gave way, rather than blaming the turns.
+    expect(report.omitted.some((entry) => entry.field === 'material')).toBe(true);
+    // The question is never dropped entirely: a prompt without the question is not a smaller prompt.
+    expect(prompt).toContain('[question]');
   });
 
   it('charges the system prompt, the context and the turn prefixes to the budget', () => {
@@ -482,7 +516,7 @@ describe('readTutorReply', () => {
       });
     });
 
-    it("accepts a short quote when it is the learner 's whole message", () => {
+    it("accepts a short quote when it is the learner's whole message", () => {
       // Somebody who answered "yes" has nothing longer to quote, and rejecting them would be rejecting
       // an honest learner for being brief.
       const result = read(

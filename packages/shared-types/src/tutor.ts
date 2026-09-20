@@ -121,13 +121,16 @@ export const TUTOR_LIMITS = {
   questionCharacters: 2000,
   /** What is kept of one tutor answer. */
   answerCharacters: 600,
-  /** One part of an answer. Longer parts are clipped, and the clip is reported. */
+  /**
+   * One part of an answer. Longer parts are clipped, and the clip is reported.
+   */
   partCharacters: 600,
   /**
    * The context block: the concept summary and the step's instructions.
    *
-   * Both are unbounded strings in the domain — whatever the imported material produced — so neither is
-   * charged against the excerpt's budget.
+   * Applied **per field**, so the block can reach twice this before anything else is counted. Both are
+   * unbounded strings in the domain — whatever the imported material produced — unlike
+   * `material.text`, which arrived already bounded from AG1.
    */
   contextCharacters: 800,
   /**

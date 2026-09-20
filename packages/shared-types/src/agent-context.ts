@@ -84,8 +84,12 @@ export interface AgentContextOmission {
   /**
    * Which part of the input this is about.
    *
-   * `'conversation'` was added for AG3: a dropped transcript turn is none of the other four, and
-   * reporting it under one of them would have said something untrue about why it was dropped.
+   * `'conversation'` was added for AG3. A dropped transcript turn is none of the other four, and
+   * reporting it under one of them would have said something untrue about why it was dropped. It now
+   * covers several ways a conversation input can be reduced — a turn dropped for space, a turn or a
+   * question clipped for length, and an answer part longer than is shown. They share a member because
+   * they share a cause (a bound the learner does not control), and a distinct member for each would be
+   * five names for one situation.
    */
   readonly field: 'events' | 'material' | 'courses' | 'session' | 'conversation';
   readonly detail: string;
