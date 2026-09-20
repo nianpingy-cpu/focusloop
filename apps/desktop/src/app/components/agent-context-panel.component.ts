@@ -46,7 +46,12 @@ import { I18nService } from '../core/i18n/i18n.service';
             <dd data-testid="agent-context-events">{{ eventLine(context) }}</dd>
           </dl>
 
-          @if (context.material.text.length > 0) {
+          <!--
+            Gated on the learner's own material-text control, not shown unconditionally. The inspector
+            is a new surface, and a new surface quietly ignoring a switch somebody deliberately built
+            is how a control stops meaning anything.
+          -->
+          @if (showMaterial() && context.material.text.length > 0) {
             <pre class="agent-context__text">{{ context.material.text }}</pre>
           }
 
@@ -74,6 +79,7 @@ export class AgentContextPanelComponent {
 
   protected readonly t = this.i18n.t;
   protected readonly enabled = () => this.state.runtime()?.simulatorEnabled ?? false;
+  protected readonly showMaterial = this.state.showMaterialText;
 
   /**
    * The context the main process built, not one assembled here.

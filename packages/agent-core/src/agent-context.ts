@@ -1,5 +1,6 @@
 import {
   AGENT_CONTEXT_LIMITS,
+  findSectionForConcept,
   type AgentContext,
   type AgentContextOmission,
   type AgentContextReport,
@@ -139,9 +140,9 @@ function excerptMaterial(
   }
 
   const sections = material.sections;
-  const section = pickSection(sections, concept);
+  const section = findSectionForConcept(material, concept?.title ?? null);
 
-  if (section === undefined) {
+  if (section === null) {
     omissions.push({
       field: 'material',
       detail:
@@ -183,27 +184,6 @@ function excerptMaterial(
     text,
     truncated,
   };
-}
-
-/**
- * The section a concept was generated from, by exact heading.
- *
- * Exact on purpose, and on purpose not "the first section when nothing matches". A concept is named
- * after its section heading, so an exact match is a real link. A near miss is not a link at all, and
- * a section about something else is worse than no section: the answer that came back would be
- * confident and grounded in the wrong thing. The choice is visible in the omissions.
- *
- * This mirrors `findSection` in the renderer's `material-lookup`, which resolves the same link for
- * the course page. One rule, written twice, because one side is a package and the other is the
- * application.
- */
-function pickSection(
-  sections: MaterialDocument['sections'],
-  concept: Concept | null,
-): MaterialDocument['sections'][number] | undefined {
-  if (concept === null) return undefined;
-  const title = concept.title.trim().toLowerCase();
-  return sections.find((section) => section.heading.trim().toLowerCase() === title);
 }
 
 function takeRecentEvents(

@@ -25,7 +25,7 @@ import type {
   StartSessionResponse,
   ThemePreference,
 } from '@focusloop/shared-types';
-import { message } from '@focusloop/shared-types';
+import { findMaterialForCourse, message } from '@focusloop/shared-types';
 import { buildAgentContext } from './agent-context';
 import {
   DEFAULT_INSIGHT_RANGE,
@@ -274,26 +274,11 @@ export class FocusLoopEngine {
       progress: snapshot.progress,
       course,
       courseCount: this.listCourses().length,
-      material: this.materialFor(session.courseId),
+      material: findMaterialForCourse(this.listMaterials(), session.courseId),
       events: this.listEvents(session.id),
       checkpoint: this.getLatestCheckpoint(session.id),
       learningState: session.state,
     });
-  }
-
-  /**
-   * The material a generated course came from.
-   *
-   * The generator names a course `course-<hash>` and the parser names the document `material-<hash>`
-   * from the same content hash, so the link is the hash and nothing else. The renderer resolves the
-   * same link in `material-lookup` for the course page — one convention, written twice, because one
-   * side is a package and the other is the application.
-   */
-  private materialFor(courseId: string): MaterialDocument | null {
-    const prefix = 'course-';
-    if (!courseId.startsWith(prefix)) return null;
-    const id = `material-${courseId.slice(prefix.length)}`;
-    return this.listMaterials().find((document) => document.id === id) ?? null;
   }
 
   getSessionProgress(sessionId: string) {

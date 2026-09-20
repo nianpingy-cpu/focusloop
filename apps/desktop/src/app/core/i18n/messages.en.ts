@@ -260,9 +260,6 @@ const en = {
   'agent.action.BREAK': 'Take a short break',
   'agent.action.RESUME': 'Resume where you left off',
   'agent.action.NO_ACTION': 'No suggestion right now',
-
-  // ----------------------------------------------------------- simulator
-  // --------------------------------------------------------------- agent
   'agent.inspector.title': 'What the agent sees',
   'agent.inspector.state': 'State',
   'agent.inspector.concept': 'Concept',
@@ -274,6 +271,8 @@ const en = {
   'agent.inspector.of': 'of',
   'agent.inspector.truncated': 'truncated',
   'agent.inspector.chars': 'chars',
+
+  // ----------------------------------------------------------- simulator
   'sim.aria': 'Demo event simulator',
   'sim.label': 'Simulator',
   'sim.distraction': 'Distraction',

@@ -8,8 +8,18 @@ import type { LearningState } from './state';
  *
  * The point of this type is its **boundaries**, not its fields. Handing a model the course list, the
  * session log and the database is easy to write and impossible to keep honest: the prompt grows with
- * the learner's history, the cost stops being predictable, and there is no longer any one place that
- * says what the model may see. This file is that place.
+ * the learner's history, the cost stops being predictable, and nothing states what the model may see.
+ *
+ * What this file actually guarantees, precisely: every field is either bounded by a limit named in
+ * `AGENT_CONTEXT_LIMITS` or is a single record, and every exclusion is itemised in
+ * `AgentContextOmission` rather than silently dropped. What it does **not** guarantee is the input —
+ * the source is assembled by the caller, so this describes the shape of what is handed over, not the
+ * policy for choosing it.
+ *
+ * The checkpoint is the one field passed through whole. It is already a summary of where the learner
+ * got to, and trimming it would damage the thing the resume capability exists to restore. It is named
+ * here rather than left implicit, because "everything is bounded" would otherwise be a claim this
+ * file does not make good on.
  *
  * A note on naming: the design notes call the checkpoint a `CognitiveCheckpoint`. The continuity
  * package already stores exactly that object as `LearningCheckpoint`, so this reuses it. Two names

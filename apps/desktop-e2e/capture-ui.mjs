@@ -236,7 +236,9 @@ try {
   const theme = await window.evaluate(() => document.documentElement.dataset.theme);
   const lightBody = await window.evaluate(() => getComputedStyle(document.body).backgroundColor);
   process.stdout.write(
-    `\nCAPTURED ${String(captured)} screens, error banners: ${String(banners)}, unsettled: ${String(unsettled)}\n` +
+    `\nCAPTURED ${String(captured)} files: ${String(captured - unsettled)} settled, ` +
+      `${String(unsettled)} written from a frame that never settled\n` +
+      `  error banners: ${String(banners)}\n` +
       `  theme=${theme} body=${lightBody}\n` +
       `  theme=dark body=${darkBody}\n`,
   );

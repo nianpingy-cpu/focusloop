@@ -165,11 +165,24 @@ describe('buildAgentContext', () => {
     expect(report.context?.material.truncated).toBe(false);
   });
 
-  it('excludes the text of every other section', () => {
-    const text = buildAgentContext(source()).context?.material.text ?? '';
+  it('accounts for the sections it left behind', () => {
+    /*
+     * This replaces an assertion that could not fail.
+     *
+     * The old one was `expect(text).not.toContain('INTRODUCTION-BODY')` — but `text` is
+     * `section.body.slice(...)` of one chosen section, so it was structurally impossible for it to
+     * contain another section's body. It read as a boundary guard and proved nothing.
+     *
+     * The account is the part that can actually be wrong, and it had no test at this granularity.
+     * "Which section was chosen" is covered by the excerpt test above, which fails if the rule falls
+     * back to the first section: Rotations is not the first section in the fixture.
+     */
+    const report = buildAgentContext(source());
 
-    expect(text).not.toContain('INTRODUCTION-BODY');
-    expect(text).not.toContain('DELETION-BODY');
+    expect(report.omissions).toContainEqual({
+      field: 'material',
+      detail: '2 other sections of the material are not included',
+    });
   });
 
   it('hands over no text at all rather than a section about something else', () => {

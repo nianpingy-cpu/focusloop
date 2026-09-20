@@ -996,9 +996,8 @@ textarea:focus {
 /*
  * Developer-mode only, and collapsed to one line until it is asked for.
  *
- * It sits *above* the simulator bar rather than beside it. That strip at the bottom is already shared
- * by the simulator and the plan sheet, and this is the third thing to want a place on it — which is
- * the argument in #85 for folding the simulator away, made again by accident.
+ * Bottom-left, which nothing else occupies: the simulator bar spans the bottom edge and the plan sheet
+ * is pinned to the bottom centre, so this sits in the corner rather than competing for their place.
  */
 .agent-context {
   position: fixed;
@@ -1016,6 +1015,7 @@ textarea:focus {
   font-size: 13px;
 }
 
+/* The simulator bar spans the bottom edge, so the panel clears its height while it is there. */
 body:has(.simulator) .agent-context {
   bottom: 72px;
 }
