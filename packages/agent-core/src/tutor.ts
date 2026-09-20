@@ -140,7 +140,13 @@ export interface ReadTutorReplyInput {
   readonly text: string;
   /** The excerpt the model was given, or null when there was nothing to ground an answer in. */
   readonly excerpt: MaterialExcerpt | null;
-  /** Every learner turn in the conversation, oldest first. See the note on the quotation check. */
+  /**
+   * Every recorded learner turn, oldest first, **plus the question this reply answers**.
+   *
+   * The current question is part of the conversation and the transcript does not hold it yet — the engine
+   * records a turn when an answer comes back — so a caller that passes only the recorded turns leaves
+   * `CHECK_MY_ANSWER` unable to confirm anything the learner just said. See the note on the quotation check.
+   */
   readonly learnerText: readonly string[];
 }
 
@@ -280,9 +286,11 @@ export function readTutorReply(input: ReadTutorReplyInput): TutorReading {
  * What it buys is that the learner can see exactly which of their own words was endorsed, and a
  * confirmation that has to point at something is harder to produce by reflex than one that does not.
  *
- * The check runs against **every learner turn**, not the current message: conversations run to several
- * turns, and a learner writing "the bit I said before about the invariant" is quoting themselves. A
- * false rejection of an honest learner is worse than a missed fabrication, because the learner cannot
+ * The check runs against **every learner turn including the one just asked** — conversations run to several
+ * turns and a learner quoting "the bit I said before about the invariant" is quoting themselves, but the
+ * message in front of the tutor is the first thing it should be able to confirm. A caller that passes only
+ * the recorded transcript makes that impossible, and the far side of the doc on `ReadTutorReplyInput` says
+ * so. A false rejection of an honest learner is worse than a missed fabrication, because the learner cannot
  * see that anything went wrong.
  */
 function quotesTheLearner(confirmed: string, learnerText: readonly string[]): boolean {

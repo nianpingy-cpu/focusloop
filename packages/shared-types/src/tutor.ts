@@ -309,6 +309,13 @@ export interface TutorReply {
  * The same accounting `AgentContextReport` does, for the same reason: a conversation is an input the
  * context report does not know about, so without this the prompt would grow while the inspector stayed
  * silent — which is the one failure an inspector must not have.
+ *
+ * **`omitted` covers both halves of the exchange, and that is deliberate.** The engine appends the
+ * reader's answer-level omissions to the prompt's on every outcome, so one array is the complete account
+ * and a renderer does not have to know which arm of `TutorOutcome` it is looking at to decide where to
+ * read them from. `TutorReply.omissions` is still the answer's own subset, for a caller that wants exactly
+ * that; a caller that shows *everything* left out should read this field, because reading both would show
+ * each answer-level omission twice.
  */
 export interface TutorContextReport {
   /**
