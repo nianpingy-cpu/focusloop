@@ -166,8 +166,19 @@ export type TutorReading =
  * Telling a model its quote was not in the learner's message invites it to produce a quote that is,
  * whether or not it belongs to the claim — retrying a grounding failure is teaching the model to
  * satisfy the checker. A model that answered well and formatted badly has no such hazard.
+ *
+ * `unparseable` is in the repairable set, which is wider than the design note's wording (it named
+ * `missing-part` and `unexpected-part`). Prose instead of labels is a format failure and not a
+ * content one, so the same argument applies — but it is worth knowing that it *does* apply, because
+ * the doc comment above `readTutorReply` calls prose "not a near-miss". Both are true: prose is not a
+ * near-miss of an *answer*, and it is exactly what a format retry is for.
  */
-export function isRetryable(reason: TutorRejection): boolean {
+export type RetryableRejection = Exclude<
+  TutorRejection,
+  'unquoted-confirmation' | 'not-from-the-material'
+>;
+
+export function isRetryable(reason: TutorRejection): reason is RetryableRejection {
   return reason === 'unparseable' || reason === 'missing-part' || reason === 'unexpected-part';
 }
 
@@ -276,8 +287,9 @@ export function readTutorReply(input: ReadTutorReplyInput): TutorReading {
  */
 function quotesTheLearner(confirmed: string, learnerText: readonly string[]): boolean {
   const said = learnerText.map(normaliseForComparison);
-  // Joined with a separator the normalisation removes, so a quote cannot straddle two turns and match
-  // something the learner never wrote as one unit.
+  // Joined with a NUL, which no normalisation removes: the point is that a quote cannot span two turns
+  // and match something the learner never wrote as one unit. (An earlier comment claimed the separator
+  // was removed by the normalisation — it is not, and it is not meant to be.)
   const joined = said.join('\u0000');
 
   const spans = quotedSpans(confirmed).map(normaliseForComparison);
@@ -436,29 +448,84 @@ function formatSpec(mode: TutorMode): string {
 export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPrompt {
   const omissions: AgentContextOmission[] = [];
   const excerpt = input.context.material;
+  const limit = TUTOR_LIMITS.inputCharacters;
 
   const system = buildSystem(input.mode);
   const question = sanitiseQuestion(
     clip(input.question.trim(), TUTOR_LIMITS.questionCharacters, omissions),
   );
-  const contextBlock = describeContext(input.context, TUTOR_LIMITS.contextCharacters, omissions);
-  const questionBlock = `[question]\n${question}`;
 
-  let used = system.length + contextBlock.length + questionBlock.length;
+  let contextBlock = describeContext(
+    input.context,
+    { detailLimit: TUTOR_LIMITS.contextCharacters, includeExcerpt: true },
+    omissions,
+  );
+  let questionBlock = `[question]\n${question}`;
 
+  /*
+   * The fixed parts can exceed the whole budget on their own.
+   *
+   * Two context fields at their own cap, AG1's excerpt and a long question sum to about 4,800 before
+   * the system prompt is counted at all — and that is every input sitting at a documented cap, with
+   * nothing adversarial about it. Without this branch the loop simply breaks on its first iteration,
+   * the call returns a prompt well over the ceiling it documents, and the one omission it reports
+   * blames the transcript for a problem the transcript did not cause. **A ceiling with no branch for
+   * "the fixed part alone is over" reports a number above itself rather than bounding anything**, which
+   * is the state this change exists to end.
+   *
+   * The excerpt goes first because it is the largest and the most expendable: the step's own words
+   * still ground the answer, and AG1 already has a "this section was clipped" concept.
+   */
+  if (system.length + contextBlock.length + questionBlock.length > limit) {
+    contextBlock = describeContext(
+      input.context,
+      { detailLimit: 0, includeExcerpt: false },
+      omissions,
+    );
+    omissions.push({
+      field: 'material',
+      detail: 'the material excerpt was left out to keep the message within its length limit',
+    });
+  }
+
+  // Still over after that: the question itself has to give way, and it is never dropped entirely —
+  // the learner asked it, and a prompt without the question is not a smaller prompt, it is a
+  // different one.
+  const head = '[question]\n'.length;
+  const room = limit - system.length - contextBlock.length - head;
+  if (
+    contextBlock.length > 0 &&
+    room >= 0 &&
+    questionBlock.length > limit - system.length - contextBlock.length
+  ) {
+    questionBlock = `[question]\n${clip(question, room, omissions)}`;
+  }
+
+  /*
+   * The loop tests the **assembled** prompt, not a running total of its parts.
+   *
+   * The first version summed the system prompt, the context, the question and each turn block and then
+   * joined them with `\n\n` and a `Earlier in this conversation:` header that nothing had charged — so
+   * the artefact could sit about fifty characters over the ceiling, and the loop admitted turns that a
+   * check on the real thing would have refused. One string, built the way it is actually sent, is the
+   * only number worth comparing to a limit on what is sent.
+   */
   const included: TutorTurn[] = [];
-  // Newest first, so the turns dropped are the ones farthest from what is being asked about.
   for (let index = input.turns.length - 1; index >= 0; index -= 1) {
     const turn = input.turns[index];
     if (turn === undefined) continue;
     if (included.length >= TUTOR_LIMITS.turns) break;
 
-    const text = clip(turn.text, TUTOR_LIMITS.answerCharacters, omissions);
-    const block = turnBlock(turn.role, text);
-    if (used + block.length > TUTOR_LIMITS.inputCharacters) break;
+    // Clipped after the budget test, not before: clipping a turn and then dropping it reports a
+    // truncation the learner never saw.
+    const candidate = [...included, turn];
+    const assembled = assemble(contextBlock, candidate, questionBlock);
+    if (system.length + assembled.length > limit) break;
 
-    included.unshift({ role: turn.role, text });
-    used += block.length;
+    included.push({
+      role: turn.role,
+      text: clip(turn.text, TUTOR_LIMITS.answerCharacters, omissions),
+    });
   }
 
   const dropped = input.turns.length - included.length;
@@ -469,9 +536,7 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPrompt {
     });
   }
 
-  const prompt = [contextBlock, turnsBlock(included), questionBlock]
-    .filter((block) => block.length > 0)
-    .join('\n\n');
+  const prompt = assemble(contextBlock, included, questionBlock);
 
   return {
     system,
@@ -479,14 +544,30 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPrompt {
     report: {
       sent: {
         turns: included.length,
-        // The whole thing, system prompt included. `prompt.length + system.length` is asserted against
-        // the limit by the spec, so this number is the artefact rather than a claim about it.
+        // The whole thing, system prompt included.
         inputCharacters: system.length + prompt.length,
         excerptCharacters: excerpt.text.length,
       },
       omitted: omissions,
     },
   };
+}
+
+/**
+ * The prompt, assembled exactly the way it is sent.
+ *
+ * A function rather than an inline join because the budget test and the result have to agree: the
+ * earlier version computed the length one way and built the string another, and the difference was the
+ * `\n\n` separators and the transcript header.
+ */
+function assemble(
+  contextBlock: string,
+  turns: readonly TutorTurn[],
+  questionBlock: string,
+): string {
+  return [contextBlock, turnsBlock(turns), questionBlock]
+    .filter((block) => block.length > 0)
+    .join('\n\n');
 }
 
 function buildSystem(mode: TutorMode): string {
@@ -501,16 +582,24 @@ function buildSystem(mode: TutorMode): string {
 }
 
 /**
- * Removes anything from the learner's own question that would read as one of the tutor's labels.
+ * Removes anything from the learner's own words that would read as one of the tutor's labels.
  *
- * The question is data being re-sent into a format that has labels, so a learner who types `[hint]` is
- * not asking for a hint — but the model has no way to tell. This is the design's promise that the
- * tutor's own labels do not re-enter the prompt through the learner's side.
+ * The question and the transcript are data being re-sent into a format that has labels, so a learner
+ * who writes `[hint]` is not answering on the tutor's behalf — but the model has no way to tell.
+ *
+ * Narrowed to the labels the format actually has. Removing *every* bracketed word was the first
+ * version, and it deleted ordinary notation: a learner asking "what does `[x]` mean here?" lost the
+ * line, and a question that was only that line became empty. That is the same argument the parser
+ * makes two hundred lines up, and it should not have been reversed here.
  */
 function sanitiseQuestion(question: string): string {
+  const labels = new Set<string>([...TUTOR_PART_KINDS, SECTION_LABEL]);
   return question
     .split(/\r?\n/)
-    .filter((line) => !LABEL_LINE.test(line.trim()))
+    .filter((line) => {
+      const match = LABEL_LINE.exec(line.trim());
+      return match?.[1] === undefined || !labels.has(match[1]);
+    })
     .join('\n')
     .trim();
 }
@@ -550,21 +639,25 @@ function turnsBlock(turns: readonly TutorTurn[]): string {
  */
 function describeContext(
   context: AgentContext,
-  limit: number,
+  options: { readonly detailLimit: number; readonly includeExcerpt: boolean },
   omissions: AgentContextOmission[],
 ): string {
   const lines: string[] = [];
   const { task, concept, material } = context;
 
   if (concept.title !== null) lines.push(`Concept: ${concept.title}`);
-  if (concept.summary !== null && concept.summary.length > 0) {
-    lines.push(`Concept summary: ${clip(concept.summary, limit, omissions)}`);
+  if (concept.summary !== null && concept.summary.length > 0 && options.detailLimit > 0) {
+    lines.push(`Concept summary: ${clip(concept.summary, options.detailLimit, omissions)}`);
   }
   if (task.title !== null) lines.push(`Step ${task.step} of ${task.totalSteps}: ${task.title}`);
-  if (task.instructions !== null) {
-    lines.push(`What the step asks for: ${clip(task.instructions, limit, omissions)}`);
+  if (task.instructions !== null && options.detailLimit > 0) {
+    lines.push(
+      `What the step asks for: ${clip(task.instructions, options.detailLimit, omissions)}`,
+    );
   }
   lines.push(`The learner's state: ${context.learningState}`);
+
+  if (!options.includeExcerpt) return lines.join('\n');
 
   if (material.heading !== null && material.text.length > 0) {
     lines.push(
@@ -582,15 +675,21 @@ function describeContext(
 }
 
 /**
- * The one thing worth asking the model again about.
+ * What the model is told when it is asked again.
  *
- * Format failures only — see `isRetryable`. The reason is stated back in the words the parser uses,
- * because those are the words the prompt already used to describe the format, and a second vocabulary
- * for the same rule is how the two drift apart.
+ * Format failures only, so the parameter is narrowed to the retryable subset — passing
+ * `unquoted-confirmation` is then a type error rather than a function that politely claims the reply
+ * was missing a label.
+ *
+ * **This is a follow-up turn, not a fresh prompt.** It carries the problem, the format and the
+ * question, and deliberately no context block or excerpt: it must be appended after the exchange it is
+ * correcting, against the same system prompt, so the model can see the answer it is being asked to
+ * redo. Sending it on its own would leave nothing to ground an answer in — which is a fact about how
+ * step two has to call it, and is therefore written here rather than assumed there.
  */
 export function buildTutorRetryPrompt(input: {
   readonly mode: TutorMode;
-  readonly reason: TutorRejection;
+  readonly reason: RetryableRejection;
   readonly question: string;
 }): string {
   const { required, allowed } = TUTOR_MODE_PARTS[input.mode];
@@ -601,9 +700,9 @@ export function buildTutorRetryPrompt(input: {
         ? `Your answer used a label that is not allowed here. Only ${allowed
             .map((kind) => `[${kind}]`)
             .join(', ')} may be used.`
-        : `Your answer was missing one of the labels this mode requires: ${required
+        : `Your answer did not include the labels this mode requires: ${required
             .map((kind) => `[${kind}]`)
-            .join(', ')}.`;
+            .join(', ')}. Each one needs text under it — a label on its own is not an answer.`;
 
   return [
     problem,
