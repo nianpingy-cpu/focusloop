@@ -148,8 +148,6 @@ export type TutorReading =
   | {
       readonly status: 'answered';
       readonly reply: TutorReply;
-      /** Ways the answer is not what the model returned: a clipped part, a dropped heading line. */
-      readonly omissions: readonly AgentContextOmission[];
     }
   | {
       readonly status: 'rejected';
@@ -252,10 +250,15 @@ export function readTutorReply(input: ReadTutorReplyInput): TutorReading {
     return { status: 'rejected', reason: 'not-from-the-material', recovered: parts, omissions };
   }
 
+  /*
+   * The clip runs before the reply is built, and its omissions go **into** the reply: they are about
+   * the answer the learner is shown, and a caller that receives them beside the reply has nowhere to
+   * put them that the renderer can reach.
+   */
+  const clipped = clipParts(parts, omissions);
   return {
     status: 'answered',
-    reply: { mode: input.mode, parts: clipParts(parts, omissions), source },
-    omissions,
+    reply: { mode: input.mode, parts: clipped, source, omissions },
   };
 }
 
@@ -374,6 +377,38 @@ export type TutorPromptResult =
       readonly system: string;
       readonly prompt: string;
       readonly report: TutorContextReport;
+      /**
+       * The learner's question **as it was sent**: clipped to whichever of `questionCharacters` and the
+       * room left by the context is smaller, and with the format's own labels stripped.
+       *
+       * Returned rather than left for the caller to reconstruct, because the two things a caller does
+       * with it are both wrong under reconstruction. The transcript stores it, and storing the raw
+       * question would put a `[hint]` the learner typed into the next prompt as though the model had
+       * written it — the sanitiser exists for exactly that. And a retry re-sanitises what it is handed,
+       * so handing it the raw text is a second pass over text the first pass already changed.
+       */
+      readonly question: string;
+      /**
+       * Everything before the question, assembled exactly as it was sent: the context block and the
+       * included transcript turns.
+       *
+       * Exists for the retry, and exists because composing `prompt + the model's answer + the complaint`
+       * carries the question **twice**: the prompt ends with the `[question]` block and
+       * `buildTutorRetryPrompt` restates the question as part of the follow-up turn. On a budget where the
+       * prompt is already near the ceiling, that duplicated block is what made the retry unaffordable for
+       * exactly the learner who wrote a long question — the one whose model is most likely to have ignored
+       * the format. `[preamble, answer, retry]` says the same thing once.
+       */
+      readonly preamble: string;
+      /**
+       * The excerpt that is in the prompt, or `null` when it was dropped for space.
+       *
+       * `null` is not "there was no material" — that is an empty excerpt with a null heading, and it is
+       * still here as an object. This is "the model was not shown it", which is what a reader needs to
+       * know before it resolves a `[section]` citation: a citation of a section the model was not given
+       * is `not-from-the-material`, and it cannot be told from a real one after the fact.
+       */
+      readonly excerpt: MaterialExcerpt | null;
     }
   | {
       readonly status: 'refused';
@@ -466,6 +501,14 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
   let system = buildSystem(input.mode, hasSection);
   const questionBlock = `${QUESTION_HEAD}${questionText}`;
   let block = questionBlock;
+  /*
+   * The question as it will be sent, tracked rather than recomputed.
+   *
+   * `block` carries the label and `asked` does not, and the clip has to land in both — a caller that
+   * reconstructed the question by stripping the label would get the unclipped text back, which is the
+   * bug the old `questionText` read produced. `clip` is called once so the omission is reported once.
+   */
+  let asked = questionText;
 
   /*
    * The fixed parts can exceed the whole budget on their own.
@@ -515,14 +558,27 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
    * conversation — the string sent was two characters longer than the sum that had been bounded, so the
    * inspector could show 4,002 against a documented 4,000.
    *
-   * With the bounds as they stand the refusal below is **unreachable** and is kept as a backstop, and
-   * the largest total this probe could produce is the number to check that against: `CHECK_MY_ANSWER`
-   * with a 4000-character summary, a 4000-character instruction block, a title of 3600 and a question
-   * at the 2000-character cap sends 3415, and the largest total over both the spec's 2400-length scan
-   * and a probe of every question length from 1 to 4000 is 3637 — against a ceiling of 4000. Raising
-   * `contextCharacters`, `questionCharacters` or AG1's `materialCharacters`, or adding a mode with a
-   * much longer system prompt, is what would bring it back, and the sweep in the spec is what will say
-   * so.
+   * The refusal below is **reachable, and only on an exact size**. `room` is computed from the system
+   * prompt and the context block, and nothing else: no turn appears in it, and the turn loop runs after
+   * this point, so a transcript cannot cause it and neither can a hostile length on its own. It needs the
+   * fixed part to land within thirteen characters of the ceiling, and measured, that is the whole of the
+   * reachable region — the branch only skips the reduction when `system + contextBlock + 13 + question <=
+   * 4000`, and `room === 0` needs `system + contextBlock >= 3987`, so a question of one or two characters
+   * with the context sized to the character is all of it. With the concept summary grown one character at
+   * a time and everything else at its cap, the summary size of 676 builds (room of 1) and 677 refuses
+   * (room of 0, `system + contextBlock` of 3987); 678 fires the reduction instead, which rebuilds a
+   * 75-character block and leaves a room of thousands.
+   *
+   * Asserted rather than described: `tutor.spec.ts` runs that search, asserts the refusal at the boundary,
+   * asserts that one character less builds, and names the constants in the failure message if no size ever
+   * reaches it. That search is what found the previous version of this paragraph to be wrong — it claimed a
+   * transcript could bring the refusal back, and a transcript cannot reach `room` at all.
+   *
+   * The largest total the built path can produce is a different number and worth having here, because it
+   * is what the ceiling is actually doing: `CHECK_MY_ANSWER` with a 4000-character summary, a
+   * 4000-character instruction block, a title of 3600 and a question at the 2000-character cap sends 3415,
+   * and the largest over both the spec's 2400-length scan and a probe of every question length from 1 to
+   * 4000 is 3637 — against a ceiling of 4000.
    */
   const room = Math.max(
     0,
@@ -539,7 +595,8 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
   }
 
   if (questionText.length > room) {
-    block = `${QUESTION_HEAD}${clip(questionText, room, omissions)}`;
+    asked = clip(questionText, room, omissions);
+    block = `${QUESTION_HEAD}${asked}`;
   }
 
   /*
@@ -583,18 +640,29 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
   }
 
   const prompt = assemble(contextBlock, included, block);
+  const preamble = assemble(contextBlock, included, '');
+  /*
+   * The same condition drives the count and the object, in one place.
+   *
+   * `excerptCharacters` and `excerpt` answer different questions about the same fact — how much was
+   * shown, and what it was — and computing them from two copies of `prompt.includes(...)` is how a
+   * report comes to say 54 characters were shown beside a null excerpt.
+   */
+  const shownExcerpt = excerpt.text.length > 0 && prompt.includes(excerpt.text) ? excerpt : null;
   return {
     status: 'built',
     system,
     prompt,
+    preamble,
+    question: asked,
+    excerpt: shownExcerpt,
     report: {
       sent: {
         turns: included.length,
         inputCharacters: system.length + prompt.length,
         // Zero when the excerpt did not make it in, so the inspector cannot show a passage the prompt
         // does not contain.
-        excerptCharacters:
-          excerpt.text.length > 0 && prompt.includes(excerpt.text) ? excerpt.text.length : 0,
+        excerptCharacters: shownExcerpt === null ? 0 : excerpt.text.length,
       },
       omitted: [...omissions],
     },
@@ -870,12 +938,20 @@ function describeContext(
  *    question and the answer that came back; this is how the second one was obtained.
  * 3. **Do not retry an offline provider.** `MockAIProvider`'s output never parses — there is a test
  *    pinning that — so retrying it is two mock calls and no answer, on every offline question, which
- *    is the golden path. `TutorProviderInfo.degraded` and `provider.offline` are the signals.
+ *    is the golden path. The signal is `provider.offline`, and the guard belongs at the **entry** to the
+ *    ask rather than here: an offline provider never reaches a retry, so there is nothing to check at
+ *    this point. `TutorProviderInfo.degraded` is the other signal and it is a different state — the
+ *    provider was reached and failed, where a retry costs a second call for a second failure.
  * 4. **Do not spend the retry on a question that was never asked.** An empty or all-label message
  *    sanitises to nothing, and this function will then emit no `[question]` block at all — the same
  *    artefact the builder refuses to send. Emitting nothing is the right output and it is not a repair:
  *    the retry exists to get a second answer to a question the learner *did* ask, so a caller that
  *    reaches here with nothing asked has already made the mistake, and a refusal is what it wanted.
+ *
+ * The sanitiser's own removals are **not reported here**, because this returns a string and has nowhere
+ * to put them. That is not a loss in the only call site: the question handed in is the text the builder
+ * already sanitised and reported, so there is nothing left to strip. A caller that passes raw text is
+ * throwing away an omission it should have produced itself.
  */
 export function buildTutorRetryPrompt(input: {
   readonly mode: TutorMode;

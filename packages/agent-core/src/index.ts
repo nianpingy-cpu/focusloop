@@ -10,6 +10,7 @@ export * from './demo-course';
 export * from './micro-task-generator';
 export * from './agent-context';
 export * from './tutor';
+export * from './tutor-ask';
 export * from './dashboard';
 export * from './insights';
 export * from './engine';

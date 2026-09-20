@@ -26,6 +26,37 @@ export const TUTOR_MODES = [
 
 export type TutorMode = (typeof TUTOR_MODES)[number];
 
+/**
+ * Whether a value off the bridge is a mode this build knows.
+ *
+ * Here rather than inline in the validator for the same reason `isStuckReason` is: the boundary and
+ * the policy both act on the value, and two hand-written lists are two places for a seventh mode to
+ * be added to one of them.
+ */
+export function isTutorMode(value: unknown): value is TutorMode {
+  return typeof value === 'string' && (TUTOR_MODES as readonly string[]).includes(value);
+}
+
+/**
+ * What the renderer is allowed to send when the learner asks something.
+ *
+ * **The question, and nothing else.** No transcript, no context, no excerpt, no mode-specific parts:
+ * the conversation becomes text the model reads as its own prior output, which makes it the largest
+ * untrusted string in the feature, so it is kept in the main process and the renderer never sees or
+ * supplies it. A renderer that could send turns could put words in the tutor's mouth.
+ *
+ * `sessionId` is here even though the transcript is keyed by it and the engine could have used the
+ * active session. Naming it is what makes an ask about a *named* session rather than about whatever is
+ * on screen now: an ask that arrives after the session it belonged to ended is refused instead of being
+ * attached to the wrong session's context, which is the failure a UI race produces and the one a
+ * caller cannot see happen.
+ */
+export interface TutorAskRequest {
+  readonly sessionId: string;
+  readonly mode: TutorMode;
+  readonly question: string;
+}
+
 export const TUTOR_PART_KINDS = [
   'explanation',
   'hint',
@@ -260,6 +291,16 @@ export interface TutorReply {
    * — one object, three uses.
    */
   readonly source: MaterialExcerpt | null;
+  /**
+   * Ways the answer is not what the model returned: a part that was clipped, a heading line dropped.
+   *
+   * Inside the reply rather than beside it, because this is about what the learner is *shown* and
+   * `TutorContextReport` is about what the model was *sent* — the two have to stay separable, since a
+   * prompt can be sent whole and an answer still arrive clipped. Without a home in the reply the reader
+   * computes these and the caller has nowhere to put them, which is the state step one's reader was in
+   * until step two needed to render one.
+   */
+  readonly omissions: readonly AgentContextOmission[];
 }
 
 /**
@@ -270,6 +311,19 @@ export interface TutorReply {
  * silent — which is the one failure an inspector must not have.
  */
 export interface TutorContextReport {
+  /**
+   * What left the process for this exchange.
+   *
+   * **`inputCharacters` is a total over the calls, not the size of one prompt.** One question normally
+   * makes one call; a format failure makes two, and both are paid for, so the retry's size is added to
+   * the first's. The consequence a reader has to know about: this number can exceed
+   * `TUTOR_LIMITS.inputCharacters`, which bounds **one** prompt, and it is the only field here that can.
+   * Anything rendering it against the ceiling as though it were a fill level is comparing a total to a
+   * per-call bound.
+   *
+   * `turns` is the transcript turns carried by the prompt (the same set on both calls), and
+   * `excerptCharacters` is the excerpt in the prompt, so neither is a sum and neither needs the caveat.
+   */
   readonly sent: {
     readonly turns: number;
     readonly inputCharacters: number;
