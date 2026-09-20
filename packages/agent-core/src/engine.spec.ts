@@ -262,6 +262,47 @@ describe('FocusLoopEngine', () => {
     });
   });
 
+  describe('stuck reasons (AG2)', () => {
+    it('answers a reasoned help request through the engine, not only in the policy package', () => {
+      /*
+       * `docs/testing.md` asks agent-core to prove every policy rule *through the engine*, and the
+       * reason is that the policy's inputs are assembled here — `recentEvents` and `shownInterventions`
+       * come from this layer. A rule can therefore be correct in the policy package and never fire in a
+       * real session, which is exactly what a unit test of the policy cannot notice.
+       */
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      const response = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { reason: 'tired' },
+      });
+
+      expect(response.decision?.action).toBe('BREAK');
+    });
+
+    it('does not answer a second reasoned request that this session has already had an answer to', () => {
+      // The request stays the most recent event after it is answered, so without the "already answered"
+      // test the same request would be answered on every subsequent dispatch.
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      const first = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { reason: 'too-big' },
+      });
+      const second = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'missing-task' },
+      });
+
+      expect(first.decision?.action).toBe('SIMPLIFY');
+      expect(second.decision?.action).not.toBe('SIMPLIFY');
+    });
+  });
+
   describe('session lifecycle', () => {
     it('refuses to start a session for an unknown course', () => {
       expect(() => ctx.engine.startSession('missing')).toThrow(EngineError);

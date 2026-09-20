@@ -122,6 +122,22 @@ function unansweredStuckReason(
   const asked = lastEventOfType(events, 'HELP_REQUESTED');
   if (asked === null || asked.type !== 'HELP_REQUESTED') return null;
 
+  /*
+   * At-or-after, and the choice is a trade-off rather than a detail.
+   *
+   * Strictly-after looks more correct — "answered" should mean an intervention shown *after* the
+   * request — and it is worse. The answer to a request lands in the same millisecond as the request,
+   * because both come from the same clock, so strictly-after reads a request that has just been
+   * answered as unanswered and answers it again on every dispatch, for ever. `engine.spec.ts` has the
+   * test that catches this.
+   *
+   * At-or-after can instead swallow a genuine request that shares a millisecond with an unrelated
+   * intervention. That costs the learner one unanswered press; the other costs an unbounded loop.
+   *
+   * Neither is right, because "was this request answered" is being inferred from timestamps rather
+   * than recorded. The fix is for an intervention to carry the id of the request it answered; that is
+   * a schema change across `shared-types` and the store, and it is not this change.
+   */
   const answered = shownInterventions.some((shown) => shown.shownAt >= asked.at);
   if (answered) return null;
 

@@ -1,7 +1,8 @@
 import { Component, computed, inject, signal, viewChild } from '@angular/core';
 import type { ElementRef, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
-import type { MicroTask, MicroTaskKind } from '@focusloop/shared-types';
+import type { MicroTask, MicroTaskKind, StuckReason } from '@focusloop/shared-types';
+import { STUCK_REASONS } from '@focusloop/shared-types';
 import { AppStateService } from '../core/app-state.service';
 import {
   DEFAULT_FOCUS_MINUTES,
@@ -16,7 +17,7 @@ import {
   type FocusTimerState,
 } from '../core/focus-timer';
 import { I18nService } from '../core/i18n/i18n.service';
-import { STATE_KEYS, kindLabel } from '../core/i18n/labels';
+import { STATE_KEYS, STUCK_REASON_KEYS, kindLabel } from '../core/i18n/labels';
 import { formatDuration } from '../core/format';
 import { formatSpan } from '../core/insights-view';
 import { KIND_GLYPHS, buildPlan } from '../core/session-plan';
@@ -187,9 +188,47 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                 <button type="button" class="btn btn--quiet" (click)="addMinuteToTimer()">
                   {{ t('focus.addMinute') }}
                 </button>
-                <button type="button" class="btn btn--quiet" (click)="needHelp(currentTask.id)">
-                  {{ t('focus.stuck') }}
-                </button>
+                <!--
+                  The reason is asked for here, because this is the only place it can come from. What
+                  the agent should do next turns on which kind of stuck this is — shrink the task,
+                  explain it another way, or stop — and the learning state cannot tell those apart.
+                -->
+                @if (stuckOpen()) {
+                  <div class="stuck-reasons" role="group" [attr.aria-label]="t('focus.stuck.aria')">
+                    @for (reason of stuckReasons; track reason) {
+                      <button
+                        type="button"
+                        class="btn btn--small"
+                        [attr.data-testid]="'stuck-' + reason"
+                        (click)="sayStuck(currentTask.id, reason)"
+                      >
+                        {{ t(STUCK_REASON_KEYS[reason]) }}
+                      </button>
+                    }
+                    <!--
+                      "I would rather not say" is a real answer and not a cancel button: it sends the
+                      same request as before this existed, and the policy falls through to the state
+                      rules for it.
+                    -->
+                    <button
+                      type="button"
+                      class="btn btn--small btn--quiet"
+                      data-testid="stuck-unsaid"
+                      (click)="sayStuck(currentTask.id, null)"
+                    >
+                      {{ t('focus.stuck.unsaid') }}
+                    </button>
+                  </div>
+                } @else {
+                  <button
+                    type="button"
+                    class="btn btn--quiet"
+                    data-testid="focus-stuck"
+                    (click)="openStuck()"
+                  >
+                    {{ t('focus.stuck') }}
+                  </button>
+                }
                 <button
                   type="button"
                   class="btn btn--primary"
@@ -407,8 +446,27 @@ export class FocusPage implements OnDestroy {
     this.timer.set(createFocusTimer());
     this.completedView.set(true);
   }
-  protected async needHelp(taskId: string): Promise<void> {
-    await this.state.dispatch('HELP_REQUESTED', { taskId });
+  protected readonly STUCK_REASON_KEYS = STUCK_REASON_KEYS;
+  protected readonly stuckReasons = STUCK_REASONS;
+  protected readonly stuckOpen = signal(false);
+
+  protected openStuck(): void {
+    this.stuckOpen.set(true);
+  }
+
+  /**
+   * Records why the learner says they are stuck, and asks for help.
+   *
+   * A reason of `null` means they would rather not say. That sends the same event this control sent
+   * before the reasons existed, which is an answer rather than a cancellation — the policy falls
+   * through to the state rules for it.
+   *
+   * The chooser closes first: the request is a thing that has happened, and leaving six buttons on
+   * screen over the task afterwards would be the interruption the agent is meant to avoid.
+   */
+  protected async sayStuck(taskId: string, reason: StuckReason | null): Promise<void> {
+    this.stuckOpen.set(false);
+    await this.state.dispatch('HELP_REQUESTED', reason === null ? { taskId } : { taskId, reason });
   }
   protected async end(): Promise<void> {
     this.clearTimer();
