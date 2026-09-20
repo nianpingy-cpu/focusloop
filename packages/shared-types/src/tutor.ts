@@ -135,7 +135,12 @@ export const TUTOR_LIMITS = {
   contextCharacters: 800,
   /**
    * Everything the model is sent: the system prompt, the context, the excerpt, the transcript and the
-   * question. Enforced as a total, not per item.
+   * question. Enforced as a total, not per item, by comparing the assembled string to it.
+   *
+   * Charged in **UTF-16 units** while the clip helpers slice by code point, so a prompt made mostly of
+   * astral characters is charged roughly twice what it holds. Harmless, and named because the two units
+   * are easy to mistake for one: a reader comparing `partCharacters` against this limit would conclude
+   * an answer fits when it does not.
    */
   inputCharacters: 4000,
   /**
@@ -143,9 +148,18 @@ export const TUTOR_LIMITS = {
    *
    * Two characters is not a referent: after normalisation strips case and punctuation, the two- and
    * three-character n-grams of any English sentence are exactly the ones most likely to appear
-   * somewhere in several turns of the learner's own text, so a fabricated confirmation would pass. Six
-   * is still safe for an honest quote, with one exception — a learner whose entire message is shorter
-   * than this, whose whole message is accepted as its own referent.
+   * somewhere in several turns of the learner's own text, so a fabricated confirmation would pass.
+   *
+   * **The cost of six is not the same in both languages the product speaks**, and saying so matters
+   * more than the number: six normalised characters is a phrase in English and most of a sentence in
+   * Chinese, where two characters are already a word. A Chinese learner quoted as
+   * `你说"左旋"是对的` — quoting `左旋` — is being quoted correctly and is refused unless that is
+   * their entire message. The English reasoning is what chose the number; the Chinese cost is what it
+   * buys, and it is the first constant to revisit if this is ever tuned for Chinese learners first.
+   *
+   * A quote below the floor is still accepted when it is the learner's **whole** message: somebody who
+   * answered "yes" has nothing longer to quote, and rejecting them would be rejecting an honest learner
+   * for being brief.
    */
   quoteCharacters: 6,
 } as const;
@@ -168,7 +182,14 @@ export type TutorUnavailableReason =
   /** The configured provider cannot answer: it is the offline mock, or it failed and we degraded. */
   | 'no-model'
   /** The provider was reached and failed. */
-  | 'provider-failed';
+  | 'provider-failed'
+  /**
+   * The question and the context do not both fit inside `TUTOR_LIMITS.inputCharacters`.
+   *
+   * A prompt with the question left out is not a smaller prompt, it is a different one — the learner
+   * has paid for a call that asks the model to explain nothing — so this is refused rather than sent.
+   */
+  | 'request-too-long';
 
 export interface TutorProviderInfo {
   readonly id: string;

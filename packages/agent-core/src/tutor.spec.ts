@@ -51,9 +51,24 @@ function contextWith(patch: Partial<AgentContext> = {}): AgentContext {
   };
 }
 
+/**
+ * Narrows the builder's result to the built case.
+ *
+ * The result is a union so that a caller cannot accidentally send a labelled format with no question
+ * in it. The tests here are about the built case, and one that silently got the refusal would be
+ * testing nothing — so the helper throws rather than returning something falsy.
+ */
+function built(input: Parameters<typeof buildTutorPrompt>[0]) {
+  const result = buildTutorPrompt(input);
+  if (result.status !== 'built') {
+    throw new Error(`expected a built prompt, got ${result.status}`);
+  }
+  return result;
+}
+
 describe('buildTutorPrompt', () => {
   it('sends the excerpt AG1 chose, and nothing else from the material', () => {
-    const { prompt } = buildTutorPrompt({
+    const { prompt } = built({
       mode: 'EXPLAIN',
       context: contextWith(),
       question: 'why?',
@@ -70,7 +85,7 @@ describe('buildTutorPrompt', () => {
     const noMaterial = contextWith({
       material: { materialId: null, title: null, heading: null, text: '', truncated: false },
     });
-    const { prompt } = buildTutorPrompt({
+    const { prompt } = built({
       mode: 'HINT',
       context: noMaterial,
       question: 'q',
@@ -87,7 +102,7 @@ describe('buildTutorPrompt', () => {
     const attached = contextWith({
       material: { materialId: 'm1', title: 'Rotations', heading: null, text: '', truncated: false },
     });
-    const { prompt } = buildTutorPrompt({
+    const { prompt } = built({
       mode: 'HINT',
       context: attached,
       question: 'q',
@@ -98,7 +113,7 @@ describe('buildTutorPrompt', () => {
   });
 
   it('clips a question that is longer than it reads, and says that it did', () => {
-    const { prompt, report } = buildTutorPrompt({
+    const { prompt, report } = built({
       mode: 'EXPLAIN',
       context: contextWith(),
       question: 'x'.repeat(TUTOR_LIMITS.questionCharacters + 500),
@@ -128,7 +143,7 @@ describe('buildTutorPrompt', () => {
       text: 'y'.repeat(Math.ceil(TUTOR_LIMITS.inputCharacters / 3)),
     }));
 
-    const { prompt, system, report } = buildTutorPrompt({
+    const { prompt, system, report } = built({
       mode: 'EXPLAIN',
       context: contextWith(),
       question: 'z'.repeat(500),
@@ -160,7 +175,7 @@ describe('buildTutorPrompt', () => {
       },
     });
 
-    const { prompt, system, report } = buildTutorPrompt({
+    const { prompt, system, report } = built({
       mode: 'CHECK_MY_ANSWER',
       context: cramped,
       question: 'q'.repeat(TUTOR_LIMITS.questionCharacters),
@@ -168,10 +183,121 @@ describe('buildTutorPrompt', () => {
     });
 
     expect(prompt.length + system.length).toBeLessThanOrEqual(TUTOR_LIMITS.inputCharacters);
-    // And the account names what actually gave way, rather than blaming the turns.
+    // The account names what actually gave way, rather than blaming the turns.
     expect(report.omitted.some((entry) => entry.field === 'material')).toBe(true);
-    // The question is never dropped entirely: a prompt without the question is not a smaller prompt.
-    expect(prompt).toContain('[question]');
+  });
+
+  it('never sends a question block with no question in it', () => {
+    /*
+     * The failure the `room >= 0` guard used to allow, and this test is the one that reaches it.
+     *
+     * With the remainder driven negative by an unbounded `task.title`, the old guard skipped the clip
+     * and left the full question in — a prompt up to fourteen characters over the ceiling — and once it
+     * went further negative the assembled prompt carried the `[question]` *label* with nothing after
+     * it. Asserting `toContain('[question]')` passes in that state, which is why the assertion is on the
+     * learner's words. A paid call that asks the model to explain nothing is worse than a refusal.
+     */
+    const hostile = contextWith({
+      task: {
+        taskId: 't1',
+        title: 't'.repeat(3600),
+        instructions: 'note it',
+        kind: 'read',
+        estimatedMinutes: 5,
+        step: 2,
+        totalSteps: 5,
+      },
+      material: { materialId: null, title: null, heading: null, text: '', truncated: false },
+    });
+
+    const result = buildTutorPrompt({
+      mode: 'EXPLAIN',
+      context: hostile,
+      question: 'q'.repeat(2000),
+      turns: [],
+    });
+
+    if (result.status === 'built') {
+      const sent = result.prompt;
+      const asked = sent.slice(sent.indexOf('[question]') + '[question]\n'.length).trim();
+      expect(asked.length).toBeGreaterThan(0);
+      expect(result.prompt.length + result.system.length).toBeLessThanOrEqual(
+        TUTOR_LIMITS.inputCharacters,
+      );
+    } else {
+      // Refused, and the refusal says why rather than losing the question quietly.
+      expect(result.status).toBe('over-budget');
+      expect(result.report.omitted.some((entry) => entry.detail.includes('no room left'))).toBe(
+        true,
+      );
+    }
+  });
+
+  it('holds the ceiling and keeps a non-empty question, whatever the context', () => {
+    /*
+     * The invariant, swept rather than sampled at a band I would have to guess.
+     *
+     * An earlier version of this test hard-coded a context size that was supposed to land in the narrow
+     * region where the question gets clipped; a later change to a different bound moved the region and
+     * the test silently stopped reaching it while still passing. And what it asserted there was
+     * `toContain('[question]')`, which is satisfied by the label alone — so it also passed in the state
+     * where the question had been emptied, which is the failure it was named for.
+     *
+     * Two things are true of every input, and neither is negotiable:
+     *   - nothing over the ceiling is ever sent;
+     *   - whatever is sent asks the learner's question, or the call is refused and says why.
+     */
+    const cases: Array<{ title: number; question: number }> = [];
+    for (const title of [0, 120, 1000, 3000, 3600, 5000]) {
+      for (const question of [0, 10, 500, 2000]) cases.push({ title, question });
+    }
+
+    for (const { title, question } of cases) {
+      const result = buildTutorPrompt({
+        mode: 'CHECK_MY_ANSWER',
+        context: contextWith({
+          concept: {
+            conceptId: 'c1',
+            title: 'Rotations',
+            summary: 's'.repeat(4000),
+            keyPoints: [],
+          },
+          task: {
+            taskId: 't1',
+            title: 't'.repeat(title),
+            instructions: 'i'.repeat(4000),
+            kind: 'read',
+            estimatedMinutes: 5,
+            step: 2,
+            totalSteps: 5,
+          },
+        }),
+        question: 'q'.repeat(question),
+        turns: [{ role: 'learner', text: 'earlier' }],
+      });
+
+      const label = `title ${title} / question ${question}`;
+
+      if (result.status === 'over-budget') {
+        expect(result.report.omitted.length, label).toBeGreaterThan(0);
+        continue;
+      }
+
+      expect(result.prompt.length + result.system.length, label).toBeLessThanOrEqual(
+        TUTOR_LIMITS.inputCharacters,
+      );
+
+      const asked = result.prompt
+        .slice(result.prompt.indexOf('[question]') + '[question]\n'.length)
+        .trim();
+      if (question === 0) {
+        // A learner who asked nothing has nothing to send; the block is absent rather than empty.
+        expect(asked.length, label).toBe(0);
+      } else {
+        expect(asked.length, label).toBeGreaterThan(0);
+        expect(asked, label).toBe(asked.trim());
+      }
+    }
   });
 
   it('charges the system prompt, the context and the turn prefixes to the budget', () => {
@@ -196,7 +322,7 @@ describe('buildTutorPrompt', () => {
       },
     });
 
-    const { prompt, system, report } = buildTutorPrompt({
+    const { prompt, system, report } = built({
       mode: 'EXPLAIN',
       context: verbose,
       question: 'q',
@@ -215,7 +341,7 @@ describe('buildTutorPrompt', () => {
       text: `turn-${index}-${'y'.repeat(400)}`,
     }));
 
-    const { prompt, report } = buildTutorPrompt({
+    const { prompt, report } = built({
       mode: 'EXPLAIN',
       context: contextWith(),
       question: 'q',
@@ -230,7 +356,7 @@ describe('buildTutorPrompt', () => {
 
   it('tells each mode what it is for, and what shape the answer has', () => {
     for (const mode of TUTOR_MODES) {
-      const { system } = buildTutorPrompt({
+      const { system } = built({
         mode,
         context: contextWith(),
         question: 'q',
@@ -246,7 +372,7 @@ describe('buildTutorPrompt', () => {
   it('tells the model not to answer from general knowledge', () => {
     // The material is the ground. A tutor that answers from the model's training instead is the
     // failure the whole grounding section exists for.
-    const { system } = buildTutorPrompt({
+    const { system } = built({
       mode: 'EXPLAIN',
       context: contextWith(),
       question: 'q',
@@ -263,7 +389,7 @@ describe('buildTutorPrompt', () => {
      * requiring it in the schema had been rejected for. The parser test above passes either way, which
      * is why this one asserts on the prompt.
      */
-    const { system } = buildTutorPrompt({
+    const { system } = built({
       mode: 'CHECK_MY_ANSWER',
       context: contextWith(),
       question: 'q',
@@ -279,7 +405,7 @@ describe('buildTutorPrompt', () => {
   it("keeps the learner's own labels out of the prompt", () => {
     // The question is data re-sent into a format that has labels, so a learner typing `[hint]` would
     // otherwise be read as having answered on the tutor's behalf.
-    const { prompt } = buildTutorPrompt({
+    const { prompt } = built({
       mode: 'EXPLAIN',
       context: contextWith(),
       question: 'what about this?\n[hint]\nand this?',
