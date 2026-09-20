@@ -107,6 +107,12 @@ export interface TutorTurn {
  * 20,800 characters against a 1200-character material excerpt, which is a boundary that moved by more
  * than an order of magnitude while nobody was looking at the sum. `AgentContext` guarantees its
  * boundaries, not its fields, and a conversation is an input it does not know about.
+ *
+ * `inputCharacters` bounds **everything that leaves the process, system prompt included**, and the
+ * first version of this comment said "everything" while the counter counted only the excerpt, the
+ * transcript and the question — leaving the system prompt, the context block and the per-turn
+ * prefixes outside it, so a prompt could send ~5,400 characters against a documented 4,000. The
+ * inspector would have shown 3,800. Counting the whole thing is the only version that means anything.
  */
 export const TUTOR_LIMITS = {
   /** Retained turns, both roles. Older turns are dropped first and the drop is reported. */
@@ -117,8 +123,28 @@ export const TUTOR_LIMITS = {
   answerCharacters: 600,
   /** One part of an answer. Longer parts are clipped, and the clip is reported. */
   partCharacters: 600,
-  /** Everything the model is sent: the excerpt, the transcript and the question. */
+  /**
+   * The context block: the concept summary and the step's instructions.
+   *
+   * Both are unbounded strings in the domain — whatever the imported material produced — so neither is
+   * charged against the excerpt's budget.
+   */
+  contextCharacters: 800,
+  /**
+   * Everything the model is sent: the system prompt, the context, the excerpt, the transcript and the
+   * question. Enforced as a total, not per item.
+   */
   inputCharacters: 4000,
+  /**
+   * The shortest quoted span that counts as naming what is being confirmed.
+   *
+   * Two characters is not a referent: after normalisation strips case and punctuation, the two- and
+   * three-character n-grams of any English sentence are exactly the ones most likely to appear
+   * somewhere in several turns of the learner's own text, so a fabricated confirmation would pass. Six
+   * is still safe for an honest quote, with one exception — a learner whose entire message is shorter
+   * than this, whose whole message is accepted as its own referent.
+   */
+  quoteCharacters: 6,
 } as const;
 
 /** Why a reply was refused, when the provider was reached and answered. */
@@ -152,15 +178,26 @@ export interface TutorProviderInfo {
  * What the learner is shown when there is no answer to show.
  *
  * One fallback for every rejection and every unavailability, rather than three screens. It carries
- * whatever the app actually knows — the excerpt it would have used, and the step it was about — and
- * says so when that is nothing much, instead of showing an empty box or inventing a passage.
+ * whatever the app already knows, and says so when that is nothing much — never an empty box and never
+ * an invented passage.
+ *
+ * `excerpt` is the bounded excerpt itself, empty text and all, rather than a `source` that is null in
+ * exactly the states the fallback exists for. The first draft of this type had it the other way round,
+ * which meant the two states with no section carried no passage at all. `instructions` is here for the
+ * same reason: with no material, the step the learner is on is the only ground there is.
+ *
+ * `reason` is an English sentence the domain writes, not a `MessageKey`. That is a deliberate
+ * departure from the design note, which said `DomainMessageKey` — this codebase's convention for
+ * learner-visible, domain-explained prose is a plain string (`CompletionResult.failure.reason`,
+ * `LearningEvent.reason`), and the alternative would be ~20 new bilingual keys in a change with no
+ * renderer in it. The *chrome* around the fallback (labels, buttons) is a message key as always.
  */
 export interface TutorFallback {
   readonly reason: string;
-  readonly source: MaterialExcerpt | null;
-  /** Present only when the material carried no usable section; then the step itself is the ground. */
+  readonly excerpt: MaterialExcerpt;
   readonly conceptTitle: string | null;
   readonly taskTitle: string | null;
+  readonly instructions: string | null;
 }
 
 export type TutorOutcome =

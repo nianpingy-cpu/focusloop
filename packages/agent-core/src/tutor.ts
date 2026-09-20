@@ -25,7 +25,7 @@ import {
  */
 
 /**
- * Normalises text for the one comparison that has to be forgiving.
+ * Normalises text for the two comparisons that have to be forgiving.
  *
  * Used for the quotation check and for resolving a named section. Deliberately aggressive, because
  * the two errors are not symmetric: a normalisation that is too lenient lets a fabricated quote
@@ -44,18 +44,31 @@ export function normaliseForComparison(value: string): string {
 }
 
 /**
- * The bracketed labels the parser reads. `section` is reply-level rather than a part: every mode has
- * to be able to name where an answer came from, and a mode whose only allowed part is `hint` has no
- * other channel through which to do it.
+ * The labels the parser reads. `section` is reply-level rather than a part: every mode has to be able
+ * to name where an answer came from, and a mode whose only allowed part is `hint` has no other channel
+ * through which to do it.
  */
 const SECTION_LABEL = 'section';
 const PART_KINDS = new Set<string>(TUTOR_PART_KINDS);
 /** ``` or ~~~ fences, which a model adds around structured output out of habit. */
 const FENCE = /^(?:```|~~~)/;
 
+/**
+ * A label is a line whose entire content is `[name]`.
+ *
+ * The whole line, not "a line that starts with a bracketed word". The parser briefly accepted a label
+ * sharing its line with the first line of its block, to be tolerant of how models write; that was
+ * worse than it looked, because a *body* line beginning with a bracketed word then became a phantom
+ * part and refused a well-formed reply. The format is specified in the prompt and deviations are
+ * repaired by the retry, which is a more honest way to be tolerant than guessing.
+ */
+const LABEL_LINE = /^\[([a-z][a-z-]*)\]$/;
+
 interface ParsedLabel {
   readonly label: string;
   readonly text: string;
+  /** Lines dropped from this block, so a lossy parse is visible rather than silent. */
+  readonly dropped: number;
 }
 
 /**
@@ -70,31 +83,38 @@ function readLabels(text: string): readonly ParsedLabel[] {
   const labels: ParsedLabel[] = [];
   let current: { label: string; lines: string[] } | null = null;
 
-  const flush = (): void => {
-    if (current !== null)
-      labels.push({ label: current.label, text: current.lines.join('\n').trim() });
+  const flush = (heading: boolean): void => {
+    if (current === null) return;
+    const block = current.lines.join('\n').trim();
+    /*
+     * A heading is one line.
+     *
+     * A model that signs off after its last block — "Hope that helps!" — would otherwise have that
+     * sentence glue onto the heading, so a correctly cited answer would be refused for citing a
+     * section nobody has. The cost is the other direction: a heading the model wrapped across two
+     * lines is read as its first line. That is the better failure of the two, and what keeps it honest
+     * is `dropped` — the discarded lines are counted and reported rather than thrown away silently.
+     */
+    const kept = heading ? (block.split('\n')[0] ?? '') : block;
+    const dropped = heading ? Math.max(0, block.split('\n').length - 1) : 0;
+    labels.push({ label: current.label, text: kept.trim(), dropped });
   };
 
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
     if (FENCE.test(line)) continue;
 
-    // A label may share its line with the first line of the block: models do that constantly, and
-    // refusing it would turn a well-formed answer into no answer over a newline.
-    const match = /^\[([a-z][a-z-]*)\]\s*(.*)$/.exec(line);
+    const match = LABEL_LINE.exec(line);
     if (match?.[1] !== undefined) {
-      flush();
-      current = {
-        label: match[1],
-        lines: match[2] === undefined || match[2] === '' ? [] : [match[2]],
-      };
+      flush(current?.label === SECTION_LABEL);
+      current = { label: match[1], lines: [] };
       continue;
     }
 
     if (current !== null) current.lines.push(rawLine);
   }
 
-  flush();
+  flush(current?.label === SECTION_LABEL);
   return labels;
 }
 
@@ -115,9 +135,6 @@ function quotedSpans(text: string): readonly string[] {
   return spans;
 }
 
-/** Shortest quoted span that can count as a referent. A one-character quote matches everywhere. */
-const MIN_QUOTE_CHARACTERS = 2;
-
 export interface ReadTutorReplyInput {
   readonly mode: TutorMode;
   readonly text: string;
@@ -128,43 +145,70 @@ export interface ReadTutorReplyInput {
 }
 
 export type TutorReading =
-  | { readonly status: 'answered'; readonly reply: TutorReply }
+  | {
+      readonly status: 'answered';
+      readonly reply: TutorReply;
+      /** Ways the answer is not what the model returned: a clipped part, a dropped heading line. */
+      readonly omissions: readonly AgentContextOmission[];
+    }
   | {
       readonly status: 'rejected';
       readonly reason: TutorRejection;
       /** Parts that were usable, so a caller can decide whether a format retry is worth it. */
       readonly recovered: readonly TutorPart[];
+      readonly omissions: readonly AgentContextOmission[];
     };
+
+/**
+ * Whether a rejection is worth asking the model again about, once.
+ *
+ * **Format failures are repairable; content failures are not**, and that split is the whole point.
+ * Telling a model its quote was not in the learner's message invites it to produce a quote that is,
+ * whether or not it belongs to the claim — retrying a grounding failure is teaching the model to
+ * satisfy the checker. A model that answered well and formatted badly has no such hazard.
+ */
+export function isRetryable(reason: TutorRejection): boolean {
+  return reason === 'unparseable' || reason === 'missing-part' || reason === 'unexpected-part';
+}
 
 /**
  * Reads a reply, and decides whether it is the answer the mode promises.
  *
- * The order matters. Whether there is anything to read comes first, because prose is not a
- * near-miss — it is the wrong thing entirely. Parts this mode does not allow come next: they are the
- * failures a single retry can fix, and they have to be caught before a required part is reported
- * missing, or a model that returned two parts gets told about the wrong one.
+ * The order matters. Whether there is anything to read comes first, because prose is not a near-miss —
+ * it is the wrong thing entirely. Parts this mode does not allow come next: they are the failures a
+ * single retry can fix, and they have to be caught before a required part is reported missing, or a
+ * model that returned two parts gets told about the wrong one.
  */
 export function readTutorReply(input: ReadTutorReplyInput): TutorReading {
   const labels = readLabels(input.text);
+  const omissions: AgentContextOmission[] = [];
   const parts: TutorPart[] = [];
   let sourceHeading: string | null = null;
   let unknown = false;
 
   for (const label of labels) {
+    if (label.dropped > 0) {
+      omissions.push({
+        field: 'material',
+        detail: `${label.dropped} line(s) after the heading were left out`,
+      });
+    }
+
     if (label.label === SECTION_LABEL) {
-      /*
-       * One line, because a heading is one line.
-       *
-       * A model that signs off after its last block — "Hope that helps!" — would otherwise have that
-       * sentence glue onto the heading, and an answer that cited the right section would be refused
-       * for citing a section nobody has.
-       */
-      const heading = label.text.split(/\r?\n/).find((line) => line.trim().length > 0) ?? '';
-      sourceHeading = heading.trim();
+      sourceHeading = label.text;
       continue;
     }
     if (!PART_KINDS.has(label.label)) {
       unknown = true;
+      continue;
+    }
+    /*
+     * A label with no text is not a part. Without this a reply of bare labels satisfies every
+     * required-part check and the learner gets an empty box — the one outcome the design says must
+     * never happen.
+     */
+    if (label.text.length === 0) {
+      omissions.push({ field: 'conversation', detail: `the ${label.label} was empty` });
       continue;
     }
     parts.push({ kind: label.label as TutorPartKind, text: label.text });
@@ -173,31 +217,38 @@ export function readTutorReply(input: ReadTutorReplyInput): TutorReading {
   const { required, allowed } = TUTOR_MODE_PARTS[input.mode];
   const allowedSet = new Set<string>(allowed);
 
-  // Nothing labelled at all is prose, not a malformed answer — there is nothing to repair.
-  if (labels.length === 0) return { status: 'rejected', reason: 'unparseable', recovered: [] };
+  // Nothing labelled at all is prose, not a malformed answer — and prose is what the format retry is
+  // for, so it is a repairable failure rather than a final one.
+  if (labels.length === 0) {
+    return { status: 'rejected', reason: 'unparseable', recovered: [], omissions };
+  }
 
   if (unknown || parts.some((part) => !allowedSet.has(part.kind))) {
-    return { status: 'rejected', reason: 'unexpected-part', recovered: parts };
+    return { status: 'rejected', reason: 'unexpected-part', recovered: parts, omissions };
   }
 
   const present = new Set(parts.map((part) => part.kind));
   if (required.some((kind) => !present.has(kind))) {
-    return { status: 'rejected', reason: 'missing-part', recovered: parts };
+    return { status: 'rejected', reason: 'missing-part', recovered: parts, omissions };
   }
 
   if (input.mode === 'CHECK_MY_ANSWER') {
     const confirmed = parts.find((part) => part.kind === 'confirmed');
     if (confirmed === undefined || !quotesTheLearner(confirmed.text, input.learnerText)) {
-      return { status: 'rejected', reason: 'unquoted-confirmation', recovered: parts };
+      return { status: 'rejected', reason: 'unquoted-confirmation', recovered: parts, omissions };
     }
   }
 
   const source = resolveSource(sourceHeading, input.excerpt);
   if (source === undefined) {
-    return { status: 'rejected', reason: 'not-from-the-material', recovered: parts };
+    return { status: 'rejected', reason: 'not-from-the-material', recovered: parts, omissions };
   }
 
-  return { status: 'answered', reply: { mode: input.mode, parts: clipParts(parts), source } };
+  return {
+    status: 'answered',
+    reply: { mode: input.mode, parts: clipParts(parts, omissions), source },
+    omissions,
+  };
 }
 
 /**
@@ -209,11 +260,14 @@ export function readTutorReply(input: ReadTutorReplyInput): TutorReading {
  * - it catches a confirmation with no referent (`"You're right."` normalises to `youareright`, which
  *   is not something the learner wrote), and it catches a quote that was invented;
  * - it does **not** catch a correctly quoted sentence being called correct when it is not. No string
- *   comparison can, and this is a named limitation rather than a solved problem.
+ *   comparison can, and this is a named limitation rather than a solved problem;
+ * - it also rejects a model that **paraphrases** the learner rather than quoting them. That follows
+ *   directly from requiring a literal quotation and is the predictable failure of this check rather
+ *   than an edge case: a learner who wrote "I think the order doesn't change" and is told "you said
+ *   the ordering is preserved" gets the fallback instead of an answer.
  *
- * What it buys is that the learner can see which of their own words was endorsed. A confirmation that
- * has to point at something is harder to produce by reflex than one that does not, and the learner can
- * audit it.
+ * What it buys is that the learner can see exactly which of their own words was endorsed, and a
+ * confirmation that has to point at something is harder to produce by reflex than one that does not.
  *
  * The check runs against **every learner turn**, not the current message: conversations run to several
  * turns, and a learner writing "the bit I said before about the invariant" is quoting themselves. A
@@ -221,22 +275,32 @@ export function readTutorReply(input: ReadTutorReplyInput): TutorReading {
  * see that anything went wrong.
  */
 function quotesTheLearner(confirmed: string, learnerText: readonly string[]): boolean {
-  const spans = quotedSpans(confirmed)
-    .map(normaliseForComparison)
-    .filter((span) => span.length >= MIN_QUOTE_CHARACTERS);
+  const said = learnerText.map(normaliseForComparison);
+  // Joined with a separator the normalisation removes, so a quote cannot straddle two turns and match
+  // something the learner never wrote as one unit.
+  const joined = said.join('\u0000');
+
+  const spans = quotedSpans(confirmed).map(normaliseForComparison);
   if (spans.length === 0) return false;
 
-  const said = learnerText.map(normaliseForComparison).join('');
-  return spans.every((span) => said.includes(span));
+  return spans.every((span) => {
+    if (span.length >= TUTOR_LIMITS.quoteCharacters) return joined.includes(span);
+    /*
+     * A quote below the floor is still a referent when it is the learner's *whole* message: somebody
+     * who answered "yes" has nothing longer to quote, and rejecting them would be rejecting an honest
+     * learner for being brief.
+     */
+    return said.some((turn) => turn.length > 0 && turn === span);
+  });
 }
 
 /**
  * Resolves the section the model named against the one it was given.
  *
- * `undefined` means "rejected", `null` means "it named none". The comparison is exact after NFKC,
- * trimming and case folding — not fuzzy, and the reason is that the fuzzy version fails in the wrong
- * direction: a model writing "from the Red-Black Trees section" against a heading of `Red-Black Trees`
- * is *grounded and confident*, and an exact-match rule would throw that answer away.
+ * `undefined` means "rejected", `null` means "it named none". The comparison goes through the same
+ * normalisation the quote check uses and is not a fuzzy match, because the fuzzy version fails in the
+ * wrong direction: a model writing "from the Red-Black Trees section" against a heading of `Red-Black
+ * Trees` is *grounded and confident*, and a fuzzy rule would throw that answer away.
  *
  * So this catches a citation of a section that does not exist, and what actually keeps an answer
  * grounded is the excerpt being in front of it. Describing it as a hallucination check would be
@@ -246,21 +310,34 @@ function resolveSource(
   heading: string | null,
   excerpt: MaterialExcerpt | null,
 ): MaterialExcerpt | null | undefined {
-  if (heading === null || heading.trim().length === 0) return null;
+  if (heading === null || heading.length === 0) return null;
   if (excerpt === null || excerpt.heading === null) return undefined;
 
-  const named = heading.normalize('NFKC').trim().toLowerCase();
-  const given = excerpt.heading.normalize('NFKC').trim().toLowerCase();
-  return named === given ? excerpt : undefined;
+  return normaliseForComparison(heading) === normaliseForComparison(excerpt.heading)
+    ? excerpt
+    : undefined;
 }
 
-/** Clips over-long parts. Reported by the caller rather than refused: a long part is still an answer. */
-function clipParts(parts: readonly TutorPart[]): readonly TutorPart[] {
-  return parts.map((part) =>
-    part.text.length <= TUTOR_LIMITS.partCharacters
-      ? part
-      : { kind: part.kind, text: part.text.slice(0, TUTOR_LIMITS.partCharacters) },
-  );
+/**
+ * Clips over-long parts. Reported rather than refused: a long part is still an answer, and a clip the
+ * caller cannot see is prose that stops mid-sentence for no stated reason.
+ *
+ * Sliced by code point, not by UTF-16 unit, so a clip cannot end between the halves of a surrogate
+ * pair and render as a replacement character.
+ */
+function clipParts(
+  parts: readonly TutorPart[],
+  omissions: AgentContextOmission[],
+): readonly TutorPart[] {
+  return parts.map((part) => {
+    const points = [...part.text];
+    if (points.length <= TUTOR_LIMITS.partCharacters) return part;
+    omissions.push({
+      field: 'conversation',
+      detail: `the ${part.kind} was longer than is shown, so its end was left out`,
+    });
+    return { kind: part.kind, text: points.slice(0, TUTOR_LIMITS.partCharacters).join('') };
+  });
 }
 
 // ------------------------------------------------------------------- the prompt
@@ -306,54 +383,82 @@ const MODE_INSTRUCTIONS: Record<TutorMode, string> = {
  */
 function formatSpec(mode: TutorMode): string {
   const { required, allowed } = TUTOR_MODE_PARTS[mode];
-  const partLines = allowed.map((kind) => `[${kind}]`).join(' then ');
+  const optional = allowed.filter((kind) => !required.includes(kind));
 
-  return [
-    'Answer with labelled sections and nothing else on the label line.',
-    `Use exactly these, in this order: ${partLines}.`,
-    `Required: ${required.join(', ')}. Any other label is refused.`,
-    `To name the section you used, add a line "[${SECTION_LABEL}]" followed by its heading, copied exactly.`,
+  const lines = [
+    'Answer with labelled blocks. A label is a line containing only the label, in square brackets,',
+    "with that block's text on the lines after it.",
+    `Use only these labels: ${allowed.map((kind) => `[${kind}]`).join(', ')}. Any other label is refused.`,
+    `You must include: ${required.map((kind) => `[${kind}]`).join(', ')}.`,
+  ];
+
+  /*
+   * `missing` is allowed, not required, and the prompt has to say so.
+   *
+   * The first version printed the allowed set as "use exactly these, in this order", which for
+   * CHECK_MY_ANSWER told the model to emit `[missing]` every time — reintroducing, in the
+   * instructions, exactly the fabrication that requiring it in the schema was rejected for. The schema
+   * permitting a part is not the same as asking for it, and the prompt is where that distinction has
+   * to survive.
+   */
+  for (const kind of optional) {
+    if (kind === 'missing') {
+      lines.push(
+        'Include [missing] only if the learner genuinely left something out. If their understanding ' +
+          'is complete, leave it out entirely rather than inventing a gap.',
+      );
+    } else {
+      lines.push(`Include [${kind}] only if it is useful here.`);
+    }
+  }
+
+  lines.push(
+    `To name the section you used, add a line "[${SECTION_LABEL}]" with its heading copied exactly.`,
     "Put the learner's own words that you are confirming inside double quotes.",
-  ].join('\n');
+  );
+
+  return lines.join('\n');
 }
 
 /**
  * Builds what the model is sent, and the account of what it was not.
  *
- * Bounded at every level, including the aggregate — see `TUTOR_LIMITS`. The excerpt is exactly what
- * AG1 chose, so the material bound is AG1's and is not re-litigated here.
+ * Bounded at every level, **including the aggregate**: `inputCharacters` is the total of the system
+ * prompt, the context, the excerpt, the transcript and the question. The first version counted only
+ * the last three and described itself as "everything", which is how a documented 4,000-character
+ * ceiling would have sent roughly 5,400 while the inspector showed 3,800 — the exact failure AG1's
+ * report exists to prevent, one layer up.
+ *
+ * The fixed parts are built first and charged against the budget before any turn is considered, so
+ * what remains for the transcript is a remainder rather than a number chosen in isolation. The excerpt
+ * is exactly what AG1 chose, so the material bound is AG1's and is not re-litigated here.
  */
 export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPrompt {
   const omissions: AgentContextOmission[] = [];
   const excerpt = input.context.material;
-  const excerptCharacters = excerpt.text.length;
 
-  const question = clip(
-    input.question.trim(),
-    TUTOR_LIMITS.questionCharacters,
-    'your question was longer than the tutor reads, so its end was left out',
-    omissions,
+  const system = buildSystem(input.mode);
+  const question = sanitiseQuestion(
+    clip(input.question.trim(), TUTOR_LIMITS.questionCharacters, omissions),
   );
+  const contextBlock = describeContext(input.context, TUTOR_LIMITS.contextCharacters, omissions);
+  const questionBlock = `[question]\n${question}`;
+
+  let used = system.length + contextBlock.length + questionBlock.length;
 
   const included: TutorTurn[] = [];
-  let used = excerptCharacters + question.length;
-
   // Newest first, so the turns dropped are the ones farthest from what is being asked about.
   for (let index = input.turns.length - 1; index >= 0; index -= 1) {
     const turn = input.turns[index];
     if (turn === undefined) continue;
     if (included.length >= TUTOR_LIMITS.turns) break;
 
-    const text = clip(
-      turn.text,
-      TUTOR_LIMITS.answerCharacters,
-      'one earlier turn was longer than is kept, so its end was left out',
-      omissions,
-    );
-    if (used + text.length > TUTOR_LIMITS.inputCharacters) break;
+    const text = clip(turn.text, TUTOR_LIMITS.answerCharacters, omissions);
+    const block = turnBlock(turn.role, text);
+    if (used + block.length > TUTOR_LIMITS.inputCharacters) break;
 
     included.unshift({ role: turn.role, text });
-    used += text.length;
+    used += block.length;
   }
 
   const dropped = input.turns.length - included.length;
@@ -364,16 +469,7 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPrompt {
     });
   }
 
-  const system = [
-    'You are a tutor inside a focus tool. The learner is looking at one step of one task.',
-    MODE_INSTRUCTIONS[input.mode],
-    formatSpec(input.mode),
-    'Use only the material section given below. If it does not answer the question, say so in the ' +
-      'same labelled form rather than answering from general knowledge.',
-    'Be brief. The learner is working, not reading.',
-  ].join('\n\n');
-
-  const prompt = [describeContext(input.context), turnsBlock(included), `[question]\n${question}`]
+  const prompt = [contextBlock, turnsBlock(included), questionBlock]
     .filter((block) => block.length > 0)
     .join('\n\n');
 
@@ -381,31 +477,64 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPrompt {
     system,
     prompt,
     report: {
-      sent: { turns: included.length, inputCharacters: used, excerptCharacters },
+      sent: {
+        turns: included.length,
+        // The whole thing, system prompt included. `prompt.length + system.length` is asserted against
+        // the limit by the spec, so this number is the artefact rather than a claim about it.
+        inputCharacters: system.length + prompt.length,
+        excerptCharacters: excerpt.text.length,
+      },
       omitted: omissions,
     },
   };
 }
 
-function clip(
-  value: string,
-  limit: number,
-  omission: string,
-  omissions: AgentContextOmission[],
-): string {
-  if (value.length <= limit) return value;
-  if (omission.length > 0) {
-    omissions.push({ field: 'conversation', detail: omission });
-  }
-  return value.slice(0, limit);
+function buildSystem(mode: TutorMode): string {
+  return [
+    'You are a tutor inside a focus tool. The learner is looking at one step of one task.',
+    MODE_INSTRUCTIONS[mode],
+    formatSpec(mode),
+    'Use only the material section given below. If it does not answer the question, say so in the ' +
+      'same labelled form rather than answering from general knowledge.',
+    'Be brief. The learner is working, not reading.',
+  ].join('\n\n');
+}
+
+/**
+ * Removes anything from the learner's own question that would read as one of the tutor's labels.
+ *
+ * The question is data being re-sent into a format that has labels, so a learner who types `[hint]` is
+ * not asking for a hint — but the model has no way to tell. This is the design's promise that the
+ * tutor's own labels do not re-enter the prompt through the learner's side.
+ */
+function sanitiseQuestion(question: string): string {
+  return question
+    .split(/\r?\n/)
+    .filter((line) => !LABEL_LINE.test(line.trim()))
+    .join('\n')
+    .trim();
+}
+
+function clip(value: string, limit: number, omissions: AgentContextOmission[]): string {
+  // By code point, so a clip cannot split a surrogate pair.
+  const points = [...value];
+  if (points.length <= limit) return value;
+  omissions.push({
+    field: 'conversation',
+    detail: 'something you wrote was longer than the tutor reads, so its end was left out',
+  });
+  return points.slice(0, limit).join('');
+}
+
+function turnBlock(role: TutorTurn['role'], text: string): string {
+  return `${role === 'learner' ? 'Learner' : 'You'} said:\n${text}`;
 }
 
 function turnsBlock(turns: readonly TutorTurn[]): string {
   if (turns.length === 0) return '';
-  const lines = turns.map(
-    (turn) => `${turn.role === 'learner' ? 'Learner' : 'You'} said:\n${turn.text}`,
-  );
-  return `Earlier in this conversation:\n\n${lines.join('\n\n')}`;
+  return `Earlier in this conversation:\n\n${turns
+    .map((turn) => turnBlock(turn.role, turn.text))
+    .join('\n\n')}`;
 }
 
 /**
@@ -414,16 +543,27 @@ function turnsBlock(turns: readonly TutorTurn[]): string {
  * Deliberately flat text rather than the JSON of `AgentContext`: the fields are what the mode
  * instructions refer to ("this step", "the section provided"), and a model reading a labelled
  * paragraph uses them more reliably than one re-deriving them from a nested object.
+ *
+ * Its own bound, because two of these fields are unbounded strings in the domain: `Concept.summary`
+ * and `Task.instructions` are whatever the imported material produced. Only `material.text` arrived
+ * already bounded, from AG1, and an unbounded field inside a bounded total is not bounded.
  */
-function describeContext(context: AgentContext): string {
+function describeContext(
+  context: AgentContext,
+  limit: number,
+  omissions: AgentContextOmission[],
+): string {
   const lines: string[] = [];
   const { task, concept, material } = context;
 
   if (concept.title !== null) lines.push(`Concept: ${concept.title}`);
-  if (concept.summary !== null && concept.summary.length > 0)
-    lines.push(`Concept summary: ${concept.summary}`);
+  if (concept.summary !== null && concept.summary.length > 0) {
+    lines.push(`Concept summary: ${clip(concept.summary, limit, omissions)}`);
+  }
   if (task.title !== null) lines.push(`Step ${task.step} of ${task.totalSteps}: ${task.title}`);
-  if (task.instructions !== null) lines.push(`What the step asks for: ${task.instructions}`);
+  if (task.instructions !== null) {
+    lines.push(`What the step asks for: ${clip(task.instructions, limit, omissions)}`);
+  }
   lines.push(`The learner's state: ${context.learningState}`);
 
   if (material.heading !== null && material.text.length > 0) {
@@ -439,4 +579,37 @@ function describeContext(context: AgentContext): string {
   }
 
   return lines.join('\n');
+}
+
+/**
+ * The one thing worth asking the model again about.
+ *
+ * Format failures only — see `isRetryable`. The reason is stated back in the words the parser uses,
+ * because those are the words the prompt already used to describe the format, and a second vocabulary
+ * for the same rule is how the two drift apart.
+ */
+export function buildTutorRetryPrompt(input: {
+  readonly mode: TutorMode;
+  readonly reason: TutorRejection;
+  readonly question: string;
+}): string {
+  const { required, allowed } = TUTOR_MODE_PARTS[input.mode];
+  const problem =
+    input.reason === 'unparseable'
+      ? 'Your answer had no labelled blocks at all.'
+      : input.reason === 'unexpected-part'
+        ? `Your answer used a label that is not allowed here. Only ${allowed
+            .map((kind) => `[${kind}]`)
+            .join(', ')} may be used.`
+        : `Your answer was missing one of the labels this mode requires: ${required
+            .map((kind) => `[${kind}]`)
+            .join(', ')}.`;
+
+  return [
+    problem,
+    'Answer the same question again, using only the allowed labels, each on a line of its own.',
+    '',
+    '[question]',
+    sanitiseQuestion(input.question),
+  ].join('\n');
 }
