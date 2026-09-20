@@ -354,6 +354,43 @@ describe('intervention policy — anti-nagging', () => {
     expect(decision.reason.key).toBe('reason.resume.dismissed');
   });
 
+  it('answers a reasoned request made inside the dismissed-resume back-off', () => {
+    /*
+     * The back-off is a rule against the agent speaking *unasked*, so it does not apply to a press —
+     * the same argument the cooldown above it was already fixed for. Left below the request, this
+     * returned NO_ACTION: the learner saw nothing at all, and two minutes later the reason they gave
+     * was answered with the reason from a request they had made in the meantime. Dismissing a resume
+     * card and then saying why you are stuck is an ordinary pair of actions, not a corner.
+     */
+    const decision = decide({
+      engineState: engineWith({ state: 'CONFUSED', currentTaskId: 't1' }),
+      recentEvents: [
+        eventWith('RESUME_DISMISSED', at(-20_000), { checkpointId: 'cp1' }),
+        eventWith('HELP_REQUESTED', T0, { taskId: 't1', reason: 'tired' }),
+      ],
+      now: T0,
+    });
+
+    expect(decision.action).toBe('BREAK');
+    expect(decision.reason.key).toBe('reason.stuck.tired');
+  });
+
+  it('still applies the dismissed-resume back-off to a request with no reason', () => {
+    // The other half of the same rule: with nothing stated there is no reason to break the silence, so
+    // the back-off stands and the state rules are not consulted either.
+    const decision = decide({
+      engineState: engineWith({ state: 'CONFUSED', currentTaskId: 't1' }),
+      recentEvents: [
+        eventWith('RESUME_DISMISSED', at(-20_000), { checkpointId: 'cp1' }),
+        eventWith('HELP_REQUESTED', T0, { taskId: 't1' }),
+      ],
+      now: T0,
+    });
+
+    expect(decision.action).toBe('NO_ACTION');
+    expect(decision.reason.key).toBe('reason.resume.dismissed');
+  });
+
   it('re-offers resume even if an earlier card was dismissed', () => {
     const decision = decide({
       engineState: engineWith({ state: 'INTERRUPTED', awaitingResume: true }),

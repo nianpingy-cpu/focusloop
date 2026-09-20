@@ -225,29 +225,19 @@ export function decideIntervention(
   }
 
   // 2. A dismissed resume means the learner wants to be left alone.
-  const lastDismissed = lastEventOfType(recentEvents, 'RESUME_DISMISSED');
-  const sinceDismissed = msSince(lastDismissed?.at, now);
-  const resumeIsPending = state === 'INTERRUPTED' && engineState.awaitingResume;
-  if (
-    sinceDismissed !== null &&
-    sinceDismissed < config.dismissedResumeCooldownMs &&
-    !resumeIsPending
-  ) {
-    return decision('reason.resume.dismissed', 'NO_ACTION', state);
-  }
-
-  // 3. The one interruption that always matters, and is never rate limited.
-  if (resumeIsPending) {
-    return decision('reason.resume.interruption', 'RESUME', state);
-  }
-
   /*
-   * 4. The learner asked. A request is not an interruption.
+   * 2. The learner asked. A request is not an interruption.
    *
-   * The cooldown below exists to stop the agent speaking up unasked; this is the opposite of that, and
-   * answering it late — because something unrelated was shown recently — is how a help button stops
-   * being worth pressing. The budget in step 1 still applies, so asking repeatedly is not a way to be
-   * shown something every few seconds.
+   * Above the two back-offs below, not between them, and that placement is the whole point. Both exist
+   * to stop the agent speaking up *unasked*; a press is the opposite of that. Leaving the request below
+   * the dismissed-resume rule meant a learner who had just dismissed a resume card and then said why
+   * they were stuck was answered with silence and then, once the window expired, with the reason from a
+   * request made two minutes earlier — which is exactly the "answering it late" failure this comment
+   * names. The cooldown was fixed for this in an earlier round and the back-off above it, being the
+   * stronger version of the same rule, was missed.
+   *
+   * The budget in step 1 still applies, so asking repeatedly is not a way to be shown something every
+   * few seconds.
    *
    * With no reason given this falls through to the state rules below: "they did not say" is not one of
    * the reasons and must not be answered as though it were.
@@ -262,6 +252,23 @@ export function decideIntervention(
       ),
       answersRequestId: asked.requestId,
     };
+  }
+
+  // 3. A dismissed resume means the learner wants to be left alone.
+  const lastDismissed = lastEventOfType(recentEvents, 'RESUME_DISMISSED');
+  const sinceDismissed = msSince(lastDismissed?.at, now);
+  const resumeIsPending = state === 'INTERRUPTED' && engineState.awaitingResume;
+  if (
+    sinceDismissed !== null &&
+    sinceDismissed < config.dismissedResumeCooldownMs &&
+    !resumeIsPending
+  ) {
+    return decision('reason.resume.dismissed', 'NO_ACTION', state);
+  }
+
+  // 4. The one interruption that always matters, and is never rate limited.
+  if (resumeIsPending) {
+    return decision('reason.resume.interruption', 'RESUME', state);
   }
 
   const candidate = candidateFor(engineState, input.currentTask, now, config);
