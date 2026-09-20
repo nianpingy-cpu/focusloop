@@ -366,7 +366,7 @@ export class FocusPage implements OnDestroy {
   protected readonly plan = computed(() => buildPlan(this.openTasks()));
   protected readonly nextTask = computed<MicroTask | null>(() => this.openTasks()[0] ?? null);
 
-  /** Set by Escape, and by nothing else: the one way out that owes the trigger its focus back. */
+  /** Set by the two ways out of the chooser: both destroy the focused element, so both owe it on. */
   private stuckReturnFocus = false;
   /** Cleared when the chooser closes. While it is set, focus has already been moved into the group. */
   private stuckFocusMoved = false;
@@ -385,9 +385,10 @@ export class FocusPage implements OnDestroy {
    * This is the arrangement the resume card uses, and its comment gives the reason it is not optional:
    * without moving focus in, the keyboard is left on the page behind.
    *
-   * The return half only runs for the Escape, not for every close. Answering a reason and completing
-   * the task both put the chooser away, and in both the learner's attention is somewhere else — the
-   * suggestion that just appeared, or the next step.
+   * Every close hands the focus back, whichever of the two it was. A first version returned it only on
+   * Escape, on the grounds that after answering, the learner's attention is on the suggestion that just
+   * appeared — which is an argument against moving focus *to the suggestion*, not for leaving it on the
+   * body, and the review was right to call it out.
    */
   private readonly manageStuckFocus = effect(() => {
     if (this.stuckOpen()) {
@@ -551,8 +552,15 @@ export class FocusPage implements OnDestroy {
    *
    * The chooser closes first: the request is a thing that has happened, and leaving six buttons on
    * screen over the task afterwards would be the interruption the agent is meant to avoid.
+   *
+   * Focus goes back to the trigger, the same as on Escape, and for the same reason: the button that was
+   * pressed is destroyed by the close, so without this the keyboard is left on the body — and the
+   * learner who needs the suggestion most is the one who cannot reach it, because the rest of the page
+   * now stands between them and "Show me". The suggestion itself is `role="status"`, so it is announced
+   * whether or not it holds the focus; the trigger is simply the nearest stable place to stand.
    */
   protected async sayStuck(taskId: string, reason: StuckReason | null): Promise<void> {
+    this.stuckReturnFocus = true;
     this.stuckOpen.set(false);
     await this.state.dispatch('HELP_REQUESTED', helpRequestPayload(taskId, reason));
   }

@@ -847,6 +847,13 @@ test('the reason the learner gives is answered according to which kind of stuck 
   await window.getByTestId('stuck-tired').click();
   await expect(window.getByTestId('stuck-tired')).toBeHidden();
 
+  /*
+   * Answering destroys the button that was pressed, so the focus has to land somewhere here too. Without
+   * this the keyboard is on the body, and the learner who needs the suggestion is the one who has to tab
+   * past the whole page to reach "Show me".
+   */
+  await expect(window.getByTestId('focus-stuck')).toBeFocused();
+
   const agent = window.locator('.agent');
   await expect(agent).toBeVisible();
   await expect(agent).toHaveAttribute('data-action', 'BREAK');
