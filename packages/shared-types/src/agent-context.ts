@@ -81,7 +81,13 @@ export interface AgentContext {
  * from one that forgot them, and the difference matters the first time an answer is wrong.
  */
 export interface AgentContextOmission {
-  readonly field: 'events' | 'material' | 'courses' | 'session';
+  /**
+   * Which part of the input this is about.
+   *
+   * `'conversation'` was added for AG3: a dropped transcript turn is none of the other four, and
+   * reporting it under one of them would have said something untrue about why it was dropped.
+   */
+  readonly field: 'events' | 'material' | 'courses' | 'session' | 'conversation';
   readonly detail: string;
 }
 
