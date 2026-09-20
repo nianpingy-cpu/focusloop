@@ -226,10 +226,9 @@ describe('buildTutorPrompt', () => {
       );
     } else {
       // Refused, and the refusal says why rather than losing the question quietly.
-      expect(result.status).toBe('over-budget');
-      expect(result.report.omitted.some((entry) => entry.detail.includes('no room left'))).toBe(
-        true,
-      );
+      expect(result.status).toBe('refused');
+      expect(result.report.omitted.length).toBeGreaterThan(0);
+      expect(result.report.sent.inputCharacters).toBe(0);
     }
   });
 
@@ -278,8 +277,12 @@ describe('buildTutorPrompt', () => {
 
       const label = `title ${title} / question ${question}`;
 
-      if (result.status === 'over-budget') {
+      if (result.status === 'refused') {
+        // Nothing is sent, and the account says nothing was rather than reporting a length for a call
+        // that never happened.
+        expect(result.report.sent.inputCharacters, label).toBe(0);
         expect(result.report.omitted.length, label).toBeGreaterThan(0);
+        if (question === 0) expect(result.reason, label).toBe('no-question');
         continue;
       }
 
@@ -287,16 +290,72 @@ describe('buildTutorPrompt', () => {
         TUTOR_LIMITS.inputCharacters,
       );
 
+      /*
+       * The question is present and is the learner's. Asserting `toContain('[question]')` would pass on
+       * the label alone, which is how an earlier version of this test walked past the state it was
+       * named for.
+       */
       const asked = result.prompt
         .slice(result.prompt.indexOf('[question]') + '[question]\n'.length)
         .trim();
-      if (question === 0) {
-        // A learner who asked nothing has nothing to send; the block is absent rather than empty.
-        expect(asked.length, label).toBe(0);
-      } else {
-        expect(asked.length, label).toBeGreaterThan(0);
-        expect(asked, label).toBe(asked.trim());
-      }
+      expect(asked.length, label).toBeGreaterThan(0);
+      expect(result.prompt, label).toContain('q'.repeat(Math.min(question, asked.length)));
+    }
+  });
+  it('charges the separator between blocks, at every question length', () => {
+    /*
+     * The two characters `assemble` puts between the context block and the question block, which nothing
+     * charged: with no turns admitted — every first question in a conversation — the string sent was two
+     * longer than the sum that had been bounded, so the inspector could show 4,002 against a documented
+     * 4,000.
+     *
+     * A sampled sweep cannot find a two-character boundary, which is why this scans every length. The
+     * excerpt is at AG1's real bound rather than the sentence the other tests use, because that is where
+     * the boundary sits: with a short excerpt the fixed part is under a thousand characters and the
+     * question never comes within a hundred of the ceiling, which is how the first version of this test
+     * passed with the separator uncharged.
+     */
+    const context = contextWith({
+      material: { ...EXCERPT, text: 'm'.repeat(1200) },
+    });
+
+    for (let length = 1; length <= 2400; length += 1) {
+      const result = buildTutorPrompt({
+        mode: 'EXPLAIN',
+        context,
+        question: 'q'.repeat(length),
+        turns: [],
+      });
+      if (result.status !== 'built') continue;
+
+      expect(
+        result.prompt.length + result.system.length,
+        `question of ${length} characters`,
+      ).toBeLessThanOrEqual(TUTOR_LIMITS.inputCharacters);
+      // And the account is the same number as the artefact, for every one of them.
+      expect(result.report.sent.inputCharacters, `question of ${length}`).toBe(
+        result.prompt.length + result.system.length,
+      );
+    }
+  });
+  it("refuses a question that is nothing but the format's own labels", () => {
+    /*
+     * The reachable route to the artefact the clamp exists to prevent, and it needed no misbehaviour
+     * from anybody: a learner whose message is exactly `[hint]` has it stripped by the sanitiser — which
+     * is correct — leaving an empty question and an eleven-character `[question]` block whose length is
+     * non-zero, so nothing downstream would touch it. A paid call carrying a label and nothing under it.
+     */
+    for (const question of ['', '   ', '[hint]', '[section]\n[hint]', '\n\n']) {
+      const result = buildTutorPrompt({
+        mode: 'EXPLAIN',
+        context: contextWith(),
+        question,
+        turns: [],
+      });
+
+      expect(result.status, JSON.stringify(question)).toBe('refused');
+      if (result.status !== 'refused') return;
+      expect(result.reason).toBe('no-question');
     }
   });
 

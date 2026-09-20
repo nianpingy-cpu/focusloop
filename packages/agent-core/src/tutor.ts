@@ -372,9 +372,23 @@ export type TutorPromptResult =
       readonly prompt: string;
       readonly report: TutorContextReport;
     }
-  | { readonly status: 'over-budget'; readonly report: TutorContextReport };
+  | {
+      readonly status: 'refused';
+      readonly reason: 'no-question' | 'request-too-long';
+      readonly report: TutorContextReport;
+    };
 
 const QUESTION_HEAD = '[question]\n';
+
+/**
+ * What `assemble` puts between blocks, and therefore what the budget has to charge for.
+ *
+ * Named because two characters between the context and the question were the difference between the
+ * ceiling the comments described and the one the code enforced: with no turns admitted, the string sent
+ * was this much longer than the sum that had been bounded. Sharing the constant means the arithmetic and
+ * the assembly cannot drift apart again.
+ */
+const ASSEMBLY_JOIN = '\n\n'.length;
 
 /**
  * Titles are clipped even in the reduced context.
@@ -406,18 +420,34 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
   const excerpt = input.context.material;
   const limit = TUTOR_LIMITS.inputCharacters;
 
-  const system = buildSystem(input.mode, excerpt.text.length > 0);
-  const question = sanitiseQuestion(
+  const questionText = sanitiseQuestion(
     clip(input.question.trim(), TUTOR_LIMITS.questionCharacters, omissions),
     omissions,
   );
 
+  /*
+   * No question means no call.
+   *
+   * Reachable without anybody misbehaving: an empty message, whitespace, or a message that is nothing
+   * but the format's own labels all sanitise to nothing — and the sanitising is itself correct. Without
+   * this, `questionBlock` is the eleven-character label on its own, whose length is non-zero so the
+   * clip below never touches it, and `assemble` keeps it because its length is non-zero too. The result
+   * is a paid call carrying `[question]` with nothing under it, which is the exact artefact the clamp
+   * was added to prevent.
+   */
+  if (questionText.length === 0) {
+    omissions.push({ field: 'conversation', detail: 'there was no question to ask' });
+    return { status: 'refused', reason: 'no-question', report: refusalReport(omissions) };
+  }
+
   const full = { detailLimit: TUTOR_LIMITS.contextCharacters, includeExcerpt: true };
   const reduced = { detailLimit: 0, includeExcerpt: false };
   const fullContext = describeContext(input.context, full);
+
   let contextBlock = fullContext.text;
-  omissions.push(...fullContext.omissions);
-  let questionBlock = `${QUESTION_HEAD}${question}`;
+  let system = buildSystem(input.mode, excerpt.text.length > 0);
+  const questionBlock = `${QUESTION_HEAD}${questionText}`;
+  let block = questionBlock;
 
   /*
    * The fixed parts can exceed the whole budget on their own.
@@ -430,32 +460,47 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
    * reports a number above itself rather than bounding anything.**
    *
    * The excerpt and the two long detail fields go first: the step's own words still ground the answer,
-   * and AG1 already has a "this section was clipped" concept. What is reported is what was actually
-   * there — a message saying the excerpt was left out, on a course with no material, would be false.
+   * and AG1 already has a "this section was clipped" concept.
+   *
+   * The system prompt is **rebuilt** here rather than computed before, because one of its sentences
+   * depends on whether an excerpt survived — and it is longer in the state where one did. Building it
+   * first meant the reduced prompt still said "use the material section given below" over a block with
+   * no section in it, which is the contradiction this branch exists to remove. The length that decides
+   * the room below is the length that is actually sent.
    */
-  if (system.length + contextBlock.length + questionBlock.length > limit) {
+  if (system.length + contextBlock.length + block.length > limit) {
     const removed = describeContext(input.context, reduced);
     contextBlock = removed.text;
+    system = buildSystem(input.mode, false);
     omissions.push(...removed.omissions);
+  } else {
+    // Only on the path that keeps the full block: reporting a summary's clip alongside "the longer
+    // context was left out" would describe two prompts, one of which was never built.
+    omissions.push(...fullContext.omissions);
   }
 
   /*
    * A length, not a bail-out, and zero means exactly one thing.
    *
    * The earlier version skipped the clip whenever the remainder went negative and left the full question
-   * in, so a prompt could sit up to fourteen characters over the ceiling — and once the remainder went
-   * further negative the assembled prompt carried the `[question]` *label* with nothing after it, which
-   * is a paid call asking the model to explain nothing. That is worse than a refusal, and a caller
-   * checking `toContain('[question]')` would not notice.
+   * in, so a prompt could sit up to fourteen characters over the ceiling. Clamping makes the remainder a
+   * length.
    *
-   * With the bounds as they stand this refusal is **unreachable**, and it is here as a backstop rather
-   * than because it fires: the reduced context leaves the titles and the state (~270 characters), so
-   * after reduction the fixed parts and a full question come to roughly 3,200 against a ceiling of
-   * 4,000. Raising `contextCharacters`, `questionCharacters` or AG1's `materialCharacters`, or adding a
-   * mode whose system prompt is much longer, is what would bring it back into reach — and the swept
-   * test in the spec is what will say so.
+   * `- ASSEMBLY_JOIN` because `assemble` puts two characters between the context block and the
+   * question block, and nothing was charging them: with no turns admitted — every first question in a
+   * conversation — the string sent was two characters longer than the sum that had been bounded, so the
+   * inspector could show 4,002 against a documented 4,000.
+   *
+   * With the bounds as they stand the refusal below is **unreachable** and is kept as a backstop: the
+   * reduced context leaves the titles and the state, so the fixed parts and a full question come to
+   * roughly 3,200 against a ceiling of 4,000. Raising `contextCharacters`, `questionCharacters` or AG1's
+   * `materialCharacters`, or adding a mode with a much longer system prompt, is what would bring it back
+   * — and the sweep in the spec is what will say so.
    */
-  const room = Math.max(0, limit - system.length - contextBlock.length - QUESTION_HEAD.length);
+  const room = Math.max(
+    0,
+    limit - system.length - contextBlock.length - QUESTION_HEAD.length - ASSEMBLY_JOIN,
+  );
 
   if (room === 0) {
     omissions.push({
@@ -463,11 +508,11 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
       detail:
         'there was no room left for your question once the step and its context were included',
     });
-    return { status: 'over-budget', report: reportFor(system, '', excerpt, 0, omissions) };
+    return { status: 'refused', reason: 'request-too-long', report: refusalReport(omissions) };
   }
 
-  if (question.length > room) {
-    questionBlock = `${QUESTION_HEAD}${clip(question, room, omissions)}`;
+  if (questionText.length > room) {
+    block = `${QUESTION_HEAD}${clip(questionText, room, omissions)}`;
   }
 
   /*
@@ -491,7 +536,7 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
     // Clipped after the budget test, not before: clipping a turn and then dropping it reports a
     // truncation the learner never saw.
     const candidate = [...included, turn];
-    if (system.length + assemble(contextBlock, candidate, questionBlock).length > limit) break;
+    if (system.length + assemble(contextBlock, candidate, block).length > limit) break;
 
     included.push({
       role: turn.role,
@@ -510,31 +555,35 @@ export function buildTutorPrompt(input: BuildTutorPromptInput): TutorPromptResul
     });
   }
 
-  const prompt = assemble(contextBlock, included, questionBlock);
+  const prompt = assemble(contextBlock, included, block);
   return {
     status: 'built',
     system,
     prompt,
-    report: reportFor(system, prompt, excerpt, included.length, omissions),
+    report: {
+      sent: {
+        turns: included.length,
+        inputCharacters: system.length + prompt.length,
+        // Zero when the excerpt did not make it in, so the inspector cannot show a passage the prompt
+        // does not contain.
+        excerptCharacters:
+          excerpt.text.length > 0 && prompt.includes(excerpt.text) ? excerpt.text.length : 0,
+      },
+      omitted: [...omissions],
+    },
   };
 }
 
-function reportFor(
-  system: string,
-  prompt: string,
-  excerpt: MaterialExcerpt,
-  turns: number,
-  omitted: readonly AgentContextOmission[],
-): TutorContextReport {
+/**
+ * The account for a request nothing was sent for.
+ *
+ * Every field is zero because nothing was sent — the type says `sent` describes what the model was
+ * given, and reporting the system prompt's length for a call that never happened is the kind of number
+ * an inspector will be believed about.
+ */
+function refusalReport(omitted: readonly AgentContextOmission[]): TutorContextReport {
   return {
-    sent: {
-      turns,
-      inputCharacters: system.length + prompt.length,
-      // Zero when the excerpt did not make it in, so the inspector cannot show a passage the prompt
-      // does not contain.
-      excerptCharacters:
-        prompt.includes(excerpt.text) && excerpt.text.length > 0 ? excerpt.text.length : 0,
-    },
+    sent: { turns: 0, inputCharacters: 0, excerptCharacters: 0 },
     omitted: [...omitted],
   };
 }
@@ -555,7 +604,6 @@ function assemble(
     .filter((block) => block.length > 0)
     .join('\n\n');
 }
-
 const MODE_INSTRUCTIONS: Record<TutorMode, string> = {
   EXPLAIN: 'Explain the idea this step depends on, in terms of the material section provided.',
   HINT:
@@ -644,13 +692,20 @@ function buildSystem(mode: TutorMode, hasMaterial: boolean): string {
 /**
  * Removes anything from the learner's own words that would read as one of the tutor's labels.
  *
- * The question and the transcript are data being re-sent into a format that has labels, so a learner
- * who writes `[hint]` is not answering on the tutor's behalf — but the model has no way to tell.
+ * A question is data being re-sent into a format that has labels, so a learner who writes `[hint]` is
+ * not answering on the tutor's behalf — but the model has no way to tell.
  *
- * Narrowed to the labels the format actually has. Removing *every* bracketed word was the first
- * version, and it deleted ordinary notation: a learner asking "what does `[x]` mean here?" lost the
- * line, and a question that was only that line became empty. That is the same argument the parser
- * makes two hundred lines up, and it should not have been reversed here.
+ * **The transcript is deliberately left alone**, and it is worth saying why rather than leaving the
+ * impression that it was forgotten. Stripping a label from a previous learner turn would rewrite what
+ * the learner said, and the transcript's job is to recall it accurately; each turn is already attributed
+ * (`Learner said:` / `You said:`), so a bracketed word inside one is a quoted utterance and not a label
+ * the model produced. What actually holds against a hostile transcript is the response contract — the
+ * reply has to be the mode's allowed parts, with a grounded section — and that is `readTutorReply`.
+ *
+ * Narrowed to the labels the format actually has. Removing *every* bracketed word was the first version,
+ * and it deleted ordinary notation: a learner asking "what does `[x]` mean here?" lost the line, and a
+ * question that was only that line became empty. That is the same argument the parser makes two hundred
+ * lines up, and it should not have been reversed here.
  */
 function sanitiseQuestion(question: string, omissions: AgentContextOmission[]): string {
   const labels = new Set<string>([...TUTOR_PART_KINDS, SECTION_LABEL]);
@@ -674,13 +729,18 @@ function sanitiseQuestion(question: string, omissions: AgentContextOmission[]): 
   return kept.join('\n').trim();
 }
 
-function clip(value: string, limit: number, omissions: AgentContextOmission[]): string {
+function clip(
+  value: string,
+  limit: number,
+  omissions: AgentContextOmission[],
+  what = 'something you wrote',
+): string {
   // By code point, so a clip cannot split a surrogate pair.
   const points = [...value];
   if (points.length <= limit) return value;
   omissions.push({
     field: 'conversation',
-    detail: 'something you wrote was longer than the tutor reads, so its end was left out',
+    detail: `${what} was longer than the tutor reads, so its end was left out`,
   });
   return points.slice(0, limit).join('');
 }
