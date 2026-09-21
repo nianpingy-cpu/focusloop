@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-too-big",
+  "capability": "AG2",
+  "kind": "happy",
+  "input": { "reason": "too-big" },
+  "expected": [
+    { "type": "equals", "path": "action", "value": "SIMPLIFY" },
+    { "type": "max-items", "path": "stepKeys", "max": 3 }
+  ],
+  "forbidden": []
+}

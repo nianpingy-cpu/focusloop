@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "ag5-success-window-pending",
+  "capability": "AG5",
+  "kind": "edge",
+  "description": "A displayed card with no outcome before the deadline remains pending.",
+  "input": {
+    "gapMs": 120000,
+    "now": "2026-09-21T12:02:00.000Z",
+    "checkpoint": {
+      "conceptTitle": "Heaps",
+      "currentTaskTitle": "Read the heap rule",
+      "currentStep": 1,
+      "nextAction": "Read the heap rule"
+    },
+    "interruptionEvents": [{ "id": "i-pending", "type": "RESUME_OFFERED" }],
+    "evidenceEvents": [],
+    "success": { "shownAt": "2026-09-21T12:00:00.000Z", "acceptedAt": "2026-09-21T12:01:00.000Z" },
+    "debugDump": "AG5_SENSITIVE_SENTINEL"
+  },
+  "expected": [
+    { "type": "equals", "path": "variant", "value": "short" },
+    { "type": "equals", "path": "status", "value": "pending" },
+    { "type": "allowed-keys", "path": "summary", "keys": ["title", "detail", "nextAction"] }
+  ],
+  "forbidden": [{ "type": "forbidden-value", "value": "AG5_SENSITIVE_SENTINEL" }]
+}

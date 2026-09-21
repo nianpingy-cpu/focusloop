@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "ag5-missing-gap-conservative-medium",
+  "capability": "AG5",
+  "kind": "adversarial",
+  "description": "An unavailable gap is handled conservatively as medium rather than guessed as short.",
+  "input": {
+    "gapMs": null,
+    "now": "2026-09-21T12:02:00.000Z",
+    "checkpoint": {
+      "conceptTitle": "Sorting",
+      "currentTaskTitle": "Compare two lists",
+      "currentStep": 1,
+      "nextAction": "Compare the first pair"
+    },
+    "interruptionEvents": [],
+    "evidenceEvents": [],
+    "success": { "shownAt": "2026-09-21T12:00:00.000Z" },
+    "fallbackReason": "AG5_SENSITIVE_SENTINEL"
+  },
+  "expected": [
+    { "type": "equals", "path": "variant", "value": "medium" },
+    { "type": "equals", "path": "gapMs", "value": null },
+    { "type": "equals", "path": "refresherRequired", "value": false },
+    { "type": "equals", "path": "status", "value": "pending" },
+    { "type": "allowed-keys", "path": "summary", "keys": ["title", "detail", "nextAction"] }
+  ],
+  "forbidden": [{ "type": "forbidden-value", "value": "AG5_SENSITIVE_SENTINEL" }]
+}

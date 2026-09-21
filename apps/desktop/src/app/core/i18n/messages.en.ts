@@ -217,6 +217,12 @@ const en = {
   'dashboard.tasks': 'Micro tasks',
   'dashboard.interruptions': 'Interruptions',
   'dashboard.latency': 'Avg resume latency',
+  'dashboard.resumeSuccess': 'Resume success',
+  'dashboard.resumeSuccess.sample':
+    '{succeeded} of {evaluated} evaluated · {pending} still pending',
+  'dashboard.rescueSuccess': 'Rescue success',
+  'dashboard.rescueSuccess.sample':
+    '{succeeded} of {evaluated} evaluated · {repeated} asked again · {pending} pending',
   'dashboard.outcomes': 'Intervention outcomes',
   'dashboard.col.action': 'Action',
   'dashboard.col.shown': 'Shown',
@@ -239,6 +245,7 @@ const en = {
   // --------------------------------------------------------- resume card
   'resume.aria': 'Resume where you left off',
   'resume.welcome': 'Welcome back',
+  'resume.refresher': '30-second recall:',
   'resume.done': 'Done',
   'resume.nothingDone': 'Nothing completed yet — that is fine.',
   'resume.open': 'Still open',
@@ -250,6 +257,8 @@ const en = {
   'resume.dismiss': 'Dismiss',
   'resume.context.checkpoint': 'checkpoint: {id}',
   'resume.context.shownAt': 'shown at: {at}',
+  'resume.context.variant': 'variant: {variant}',
+  'resume.context.gap': 'gap in ms: {gap}',
   'resume.context.completed': 'completed: {items}',
   'resume.context.unresolved': 'unresolved: {items}',
   'resume.context.next': 'next: {action}',
@@ -257,8 +266,15 @@ const en = {
 
   // -------------------------------------------------------- agent panel
   'agent.suggesting': 'Suggestion',
+  'agent.accept': 'Accept',
+  'agent.accepting': 'Accepting…',
   'agent.showMe': 'Show me',
   'agent.notNow': 'Not now',
+  'agent.estimate': 'About {minutes} min',
+  'agent.rescue.ready': 'Rescue ready',
+  'agent.rescue.title': 'Here is a small way forward',
+  'agent.rescue.plan': 'Rescue plan',
+  'agent.continue': 'Continue',
   'agent.action.MICRO_START': 'Start with the smallest possible step',
   'agent.action.SIMPLIFY': 'Simplify the current task',
   'agent.action.HINT': 'Here is a hint',
@@ -268,6 +284,8 @@ const en = {
   'agent.action.RESUME': 'Resume where you left off',
   'agent.action.NO_ACTION': 'No suggestion right now',
   'agent.inspector.title': 'What the agent sees',
+  'agent.inspector.description':
+    'Shared AG1 context report from the main process. It lists the bounded fields and explicit omissions used for this moment.',
   'agent.inspector.state': 'State',
   'agent.inspector.concept': 'Concept',
   'agent.inspector.task': 'Task',
@@ -297,6 +315,18 @@ const en = {
   'action.practice.example': 'Work through the practice task: {title}',
   'action.read.summarise': 'Read it, then summarise it in one sentence: {title}',
 
+  // stuck rescue — deterministic offline steps
+  'rescue.microStart.first': 'Only identify the first action this step asks you to take.',
+  'rescue.simplify.identify': 'Name the result this step is trying to produce.',
+  'rescue.simplify.first': 'Do only the first part; leave the rest untouched for now.',
+  'rescue.simplify.check': 'Pause and check that first part before continuing.',
+  'rescue.hint.action': 'Find the action word in the instruction.',
+  'rescue.hint.condition': 'Use one given condition, then try the smallest next move.',
+  'rescue.example.pattern': 'Look for the pattern: input, one operation, then a check.',
+  'rescue.example.apply': 'Apply that pattern to one small piece of the current step.',
+  'rescue.break.pause': 'Step away for five minutes; the current task will stay here.',
+  'rescue.break.return': 'When you return, continue from the same first unfinished move.',
+
   // continuity — the resume card's own wording
   'resume.title.course': 'Back to {course}',
   'resume.title.task': 'Back to: {task}',
@@ -304,6 +334,8 @@ const en = {
   'resume.context.moment': 'You were working on {concept} a moment ago. The goal was: {goal}',
   'resume.context.away':
     'You were working on {concept} and stepped away for {duration}. The goal was: {goal}',
+  'resume.refresher.long':
+    'Before continuing, spend {seconds} seconds recalling the last idea in your own words.',
 
   // intervention policy — why the agent decided what it decided
   'reason.budget': 'You have already used today’s interventions.',
@@ -352,6 +384,8 @@ const en = {
   'tutor.concept': 'Concept',
   'tutor.step': 'Step',
   'tutor.instructions': 'What this step asks',
+  'tutor.contextHint':
+    'The tutor adds your question and bounded session conversation, then enforces a 4,000-character total prompt budget (system prompt included).',
 } as const;
 
 export default en;

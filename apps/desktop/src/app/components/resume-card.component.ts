@@ -26,40 +26,48 @@ import { focusableWithin, nextIndex } from '../core/focus-trap';
           before its controls are reached, and focus is provably inside the aria-modal region
           rather than left on the page behind it.
         -->
-        <div class="resume" #panel tabindex="-1">
+        <div class="resume" #panel tabindex="-1" [attr.data-resume-variant]="view.card.variant">
           <header class="resume__header">
             <p class="eyebrow">{{ t('resume.welcome') }}</p>
             <h2>{{ title(view) }}</h2>
             <p class="muted">{{ context(view) }}</p>
           </header>
 
-          <div class="resume__grid">
-            <section>
-              <h3>{{ t('resume.done') }}</h3>
-              @if (view.card.completed.length === 0) {
-                <p class="muted">{{ t('resume.nothingDone') }}</p>
-              } @else {
-                <ul>
-                  @for (item of view.card.completed; track item) {
-                    <li>{{ item }}</li>
-                  }
-                </ul>
-              }
-            </section>
+          @if (view.card.variant !== 'short') {
+            <div class="resume__grid">
+              <section>
+                <h3>{{ t('resume.done') }}</h3>
+                @if (view.card.completed.length === 0) {
+                  <p class="muted">{{ t('resume.nothingDone') }}</p>
+                } @else {
+                  <ul>
+                    @for (item of view.card.completed; track item) {
+                      <li>{{ item }}</li>
+                    }
+                  </ul>
+                }
+              </section>
 
-            <section>
-              <h3>{{ t('resume.open') }}</h3>
-              @if (view.card.unresolved.length === 0) {
-                <p class="muted">{{ t('resume.nothingOpen') }}</p>
-              } @else {
-                <ul>
-                  @for (item of view.card.unresolved; track item) {
-                    <li>{{ item }}</li>
-                  }
-                </ul>
-              }
-            </section>
-          </div>
+              <section>
+                <h3>{{ t('resume.open') }}</h3>
+                @if (view.card.unresolved.length === 0) {
+                  <p class="muted">{{ t('resume.nothingOpen') }}</p>
+                } @else {
+                  <ul>
+                    @for (item of view.card.unresolved; track item) {
+                      <li>{{ item }}</li>
+                    }
+                  </ul>
+                }
+              </section>
+            </div>
+          }
+
+          @if (view.card.refresher !== null) {
+            <p class="resume__next" data-testid="resume-refresher">
+              <strong>{{ t('resume.refresher') }}</strong> {{ refresher(view) }}
+            </p>
+          }
 
           <p class="resume__next">
             <strong>{{ t('resume.nextStep') }}</strong> {{ nextAction(view) }}
@@ -171,6 +179,10 @@ export class ResumeCardComponent implements OnDestroy {
     return this.i18n.translate(view.card.nextAction);
   }
 
+  protected refresher(view: ResumeCardView): string {
+    return view.card.refresher === null ? '' : this.i18n.translate(view.card.refresher);
+  }
+
   /** Templates cannot reach the global `String`, so the conversion lives here. */
   protected minutes(value: number): string {
     return this.t('resume.minutes', { minutes: `${value}` });
@@ -199,6 +211,10 @@ export class ResumeCardComponent implements OnDestroy {
     return [
       this.t('resume.context.checkpoint', { id: view.timing.checkpointId }),
       this.t('resume.context.shownAt', { at: view.timing.shownAt }),
+      this.t('resume.context.variant', { variant: view.card.variant }),
+      this.t('resume.context.gap', {
+        gap: view.card.gapMs === null ? empty : `${view.card.gapMs}`,
+      }),
       this.t('resume.context.completed', {
         items: view.card.completed.join(', ') || empty,
       }),

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "ag5-medium-15m-boundary",
+  "capability": "AG5",
+  "kind": "edge",
+  "description": "The fifteen-minute boundary remains a medium resume.",
+  "input": {
+    "gapMs": 900000,
+    "now": "2026-09-21T12:16:00.000Z",
+    "checkpoint": {
+      "conceptTitle": "Trees",
+      "currentTaskTitle": "Trace one branch",
+      "currentStep": 2,
+      "nextAction": "Trace the right branch"
+    },
+    "interruptionEvents": [{ "id": "i-medium", "type": "RESUME_OFFERED" }],
+    "evidenceEvents": [],
+    "success": { "shownAt": "2026-09-21T12:15:00.000Z" },
+    "metadata": { "token": "AG5_SENSITIVE_SENTINEL" }
+  },
+  "expected": [
+    { "type": "equals", "path": "variant", "value": "medium" },
+    { "type": "equals", "path": "gapMs", "value": 900000 },
+    { "type": "equals", "path": "refresherRequired", "value": false },
+    { "type": "equals", "path": "status", "value": "pending" },
+    { "type": "allowed-keys", "path": "summary", "keys": ["title", "detail", "nextAction"] },
+    { "type": "equals", "path": "summary.title", "value": "resume.title.task" }
+  ],
+  "forbidden": [{ "type": "forbidden-value", "value": "AG5_SENSITIVE_SENTINEL" }]
+}

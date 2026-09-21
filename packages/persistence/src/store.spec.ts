@@ -395,6 +395,82 @@ describe('FocusLoopStore', () => {
       store.saveOutcome(outcome);
       expect(store.listOutcomes('session-1')).toHaveLength(1);
     });
+
+    it('keeps the first rescue decision and only advances accepted outcomes to Continue', () => {
+      const accepted: InterventionOutcome = {
+        id: 'o1',
+        interventionId: 'i1',
+        sessionId: 'session-1',
+        at: T0,
+        state: 'CONFUSED',
+        action: 'HINT',
+        accepted: true,
+        dismissed: false,
+        taskCompleted: false,
+        resumeLatencyMs: null,
+        quizOutcome: null,
+        acceptedAt: T0,
+      };
+      store.saveOutcome(accepted);
+      store.saveOutcome({
+        ...accepted,
+        id: 'o2',
+        at: '2026-01-01T00:00:02.000Z',
+        accepted: false,
+        dismissed: true,
+        acceptedAt: undefined,
+        dismissedAt: '2026-01-01T00:00:02.000Z',
+      });
+      const storedAccepted = store.getOutcomeByIntervention('i1');
+      expect(storedAccepted).toMatchObject({
+        accepted: true,
+        dismissed: false,
+        acceptedAt: T0,
+      });
+      expect(storedAccepted).not.toHaveProperty('dismissedAt');
+
+      store.saveOutcome({
+        ...accepted,
+        id: 'o3',
+        at: '2026-01-01T00:00:03.000Z',
+        continuedAt: '2026-01-01T00:00:03.000Z',
+      });
+      expect(store.getOutcomeByIntervention('i1')?.continuedAt).toBe('2026-01-01T00:00:03.000Z');
+      expect(store.listOutcomes('session-1')).toHaveLength(1);
+    });
+
+    it('does not turn a dismissed rescue into an accepted one', () => {
+      const dismissed: InterventionOutcome = {
+        id: 'o1',
+        interventionId: 'i1',
+        sessionId: 'session-1',
+        at: T0,
+        state: 'CONFUSED',
+        action: 'HINT',
+        accepted: false,
+        dismissed: true,
+        taskCompleted: false,
+        resumeLatencyMs: null,
+        quizOutcome: null,
+        dismissedAt: T0,
+      };
+      store.saveOutcome(dismissed);
+      store.saveOutcome({
+        ...dismissed,
+        id: 'o2',
+        accepted: true,
+        dismissed: false,
+        acceptedAt: '2026-01-01T00:00:04.000Z',
+        dismissedAt: undefined,
+      });
+      const storedDismissed = store.getOutcomeByIntervention('i1');
+      expect(storedDismissed).toMatchObject({
+        accepted: false,
+        dismissed: true,
+        dismissedAt: T0,
+      });
+      expect(storedDismissed).not.toHaveProperty('acceptedAt');
+    });
   });
 
   describe('resume timing', () => {
@@ -423,8 +499,85 @@ describe('FocusLoopStore', () => {
       expect(timing?.dismissedAt).toBe('2026-01-01T00:00:03.000Z');
     });
 
+    it('keeps the first decision and timestamp when a decision is replayed', () => {
+      store.saveResumeShown('cp1', 'session-1', T0);
+      const accepted = store.markResumeDecided('cp1', 'accepted', '2026-01-01T00:00:03.000Z');
+      const replayed = store.markResumeDecided('cp1', 'dismissed', '2026-01-01T00:00:09.000Z');
+
+      expect(replayed).toEqual(accepted);
+      expect(replayed).toMatchObject({
+        acceptedAt: '2026-01-01T00:00:03.000Z',
+        dismissedAt: undefined,
+        resumeLatencyMs: 3_000,
+      });
+    });
+
     it('returns null when deciding on an unknown card', () => {
       expect(store.markResumeDecided('missing', 'accepted', T0)).toBeNull();
+    });
+
+    it('lists timings for one session in deterministic shown order', () => {
+      store.saveResumeShown('cp-later', 'session-1', '2026-01-01T00:00:02.000Z');
+      store.saveResumeShown('cp-first', 'session-1', '2026-01-01T00:00:01.000Z');
+      store.saveResumeShown('cp-tie-b', 'session-1', '2026-01-01T00:00:03.000Z');
+      store.saveResumeShown('cp-tie-a', 'session-1', '2026-01-01T00:00:03.000Z');
+      store.saveResumeShown('cp-other', 'session-2', '2026-01-01T00:00:00.000Z');
+      store.markResumeDecided('cp-first', 'accepted', '2026-01-01T00:00:04.000Z');
+      store.markResumeDecided('cp-tie-b', 'dismissed', '2026-01-01T00:00:05.000Z');
+
+      expect(store.listResumeTimings('session-1')).toEqual([
+        {
+          checkpointId: 'cp-first',
+          shownAt: '2026-01-01T00:00:01.000Z',
+          acceptedAt: '2026-01-01T00:00:04.000Z',
+          dismissedAt: undefined,
+          resumeLatencyMs: 3_000,
+        },
+        {
+          checkpointId: 'cp-later',
+          shownAt: '2026-01-01T00:00:02.000Z',
+          acceptedAt: undefined,
+          dismissedAt: undefined,
+          resumeLatencyMs: undefined,
+        },
+        {
+          checkpointId: 'cp-tie-a',
+          shownAt: '2026-01-01T00:00:03.000Z',
+          acceptedAt: undefined,
+          dismissedAt: undefined,
+          resumeLatencyMs: undefined,
+        },
+        {
+          checkpointId: 'cp-tie-b',
+          shownAt: '2026-01-01T00:00:03.000Z',
+          acceptedAt: undefined,
+          dismissedAt: '2026-01-01T00:00:05.000Z',
+          resumeLatencyMs: undefined,
+        },
+      ]);
+    });
+
+    it('round-trips resume timings across a database reopen', () => {
+      const file = join(tmpdir(), `focusloop-resume-${randomUUID()}.sqlite`);
+      try {
+        const first = openDatabase(file);
+        const firstStore = new FocusLoopStore(first);
+        firstStore.initialize();
+        firstStore.saveResumeShown('cp1', 'session-1', T0);
+        firstStore.markResumeDecided('cp1', 'accepted', '2026-01-01T00:00:02.000Z');
+        const expected = firstStore.listResumeTimings('session-1');
+        firstStore.close();
+
+        const second = openDatabase(file);
+        const secondStore = new FocusLoopStore(second);
+        secondStore.initialize();
+        expect(secondStore.listResumeTimings('session-1')).toEqual(expected);
+        secondStore.close();
+      } finally {
+        rmSync(file, { force: true });
+        rmSync(`${file}-wal`, { force: true });
+        rmSync(`${file}-shm`, { force: true });
+      }
     });
   });
 

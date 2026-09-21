@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "ag5-duplicate-events-deterministic",
+  "capability": "AG5",
+  "kind": "adversarial",
+  "description": "Repeated interruption events are idempotent and do not change the resume output.",
+  "input": {
+    "gapMs": 900000,
+    "now": "2026-09-21T12:16:00.000Z",
+    "checkpoint": {
+      "conceptTitle": "Graphs",
+      "currentTaskTitle": "Trace one path",
+      "currentStep": 2,
+      "nextAction": "Trace the next path"
+    },
+    "interruptionEvents": [
+      { "id": "i-repeat", "type": "INTERRUPTION_DETECTED" },
+      { "id": "i-repeat", "type": "INTERRUPTION_DETECTED" },
+      { "id": "i-offer", "type": "RESUME_OFFERED" },
+      { "id": "i-offer", "type": "RESUME_OFFERED" }
+    ],
+    "evidenceEvents": [],
+    "success": { "shownAt": "2026-09-21T12:15:00.000Z" },
+    "eventPayload": { "raw": "AG5_SENSITIVE_SENTINEL" }
+  },
+  "expected": [
+    { "type": "equals", "path": "variant", "value": "medium" },
+    { "type": "equals", "path": "gapMs", "value": 900000 },
+    { "type": "equals", "path": "refresherRequired", "value": false },
+    { "type": "equals", "path": "status", "value": "pending" },
+    { "type": "allowed-keys", "path": "summary", "keys": ["title", "detail", "nextAction"] },
+    { "type": "equals", "path": "summary.detail", "value": "resume.context.away" }
+  ],
+  "forbidden": [{ "type": "forbidden-value", "value": "AG5_SENSITIVE_SENTINEL" }]
+}

@@ -160,6 +160,7 @@ test('golden path: learn, get interrupted, resume, see the outcome', async () =>
   // 7. The resume card appears and restores the cognitive position.
   const resume = window.getByRole('dialog', { name: 'Resume where you left off' });
   await expect(resume).toBeVisible();
+  await expect(resume.locator('[data-resume-variant="short"]')).toBeVisible();
   await expect(resume).toContainText('Continue');
   await expect(resume).toContainText('Next step:');
 
@@ -176,6 +177,7 @@ test('golden path: learn, get interrupted, resume, see the outcome', async () =>
   await expect(window.getByTestId('interruptions')).toHaveText('1');
   await expect(window.getByTestId('tasks')).toContainText('/ 5');
   await expect(window.getByTestId('latency')).not.toHaveText('—');
+  await expect(window.getByTestId('resume-success')).toHaveText('—');
   await expect(window.getByTestId('duration')).toBeVisible();
 
   // The task the learner was on is still the task they resume into.
@@ -902,6 +904,44 @@ test('the reason the learner gives is answered according to which kind of stuck 
   await expect(window.getByTestId('focus-stuck')).toBeVisible();
 
   // Left as it was found, so a re-run of this file does not start from a session.
+  await window.getByTestId('end-session').click();
+  await expect(window.getByRole('heading', { name: 'No session running' })).toBeVisible();
+});
+
+test('a tired rescue moves from offer to plan and back to focus', async () => {
+  // Use a fresh session so the explicit-help budget and current task are not coupled to another test.
+  await clickSidebarLink('Home');
+  await window.getByTestId('course-card').first().getByTestId('start-session').click();
+  await window.getByTestId('start-task').first().click();
+
+  // The tired reason is the user-facing producer for a deterministic BREAK rescue.
+  await window.getByTestId('focus-stuck').click();
+  await window.getByTestId('stuck-tired').click();
+  const offered = window.getByTestId('agent-offered');
+  await expect(offered).toBeVisible();
+  await expect(offered).toHaveAttribute('data-action', 'BREAK');
+
+  // Accepting a BREAK pauses the local commitment before its plan is shown.
+  const clock = window.locator('.focus-clock');
+  await offered.getByTestId('agent-accept').click();
+  const accepted = window.getByTestId('agent-accepted');
+  await expect(accepted).toBeVisible();
+  await expect(accepted.locator('.agent__plan')).toBeVisible();
+  await expect(clock.locator('.focus-clock__status')).toHaveText('Paused');
+  const pausedValue = await clock.locator('.focus-clock__value').innerText();
+
+  // The paused value must remain stable while the rescue plan is waiting for the learner.
+  await window.waitForTimeout(1_100);
+  await expect(clock.locator('.focus-clock__value')).toHaveText(pausedValue);
+
+  // Continue closes the rescue card and resumes the same task's timer.
+  await accepted.getByTestId('agent-continue').click();
+  await expect(accepted).toBeHidden();
+  await expect(clock.locator('.focus-clock__status')).toBeHidden();
+  await window.waitForTimeout(1_100);
+  await expect(clock.locator('.focus-clock__value')).not.toHaveText(pausedValue);
+
+  await expect(window.locator('.banner--error')).toHaveCount(0);
   await window.getByTestId('end-session').click();
   await expect(window.getByRole('heading', { name: 'No session running' })).toBeVisible();
 });

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-do-not-understand",
+  "capability": "AG2",
+  "kind": "happy",
+  "input": { "reason": "do-not-understand" },
+  "expected": [
+    { "type": "equals", "path": "action", "value": "EXAMPLE" },
+    { "type": "max-items", "path": "stepKeys", "max": 3 }
+  ],
+  "forbidden": []
+}

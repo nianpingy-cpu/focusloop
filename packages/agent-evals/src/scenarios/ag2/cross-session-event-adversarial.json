@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-cross-session-event-adversarial",
+  "capability": "AG2",
+  "kind": "adversarial",
+  "input": {
+    "reason": "went-wrong",
+    "acceptedAt": "2026-01-01T00:00:00.000Z",
+    "now": "2026-01-01T00:05:00.000Z",
+    "events": [
+      {
+        "id": "other-session-complete",
+        "type": "TASK_COMPLETED",
+        "sessionId": "session-other",
+        "at": "2026-01-01T00:01:00.000Z"
+      }
+    ]
+  },
+  "expected": [
+    { "type": "equals", "path": "status", "value": "expired" },
+    { "type": "equals", "path": "evidenceEventIds", "value": [] },
+    { "type": "equals", "path": "repeatedHelpEventIds", "value": [] }
+  ],
+  "forbidden": []
+}

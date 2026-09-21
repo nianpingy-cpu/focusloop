@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "ag5-success-window-expired",
+  "capability": "AG5",
+  "kind": "edge",
+  "description": "No completion after the five-minute window is expired.",
+  "input": {
+    "gapMs": 120000,
+    "now": "2026-09-21T12:06:00.000Z",
+    "checkpoint": {
+      "conceptTitle": "Queues",
+      "currentTaskTitle": "Enqueue one item",
+      "currentStep": 1,
+      "nextAction": "Enqueue the item"
+    },
+    "interruptionEvents": [{ "id": "i-expired", "type": "RESUME_OFFERED" }],
+    "evidenceEvents": [],
+    "success": { "shownAt": "2026-09-21T12:00:00.000Z", "acceptedAt": "2026-09-21T12:01:00.000Z" },
+    "privateNote": "AG5_SENSITIVE_SENTINEL"
+  },
+  "expected": [
+    { "type": "equals", "path": "variant", "value": "short" },
+    { "type": "equals", "path": "status", "value": "expired" },
+    { "type": "allowed-keys", "path": "summary", "keys": ["title", "detail", "nextAction"] }
+  ],
+  "forbidden": [{ "type": "forbidden-value", "value": "AG5_SENSITIVE_SENTINEL" }]
+}

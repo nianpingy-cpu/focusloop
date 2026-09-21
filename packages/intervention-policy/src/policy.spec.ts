@@ -66,6 +66,19 @@ describe('intervention policy — the learner asks for help (AG2)', () => {
     expect(decision.action).toBe(action);
   });
 
+  it('keeps the explicit reason route when the state is overloaded', () => {
+    const decision = decide({
+      engineState: engineWith({ state: 'OVERLOADED', currentTaskId: 't1' }),
+      recentEvents: asked({ taskId: 't1', reason: 'cannot-start' }),
+      now: T0,
+    });
+
+    expect(decision).toMatchObject({
+      action: 'MICRO_START',
+      reason: { key: 'reason.stuck.cannot-start' },
+    });
+  });
+
   /**
    * The whole table, both halves of every row.
    *

@@ -261,6 +261,18 @@ const DONUT_RADIUS = 42;
             <span class="stat__label">{{ t('dashboard.latency') }}</span>
             <strong data-testid="latency">{{ latency() }}</strong>
           </div>
+          <div class="card stat-card">
+            <span class="stat__label">{{ t('dashboard.resumeSuccess') }}</span>
+            <strong data-testid="resume-success">{{ resumeSuccess() }}</strong>
+            <span class="muted small">
+              {{ resumeSuccessSample() }}
+            </span>
+          </div>
+          <div class="card stat-card">
+            <span class="stat__label">{{ t('dashboard.rescueSuccess') }}</span>
+            <strong data-testid="rescue-success">{{ rescueSuccess() }}</strong>
+            <span class="muted small">{{ rescueSuccessSample() }}</span>
+          </div>
         </div>
       </section>
 
@@ -463,6 +475,44 @@ export class DashboardPage {
 
   protected latency(): string {
     return formatLatency(this.summary()?.averageResumeLatencyMs ?? null);
+  }
+
+  protected resumeSuccess(): string {
+    const rate = this.summary()?.resumeSuccess.rate ?? null;
+    return rate === null ? '—' : percentLabel(rate);
+  }
+
+  protected resumeSuccessSample(): string {
+    const summary = this.summary()?.resumeSuccess;
+    if (summary === undefined) {
+      return this.t('dashboard.resumeSuccess.sample', {
+        succeeded: '0',
+        evaluated: '0',
+        pending: '0',
+      });
+    }
+    return this.t('dashboard.resumeSuccess.sample', {
+      succeeded: `${summary.succeeded}`,
+      evaluated: `${summary.succeeded + summary.expired}`,
+      pending: `${summary.pending}`,
+    });
+  }
+
+  protected rescueSuccess(): string {
+    const rate = this.summary()?.rescueSuccess.rate ?? null;
+    return rate === null ? '—' : percentLabel(rate);
+  }
+
+  protected rescueSuccessSample(): string {
+    const summary = this.summary()?.rescueSuccess;
+    return this.t('dashboard.rescueSuccess.sample', {
+      succeeded: `${summary?.succeeded ?? 0}`,
+      evaluated: `${
+        (summary?.succeeded ?? 0) + (summary?.expired ?? 0) + (summary?.repeatedHelp ?? 0)
+      }`,
+      repeated: `${summary?.repeatedHelp ?? 0}`,
+      pending: `${summary?.pending ?? 0}`,
+    });
   }
 
   /**

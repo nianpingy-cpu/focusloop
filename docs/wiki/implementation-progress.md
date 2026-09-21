@@ -65,4 +65,37 @@
 
 ### 下一切片
 
-按路线收口 AG2 Stuck Rescue：把干预文案接成可执行微步骤，统一 outcome 口径，并继续补 AG10 正常/边界/越权场景。AG5 的 Tutor/Rescue 卡点证据与 adaptive restore 留到其依赖能力形成后完成。
+AG2 Stuck Rescue 的 Phase 1 确定性策略、救援计划、桌面交互与 outcome evaluator 已收口；后续仍需 AG4/AG8 的结构性任务和工具执行，完整 E2E 当前受运行环境阻塞。AG5 的 Tutor/Rescue 卡点证据与 adaptive restore 留到其依赖能力形成后完成。
+
+## 2026-09-22：Phase 1 / AG2 deterministic rescue slice
+
+状态：部分形成；AG2 Phase 1 已完成，AG4、AG8 和可执行的完整 E2E 仍未完成。
+
+### 本切片范围
+
+- AG2：把 eval adapter 接到生产 `decideIntervention` → `buildRescuePlan` →
+  `evaluateRescueSuccess` 路径，而不是在 adapter 内复制 reason/action 表。
+- AG10：扩充 AG2 的 happy/edge/adversarial JSON fixtures，覆盖无 reason、未知 reason、
+  `OVERLOADED` 下明确 reason 优先级、缺失 `acceptedAt`、跨 session/task、未来事件、重复事件和
+  repeated-help precedence，并断言 `stepKeys`、`estimatedMinutes`、`source` 与 evidence ids。
+- AG10 的当前交付仍只是 deterministic、同步、JSON-only runner；不包含真实模型、provider、
+  tool/store 集成或完整端到端门禁。
+
+### 已知未完成
+
+- AG2 已有 offered → accept → plan → continue 桌面链路，以及 BREAK 暂停/恢复计时器的 E2E；
+  该测试当前在应用启动前被 Electron 44 拒绝 `--remote-debugging-port=0` 阻塞。
+- 临时任务变更、工具执行和完整六类 E2E 仍需 AG4/AG8 action contract。
+- AG4 Task Adaptation 尚未形成；AG8 Tools & Actions 尚未形成（确认、幂等、审计和越权测试仍待交付）。
+
+### 验收证据
+
+- 全仓库 764 项 Vitest 测试通过；12 个项目 typecheck、12 个项目 lint、11 个项目 build 通过。
+- AG2 生产策略测试覆盖明确 reason 在 `OVERLOADED` 下仍按固定映射执行。
+- AG2 生命周期覆盖 latest-request-wins、accept/dismiss/continue 幂等和跨 Session/任务拒绝。
+- AG10 共 18 个 AG2 JSON 场景；重复运行结果一致，并覆盖 happy/edge/adversarial。
+- Scaffolding、workflow、docs、theme token、Prettier 和 diff whitespace 校验通过。
+
+### 下一切片
+
+按路线进入 AG9 Model Runtime 基础合同；在 AG8 confirmation/idempotency 形成前，不开放 AG4 的结构性任务写入。

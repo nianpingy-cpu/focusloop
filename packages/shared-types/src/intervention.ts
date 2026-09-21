@@ -64,6 +64,10 @@ export interface InterventionOutcome {
   readonly taskCompleted: boolean;
   readonly resumeLatencyMs: number | null;
   readonly quizOutcome: 'correct' | 'incorrect' | null;
+  /** Event-time fields are optional for rows written before the timestamp contract existed. */
+  readonly acceptedAt?: string;
+  readonly dismissedAt?: string;
+  readonly continuedAt?: string;
 }
 
 export interface InterventionOutcomeInput {
@@ -73,4 +77,7 @@ export interface InterventionOutcomeInput {
   readonly taskCompleted: boolean;
   readonly resumeLatencyMs: number | null;
   readonly quizOutcome: 'correct' | 'incorrect' | null;
+  readonly acceptedAt?: string;
+  readonly dismissedAt?: string;
+  readonly continuedAt?: string;
 }

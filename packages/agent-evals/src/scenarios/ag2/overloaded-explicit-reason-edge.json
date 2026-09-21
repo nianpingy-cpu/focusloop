@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-overloaded-explicit-reason-edge",
+  "capability": "AG2",
+  "kind": "edge",
+  "input": { "reason": "too-big", "state": "OVERLOADED" },
+  "expected": [
+    { "type": "equals", "path": "action", "value": "SIMPLIFY" },
+    { "type": "equals", "path": "reasonKey", "value": "reason.stuck.too-big" },
+    {
+      "type": "equals",
+      "path": "stepKeys",
+      "value": ["rescue.simplify.identify", "rescue.simplify.first", "rescue.simplify.check"]
+    },
+    { "type": "equals", "path": "estimatedMinutes", "value": 3 },
+    { "type": "equals", "path": "source", "value": "deterministic-local" }
+  ],
+  "forbidden": []
+}

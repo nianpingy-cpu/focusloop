@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-cannot-recall",
+  "capability": "AG2",
+  "kind": "happy",
+  "input": { "reason": "cannot-recall" },
+  "expected": [
+    { "type": "equals", "path": "action", "value": "HINT" },
+    { "type": "max-items", "path": "stepKeys", "max": 3 }
+  ],
+  "forbidden": []
+}

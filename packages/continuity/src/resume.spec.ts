@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { LearningEvent } from '@focusloop/shared-types';
+import type { LearningEvent, ResumeCardTiming } from '@focusloop/shared-types';
 import { createInitialState, type StateEngineState } from '@focusloop/learning-state';
 import { buildCheckpoint } from './checkpoint';
-import { buildResumeCard, computeResumeLatencyMs, sessionTitle } from './resume';
+import {
+  buildResumeCard,
+  classifyResumeGap,
+  computeResumeLatencyMs,
+  deriveResumeGapMs,
+  evaluateResumeSuccess,
+  sessionTitle,
+} from './resume';
 import { detectInterruption, isAwayOrIdle, shouldOfferResume } from './interruption';
 import { tinyCourse, tinySession } from './fixtures';
 
@@ -142,6 +149,212 @@ describe('buildResumeCard', () => {
       now: T1,
     };
     expect(buildResumeCard(args)).toEqual(buildResumeCard(args));
+  });
+
+  it('adds a short variant for a recent interruption and keeps only one item', () => {
+    const checkpoint = checkpointFor(createInitialState(T0));
+    const card = buildResumeCard({
+      checkpoint: {
+        ...checkpoint,
+        mastered: ['one', 'two', 'three'],
+        unresolved: ['open one', 'open two'],
+      },
+      session: tinySession(),
+      course: tinyCourse(),
+      recentEvents: [tabReturned(60_000)],
+      now: T1,
+    });
+    expect(card.variant).toBe('short');
+    expect(card.gapMs).toBe(60_000);
+    expect(card.refresher).toBeNull();
+    expect(card.completed).toHaveLength(1);
+    expect(card.unresolved).toHaveLength(1);
+  });
+
+  it('uses a fixed 30-second refresher for long gaps', () => {
+    const now = '2026-01-02T00:00:00.000Z';
+    const card = buildResumeCard({
+      checkpoint: checkpointFor(createInitialState(T0)),
+      session: tinySession(),
+      course: tinyCourse(),
+      recentEvents: [
+        {
+          ...tabReturned(24 * 60 * 60 * 1000),
+          at: now,
+        },
+      ],
+      now,
+    });
+    expect(card.variant).toBe('long');
+    expect(card.refresher).toEqual({
+      key: 'resume.refresher.long',
+      params: { seconds: '30' },
+    });
+  });
+});
+
+describe('resume gap policy', () => {
+  it('uses the latest valid completed interruption before open starts', () => {
+    const events: LearningEvent[] = [
+      {
+        id: 'left',
+        sessionId: 'session-tiny',
+        at: '2026-01-01T00:01:00.000Z',
+        type: 'TAB_LEFT',
+        source: 'extension',
+        payload: {},
+      },
+      {
+        id: 'bad-return',
+        sessionId: 'session-tiny',
+        at: '2026-01-01T00:02:00.000Z',
+        type: 'TAB_RETURNED',
+        source: 'extension',
+        payload: { awayMs: -1 },
+      },
+      {
+        id: 'return',
+        sessionId: 'session-tiny',
+        at: '2026-01-01T00:03:00.000Z',
+        type: 'TAB_RETURNED',
+        source: 'extension',
+        payload: { awayMs: 42_000 },
+      },
+    ];
+    expect(deriveResumeGapMs(events, '2026-01-01T00:10:00.000Z')).toBe(42_000);
+  });
+
+  it('measures the latest valid open interruption to now', () => {
+    const events: LearningEvent[] = [
+      {
+        id: 'left',
+        sessionId: 'session-tiny',
+        at: '2026-01-01T00:05:00.000Z',
+        type: 'TAB_LEFT',
+        source: 'extension',
+        payload: {},
+      },
+    ];
+    expect(deriveResumeGapMs(events, T1)).toBe(0);
+    expect(deriveResumeGapMs(events, '2026-01-01T00:06:00.000Z')).toBe(60_000);
+  });
+
+  it('uses a newer open interruption instead of an older completed gap', () => {
+    const events: LearningEvent[] = [
+      tabReturned(42_000),
+      {
+        id: 'left-again',
+        sessionId: 'session-tiny',
+        at: '2026-01-01T01:00:00.000Z',
+        type: 'TAB_LEFT',
+        source: 'extension',
+        payload: {},
+      },
+    ];
+
+    expect(deriveResumeGapMs(events, '2026-01-01T02:00:00.000Z')).toBe(60 * 60_000);
+  });
+
+  it('maps exact boundaries to the more detailed variant and invalid gaps to medium', () => {
+    expect(classifyResumeGap(15 * 60_000)).toBe('medium');
+    expect(classifyResumeGap(24 * 60 * 60_000)).toBe('long');
+    expect(classifyResumeGap(null)).toBe('medium');
+    expect(classifyResumeGap(-1)).toBe('medium');
+  });
+});
+
+describe('evaluateResumeSuccess', () => {
+  const timing: ResumeCardTiming = {
+    checkpointId: 'cp-1',
+    shownAt: T0,
+    acceptedAt: T1,
+  };
+  const checkpoint = checkpointFor(createInitialState(T0));
+
+  function taskEvent(
+    id: string,
+    type: 'TASK_STARTED' | 'TASK_COMPLETED' | 'HELP_REQUESTED',
+    at: string,
+    taskId = checkpoint.currentTaskId,
+  ): LearningEvent {
+    return {
+      id,
+      sessionId: checkpoint.sessionId,
+      at,
+      type,
+      source: 'user',
+      payload: type === 'HELP_REQUESTED' ? { taskId } : { taskId },
+    } as LearningEvent;
+  }
+
+  it('succeeds on one current-task evidence event inside the exclusive/inclusive window', () => {
+    const result = evaluateResumeSuccess({
+      checkpoint,
+      timing,
+      events: [
+        taskEvent('at-accepted', 'TASK_STARTED', T1),
+        taskEvent('at-window-end', 'TASK_COMPLETED', '2026-01-01T00:10:00.000Z'),
+      ],
+      now: '2026-01-01T00:10:00.000Z',
+    });
+    expect(result).toMatchObject({ status: 'succeeded', evidenceEventIds: ['at-window-end'] });
+  });
+
+  it('does not count duplicates, other tasks, other sessions, or out-of-window events', () => {
+    const otherTask = taskEvent(
+      'other-task',
+      'TASK_COMPLETED',
+      '2026-01-01T00:06:00.000Z',
+      'not-current',
+    );
+    const otherSession = {
+      ...taskEvent('other-session', 'TASK_STARTED', '2026-01-01T00:06:01.000Z'),
+      sessionId: 'other',
+    };
+    const duplicate = taskEvent('same', 'TASK_STARTED', T0);
+    const result = evaluateResumeSuccess({
+      checkpoint,
+      timing,
+      events: [
+        taskEvent('before', 'TASK_STARTED', T0),
+        taskEvent('after-window', 'TASK_STARTED', '2026-01-01T00:10:01.000Z'),
+        otherTask,
+        otherSession,
+        duplicate,
+        duplicate,
+      ],
+      now: '2026-01-01T00:10:01.000Z',
+    });
+    expect(result.status).toBe('expired');
+    expect(result.evidenceEventIds).toEqual([]);
+  });
+
+  it('returns pending before the window closes, expired after it, and excludes dismissed cards', () => {
+    const base = { checkpoint, timing, events: [] as LearningEvent[] };
+    expect(evaluateResumeSuccess({ ...base, now: '2026-01-01T00:09:59.999Z' }).status).toBe(
+      'pending',
+    );
+    expect(evaluateResumeSuccess({ ...base, now: '2026-01-01T00:10:00.000Z' }).status).toBe(
+      'expired',
+    );
+    expect(
+      evaluateResumeSuccess({
+        ...base,
+        timing: { ...timing, dismissedAt: '2026-01-01T00:05:01.000Z' },
+        now: '2026-01-01T00:10:01.000Z',
+      }).status,
+    ).toBe('dismissed');
+  });
+
+  it('does not use evidence dated after now', () => {
+    const result = evaluateResumeSuccess({
+      checkpoint,
+      timing,
+      events: [taskEvent('future', 'TASK_STARTED', '2026-01-01T00:09:00.000Z')],
+      now: '2026-01-01T00:08:00.000Z',
+    });
+
+    expect(result).toMatchObject({ status: 'pending', evidenceEventIds: [] });
   });
 });
 

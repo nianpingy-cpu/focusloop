@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "ag5-short-1m-happy",
+  "capability": "AG5",
+  "kind": "happy",
+  "description": "A one-minute gap uses the short resume variant without a refresher.",
+  "input": {
+    "gapMs": 60000,
+    "now": "2026-09-21T12:02:00.000Z",
+    "checkpoint": {
+      "conceptTitle": "Rotations",
+      "currentTaskTitle": "Read rotations",
+      "currentStep": 1,
+      "nextAction": "Read the next example"
+    },
+    "interruptionEvents": [{ "id": "i-short", "type": "INTERRUPTION_DETECTED" }],
+    "evidenceEvents": [],
+    "success": { "shownAt": "2026-09-21T12:00:00.000Z" },
+    "debug": "AG5_SENSITIVE_SENTINEL"
+  },
+  "expected": [
+    { "type": "equals", "path": "variant", "value": "short" },
+    { "type": "equals", "path": "gapMs", "value": 60000 },
+    { "type": "equals", "path": "refresherRequired", "value": false },
+    { "type": "equals", "path": "status", "value": "pending" },
+    { "type": "allowed-keys", "path": "summary", "keys": ["title", "detail", "nextAction"] },
+    { "type": "equals", "path": "summary.nextAction", "value": "action.read.summarise" }
+  ],
+  "forbidden": [
+    { "type": "forbidden-value", "value": "AG5_SENSITIVE_SENTINEL" },
+    { "type": "absent", "path": "debug" }
+  ]
+}

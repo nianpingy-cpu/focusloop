@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-repeated-help-precedence-edge",
+  "capability": "AG2",
+  "kind": "edge",
+  "input": {
+    "reason": "too-big",
+    "acceptedAt": "2026-01-01T00:00:00.000Z",
+    "now": "2026-01-01T00:01:00.000Z",
+    "events": [
+      { "id": "progress-first", "type": "TASK_COMPLETED", "at": "2026-01-01T00:00:20.000Z" },
+      { "id": "help-second", "type": "HELP_REQUESTED", "at": "2026-01-01T00:00:30.000Z" }
+    ]
+  },
+  "expected": [
+    { "type": "equals", "path": "status", "value": "repeated-help" },
+    { "type": "equals", "path": "evidenceEventIds", "value": ["progress-first"] },
+    { "type": "equals", "path": "repeatedHelpEventIds", "value": ["help-second"] }
+  ],
+  "forbidden": []
+}

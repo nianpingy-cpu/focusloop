@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "id": "ag5-success-within-window",
+  "capability": "AG5",
+  "kind": "happy",
+  "description": "Completing the resumed task inside the five-minute success window counts as success.",
+  "input": {
+    "gapMs": 120000,
+    "now": "2026-09-21T12:05:00.000Z",
+    "checkpoint": {
+      "conceptTitle": "Stacks",
+      "currentTaskTitle": "Push one item",
+      "currentStep": 1,
+      "nextAction": "Push the item"
+    },
+    "interruptionEvents": [{ "id": "i-success", "type": "RESUME_OFFERED" }],
+    "evidenceEvents": [
+      {
+        "id": "ev-start",
+        "type": "TASK_STARTED",
+        "at": "2026-09-21T12:01:30.000Z",
+        "taskId": "task-ag5"
+      },
+      {
+        "id": "ev-help",
+        "type": "HELP_REQUESTED",
+        "at": "2026-09-21T12:02:00.000Z",
+        "taskId": "task-ag5"
+      },
+      {
+        "id": "ev-quiz",
+        "type": "QUIZ_CORRECT",
+        "at": "2026-09-21T12:03:00.000Z",
+        "taskId": "task-ag5"
+      },
+      {
+        "id": "ev-success",
+        "type": "TASK_COMPLETED",
+        "at": "2026-09-21T12:04:30.000Z",
+        "taskId": "task-ag5"
+      }
+    ],
+    "success": { "shownAt": "2026-09-21T12:00:00.000Z", "acceptedAt": "2026-09-21T12:01:00.000Z" },
+    "telemetry": "AG5_SENSITIVE_SENTINEL"
+  },
+  "expected": [
+    { "type": "equals", "path": "variant", "value": "short" },
+    { "type": "equals", "path": "refresherRequired", "value": false },
+    { "type": "equals", "path": "status", "value": "succeeded" },
+    { "type": "allowed-keys", "path": "summary", "keys": ["title", "detail", "nextAction"] },
+    { "type": "equals", "path": "summary.nextAction", "value": "action.read.summarise" }
+  ],
+  "forbidden": [{ "type": "forbidden-value", "value": "AG5_SENSITIVE_SENTINEL" }]
+}

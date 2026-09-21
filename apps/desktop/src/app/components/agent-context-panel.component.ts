@@ -27,6 +27,9 @@ import { I18nService } from '../core/i18n/i18n.service';
         <summary class="agent-context__summary" data-testid="agent-context-toggle">
           {{ t('agent.inspector.title') }}
         </summary>
+        <p class="muted small agent-context__description">
+          {{ t('agent.inspector.description') }}
+        </p>
 
         @if (report().context; as context) {
           <dl class="agent-context__grid">

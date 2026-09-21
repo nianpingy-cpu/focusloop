@@ -24,6 +24,7 @@ import type {
   TutorAnswer,
   TutorMode,
   RuntimeInfo,
+  RescueView,
   SessionSnapshot,
   ThemePreference,
 } from '@focusloop/shared-types';
@@ -71,6 +72,14 @@ export class AppStateService {
   readonly dashboard = signal<DashboardSummary | null>(null);
   readonly decision = signal<InterventionDecision | null>(null);
   readonly interventionId = signal<string | null>(null);
+  readonly rescue = signal<RescueView | null>(null);
+  /**
+   * Renderer-only hand-off for the rescue surface.  The main process remains the authority for the
+   * intervention decision; these counters are intentionally just one-shot UI intents so a BREAK
+   * rescue can pause the local focus clock and Continue can resume it without a second domain event.
+   */
+  readonly rescuePauseRequest = signal(0);
+  readonly rescueContinueRequest = signal(0);
   readonly lastError = signal<string | null>(null);
   readonly busy = signal(false);
   readonly recentEvents = signal<readonly LearningEvent[]>([]);
@@ -325,20 +334,47 @@ export class AppStateService {
   }
 
   async dismissIntervention(accepted: boolean): Promise<void> {
+    if (this.rescue() !== null) {
+      await this.resolveRescue(accepted ? 'accept' : 'dismiss');
+      return;
+    }
     const interventionId = this.interventionId();
-    if (interventionId === null) {
+    const sessionId = this.snapshot()?.session.id;
+    if (interventionId === null || sessionId === undefined) {
       this.decision.set(null);
       return;
     }
     await this.run(async () => {
-      await this.api.resolveIntervention({
+      const response = await this.api.resolveIntervention({
+        sessionId,
         interventionId,
-        accepted,
-        dismissed: !accepted,
-        taskCompleted: false,
+        resolution: accepted ? 'accept' : 'dismiss',
       });
+      this.rescue.set(response?.rescue ?? null);
       this.decision.set(null);
       this.interventionId.set(null);
+    });
+  }
+
+  async resolveRescue(resolution: 'accept' | 'dismiss' | 'continue'): Promise<void> {
+    const rescue = this.rescue();
+    if (rescue === null) return;
+    await this.run(async () => {
+      const response = await this.api.resolveIntervention({
+        sessionId: rescue.sessionId,
+        interventionId: rescue.interventionId,
+        resolution,
+      });
+      if (resolution === 'accept' && rescue.decision.action === 'BREAK') {
+        this.rescuePauseRequest.update((value) => value + 1);
+      }
+      if (resolution === 'continue' && rescue.decision.action === 'BREAK') {
+        this.rescueContinueRequest.update((value) => value + 1);
+      }
+      this.rescue.set(response?.rescue ?? null);
+      this.decision.set(null);
+      this.interventionId.set(null);
+      this.dashboard.set(await this.api.getDashboard());
     });
   }
 
@@ -414,6 +450,7 @@ export class AppStateService {
     if (response === null) return;
     this.decision.set(response.decision);
     this.interventionId.set(response.interventionId);
+    this.rescue.set(response.rescue);
     if (response.resumeCard !== null) this.resumeCard.set(response.resumeCard);
   }
 
@@ -429,6 +466,7 @@ export class AppStateService {
     this.agentContext.set(await this.api.getAgentContext());
     if (snapshot !== null) {
       this.resumeCard.set(await this.api.getResumeCard(snapshot.session.id));
+      this.rescue.set(await this.api.getPendingRescue(snapshot.session.id));
       this.recentEvents.set(await this.api.listEvents(snapshot.session.id));
     } else {
       /*
@@ -437,6 +475,7 @@ export class AppStateService {
        * look wrong, it blocks the screen it is covering.
        */
       this.resumeCard.set(null);
+      this.rescue.set(null);
       this.recentEvents.set([]);
     }
     await this.refreshToday();

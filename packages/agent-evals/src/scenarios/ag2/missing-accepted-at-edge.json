@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-missing-accepted-at-edge",
+  "capability": "AG2",
+  "kind": "edge",
+  "input": { "reason": "cannot-start" },
+  "expected": [
+    { "type": "equals", "path": "action", "value": "MICRO_START" },
+    { "type": "equals", "path": "stepKeys", "value": ["rescue.microStart.first"] },
+    { "type": "equals", "path": "estimatedMinutes", "value": 5 },
+    { "type": "equals", "path": "source", "value": "deterministic-local" },
+    { "type": "equals", "path": "status", "value": "pending" },
+    { "type": "equals", "path": "acceptedAt", "value": null }
+  ],
+  "forbidden": []
+}

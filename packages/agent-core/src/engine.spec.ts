@@ -239,15 +239,71 @@ describe('FocusLoopEngine', () => {
        * assertion read the checkpoint at all — a regression passing `null` through would have left
        * every other line here green, and the resume capability would lose its input silently.
        */
-      expect(report.context?.checkpoint?.id).toBe(checkpoint.id);
+      expect(report.context?.checkpoint).toMatchObject({
+        currentTaskTitle: checkpoint.currentTaskTitle,
+        currentStep: checkpoint.currentStep,
+        frictionState: checkpoint.frictionState,
+      });
+      expect(report.context?.checkpoint).not.toHaveProperty('id');
+      expect(report.context?.checkpoint).not.toHaveProperty('sessionId');
       // The point of the wiring test: a real document is found, and its text reaches the agent.
       expect(report.context?.material.materialId).not.toBeNull();
       expect(report.context?.material.text.length).toBeGreaterThan(0);
       expect(report.context?.recentEvents.length).toBeGreaterThan(0);
-      expect(report.context?.recentEvents.every((event) => event.sessionId === session.id)).toBe(
-        true,
-      );
+      expect(
+        report.context?.recentEvents.every((event) => !('sessionId' in event) && !('id' in event)),
+      ).toBe(true);
       expect(report.context?.task.totalSteps).toBeGreaterThan(0);
+    });
+
+    it('projects hostile stored event payloads before returning the shared context report', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TAB_LEFT',
+        source: 'extension',
+        payload: {
+          origin: 'https://private.example',
+          url: 'https://private.example/private?token=secret',
+          formValue: 'FORM_SECRET',
+        },
+      });
+
+      const report = ctx.engine.getAgentContext();
+      const tabLeft = report.context?.recentEvents.find((event) => event.type === 'TAB_LEFT');
+
+      expect(tabLeft?.payload).toEqual({});
+      expect(JSON.stringify(report)).not.toContain('private.example');
+      expect(JSON.stringify(report)).not.toContain('FORM_SECRET');
+    });
+
+    it('assembles context only from the active course when other courses contain private text', () => {
+      ctx.engine.importMaterial(
+        'other.md',
+        '# Other course\n\n## Private section\n\nOTHER_COURSE_SECRET '.repeat(12),
+      );
+      ctx.engine.importMaterial(
+        'current.md',
+        '# Current course\n\n## Current section\n\nCURRENT_COURSE_TEXT '.repeat(12),
+      );
+      const current = ctx.engine.listCourses().find((course) => course.title === 'Current course');
+      expect(current).toBeDefined();
+
+      const { session } = ctx.engine.startSession(current!.id);
+      const task = current!.microTasks[0]!;
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: task.id },
+      });
+
+      const report = ctx.engine.getAgentContext();
+      const serialized = JSON.stringify(report);
+
+      expect(serialized).toContain('CURRENT_COURSE_TEXT');
+      expect(serialized).not.toContain('OTHER_COURSE_SECRET');
+      expect(report.omissions.some((item) => item.field === 'courses')).toBe(true);
     });
 
     it('has no section to give before a task is under way, and says so', () => {
@@ -369,6 +425,188 @@ describe('FocusLoopEngine', () => {
       // The row survived, and it names the request. Dropped, it would be `undefined` here.
       expect(answer).toBeDefined();
       expect(answer?.answersRequestId).toBe(request?.id);
+    });
+
+    it('moves an explicit rescue from offered to active to continued', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+      const asked = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1', reason: 'went-wrong' },
+      });
+
+      expect(asked.rescue).toMatchObject({
+        interventionId: asked.interventionId,
+        sessionId: session.id,
+        phase: 'offered',
+        plan: null,
+      });
+
+      const accepted = ctx.engine.resolveIntervention({
+        sessionId: session.id,
+        interventionId: asked.interventionId!,
+        resolution: 'accept',
+      });
+      expect(accepted?.rescue?.phase).toBe('active');
+      expect(accepted?.rescue?.plan?.steps.length).toBeGreaterThan(0);
+      const acceptedAt = accepted?.outcome?.acceptedAt;
+
+      ctx.clock.advance(1_000);
+      const replayed = ctx.engine.resolveIntervention({
+        sessionId: session.id,
+        interventionId: asked.interventionId!,
+        resolution: 'accept',
+      });
+      expect(replayed?.outcome?.acceptedAt).toBe(acceptedAt);
+
+      const continued = ctx.engine.resolveIntervention({
+        sessionId: session.id,
+        interventionId: asked.interventionId!,
+        resolution: 'continue',
+      });
+      expect(continued?.outcome?.continuedAt).toBeDefined();
+      expect(continued?.rescue).toBeNull();
+      expect(ctx.engine.getPendingRescue(session.id)).toBeNull();
+    });
+
+    it('uses only the latest rescue request and never revives an older card', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+      const first = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1', reason: 'went-wrong' },
+      });
+      ctx.engine.resolveIntervention({
+        sessionId: session.id,
+        interventionId: first.interventionId!,
+        resolution: 'accept',
+      });
+
+      const latest = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1', reason: 'too-big' },
+      });
+      expect(latest.rescue?.interventionId).toBe(latest.interventionId);
+
+      ctx.engine.resolveIntervention({
+        sessionId: session.id,
+        interventionId: latest.interventionId!,
+        resolution: 'accept',
+      });
+      const continued = ctx.engine.resolveIntervention({
+        sessionId: session.id,
+        interventionId: latest.interventionId!,
+        resolution: 'continue',
+      });
+
+      expect(continued?.rescue).toBeNull();
+      expect(ctx.engine.getPendingRescue(session.id)).toBeNull();
+    });
+
+    it('rejects continue for a proactive non-rescue intervention', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TAB_LEFT',
+        source: 'extension',
+        payload: {},
+      });
+      ctx.clock.advance(25_000);
+      const response = ctx.engine.tick();
+      expect(response?.decision?.action).toBe('RESUME');
+
+      expect(() =>
+        ctx.engine.resolveIntervention({
+          sessionId: session.id,
+          interventionId: response!.interventionId!,
+          resolution: 'continue',
+        }),
+      ).toThrow(EngineError);
+    });
+
+    it('treats a proactive rescue-shaped action as generic', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'QUIZ_INCORRECT',
+        source: 'user',
+        payload: { taskId: 'rbt-t2', quizId: 'rbt-q1' },
+      });
+      const response = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'QUIZ_INCORRECT',
+        source: 'user',
+        payload: { taskId: 'rbt-t2', quizId: 'rbt-q2' },
+      });
+
+      expect(response.decision?.action).toBe('EXAMPLE');
+      expect(response.rescue).toBeNull();
+      expect(() =>
+        ctx.engine.resolveIntervention({
+          sessionId: session.id,
+          interventionId: response.interventionId!,
+          resolution: 'continue',
+        }),
+      ).toThrow(EngineError);
+    });
+
+    it('rejects conflicting and out-of-order rescue resolutions', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      const asked = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { reason: 'too-big' },
+      });
+      const request = {
+        sessionId: session.id,
+        interventionId: asked.interventionId!,
+      };
+
+      expect(() => ctx.engine.resolveIntervention({ ...request, resolution: 'continue' })).toThrow(
+        EngineError,
+      );
+      ctx.engine.resolveIntervention({ ...request, resolution: 'dismiss' });
+      expect(ctx.engine.getPendingRescue(session.id)).toBeNull();
+      expect(() => ctx.engine.resolveIntervention({ ...request, resolution: 'accept' })).toThrow(
+        EngineError,
+      );
+    });
+
+    it('rejects cross-session rescue resolution', () => {
+      const first = ctx.engine.startSession(DEMO_COURSE_ID).session;
+      const asked = ctx.engine.dispatch({
+        sessionId: first.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { reason: 'cannot-start' },
+      });
+      ctx.engine.endSession({ sessionId: first.id, reason: 'user' });
+      const second = ctx.engine.startSession(DEMO_COURSE_ID).session;
+
+      expect(() =>
+        ctx.engine.resolveIntervention({
+          sessionId: second.id,
+          interventionId: asked.interventionId!,
+          resolution: 'accept',
+        }),
+      ).toThrow(EngineError);
     });
   });
 
@@ -592,6 +830,23 @@ describe('FocusLoopEngine', () => {
       });
     });
 
+    it('replays the first resume decision without moving its success window', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.simulate({ command: 'distraction', sessionId: session.id });
+      ctx.clock.advance(30_000);
+      const response = ctx.engine.simulate({ command: 'return', sessionId: session.id });
+      const checkpointId = response.checkpoint!.id;
+
+      ctx.clock.advance(2_000);
+      const first = ctx.engine.acceptResume(checkpointId);
+      const eventCount = ctx.engine.listEvents(session.id).length;
+      ctx.clock.advance(10_000);
+      const replay = ctx.engine.dismissResume(checkpointId);
+
+      expect(replay).toEqual(first);
+      expect(ctx.engine.listEvents(session.id)).toHaveLength(eventCount);
+    });
+
     it('clears the pending card after a decision', () => {
       const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
       ctx.engine.simulate({ command: 'distraction', sessionId: session.id });
@@ -640,6 +895,57 @@ describe('FocusLoopEngine', () => {
       const response = ctx.engine.simulate({ command: 'overload', sessionId: session.id });
       expect(response.state).toBe('OVERLOADED');
       expect(response.decision?.action).toBe('BREAK');
+      expect(response.rescue).toBeNull();
+    });
+
+    it('routes a reasoned request by reason even after the state becomes overloaded', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t2' },
+      });
+      ctx.engine.simulate({ command: 'overload', sessionId: session.id });
+      const response = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t2', reason: 'cannot-start' },
+      });
+
+      expect(response.state).toBe('OVERLOADED');
+      expect(response.decision).toMatchObject({
+        action: 'MICRO_START',
+        reason: { key: 'reason.stuck.cannot-start' },
+      });
+      expect(response.rescue?.decision.action).toBe('MICRO_START');
+    });
+
+    it('returns the persisted rescue when a later dispatch creates no new intervention', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+      const first = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1', reason: 'too-big' },
+      });
+      const later = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+
+      expect(first.rescue?.interventionId).toBe(first.interventionId);
+      expect(later.interventionId).toBeNull();
+      expect(later.rescue?.interventionId).toBe(first.interventionId);
     });
 
     it('stays silent while the learner is making progress', () => {
@@ -714,6 +1020,13 @@ describe('FocusLoopEngine', () => {
         tasksTotal: 5,
         interruptCount: 1,
         averageResumeLatencyMs: 2_000,
+        resumeSuccess: {
+          accepted: 1,
+          succeeded: 0,
+          expired: 0,
+          pending: 1,
+          rate: null,
+        },
       });
       const resumeRow = summary.interventionOutcomes.find((row) => row.action === 'RESUME');
       expect(resumeRow).toMatchObject({ total: 1, accepted: 1 });

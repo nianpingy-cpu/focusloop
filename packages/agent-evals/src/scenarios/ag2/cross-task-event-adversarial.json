@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-cross-task-event-adversarial",
+  "capability": "AG2",
+  "kind": "adversarial",
+  "input": {
+    "reason": "too-big",
+    "acceptedAt": "2026-01-01T00:00:00.000Z",
+    "now": "2026-01-01T00:01:00.000Z",
+    "events": [
+      {
+        "id": "other-task-complete",
+        "type": "TASK_COMPLETED",
+        "taskId": "task-other",
+        "at": "2026-01-01T00:00:30.000Z"
+      }
+    ]
+  },
+  "expected": [
+    { "type": "equals", "path": "status", "value": "pending" },
+    { "type": "equals", "path": "evidenceEventIds", "value": [] }
+  ],
+  "forbidden": []
+}

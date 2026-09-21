@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-cannot-start",
+  "capability": "AG2",
+  "kind": "happy",
+  "input": { "reason": "cannot-start" },
+  "expected": [
+    { "type": "equals", "path": "action", "value": "MICRO_START" },
+    { "type": "max-items", "path": "stepKeys", "max": 3 }
+  ],
+  "forbidden": []
+}

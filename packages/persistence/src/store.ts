@@ -155,6 +155,9 @@ interface OutcomeRow {
   task_completed: number;
   resume_latency_ms: number | null;
   quiz_outcome: string | null;
+  accepted_at: string | null;
+  dismissed_at: string | null;
+  continued_at: string | null;
 }
 
 interface ResumeCardRow {
@@ -591,49 +594,122 @@ export class FocusLoopStore {
   }
 
   saveOutcome(outcome: InterventionOutcome): void {
+    /*
+     * There is one logical outcome per intervention.  The old schema keyed
+     * only the synthetic outcome id, which allowed two IPC retries with
+     * different ids to create two decisions.  Resolve by intervention id and
+     * merge only fields that have not been decided yet. This gives us
+     * first-decision-wins semantics while still allowing an accepted rescue
+     * to advance monotonically to Continue.
+     */
+    const existing = this.getOutcomeByIntervention(outcome.interventionId);
+    const incoming = outcome as InterventionOutcome & {
+      readonly acceptedAt?: string;
+      readonly dismissedAt?: string;
+      readonly continuedAt?: string;
+    };
+    const acceptedAt = incoming.acceptedAt ?? null;
+    const dismissedAt = incoming.dismissedAt ?? null;
+    const continuedAt = incoming.continuedAt ?? null;
+
+    if (existing === null) {
+      this.db
+        .prepare(
+          `INSERT INTO outcomes
+             (id, intervention_id, session_id, at, state, action, accepted, dismissed,
+              task_completed, resume_latency_ms, quiz_outcome, accepted_at, dismissed_at, continued_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO NOTHING;`,
+        )
+        .run(
+          outcome.id,
+          outcome.interventionId,
+          outcome.sessionId,
+          outcome.at,
+          outcome.state,
+          outcome.action,
+          outcome.accepted ? 1 : 0,
+          outcome.dismissed ? 1 : 0,
+          outcome.taskCompleted ? 1 : 0,
+          outcome.resumeLatencyMs,
+          outcome.quizOutcome,
+          acceptedAt,
+          dismissedAt,
+          continuedAt,
+        );
+      return;
+    }
+
+    const current = existing as InterventionOutcome & {
+      readonly acceptedAt?: string;
+      readonly dismissedAt?: string;
+      readonly continuedAt?: string;
+    };
+    const alreadyDecided = current.accepted || current.dismissed;
+    const incomingOpposesDecision =
+      (current.accepted && outcome.dismissed) || (current.dismissed && outcome.accepted);
+    if (alreadyDecided && incomingOpposesDecision) return;
+    // Timestamps are monotonic and immutable once written.  Keep the first
+    // row's `at` as the audit time; retries must never move it.
+    const nextAcceptedAt = current.acceptedAt ?? acceptedAt;
+    const nextDismissedAt = current.dismissedAt ?? dismissedAt;
+    const nextContinuedAt = current.continuedAt ?? continuedAt;
+    const taskCompleted = current.taskCompleted || outcome.taskCompleted;
+    const quizOutcome = current.quizOutcome ?? outcome.quizOutcome;
+    const resumeLatencyMs = current.resumeLatencyMs ?? outcome.resumeLatencyMs;
+
+    if (
+      nextAcceptedAt === current.acceptedAt &&
+      nextDismissedAt === current.dismissedAt &&
+      nextContinuedAt === current.continuedAt &&
+      taskCompleted === current.taskCompleted &&
+      quizOutcome === current.quizOutcome &&
+      resumeLatencyMs === current.resumeLatencyMs
+    ) {
+      return;
+    }
+
     this.db
       .prepare(
-        `INSERT INTO outcomes
-           (id, intervention_id, session_id, at, state, action, accepted, dismissed,
-            task_completed, resume_latency_ms, quiz_outcome)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO NOTHING;`,
+        `UPDATE outcomes
+         SET accepted = ?, dismissed = ?, task_completed = ?, resume_latency_ms = ?, quiz_outcome = ?,
+             accepted_at = ?, dismissed_at = ?, continued_at = ?
+         WHERE id = ?;`,
       )
       .run(
-        outcome.id,
-        outcome.interventionId,
-        outcome.sessionId,
-        outcome.at,
-        outcome.state,
-        outcome.action,
-        outcome.accepted ? 1 : 0,
-        outcome.dismissed ? 1 : 0,
-        outcome.taskCompleted ? 1 : 0,
-        outcome.resumeLatencyMs,
-        outcome.quizOutcome,
+        current.accepted || outcome.accepted ? 1 : 0,
+        current.dismissed || outcome.dismissed ? 1 : 0,
+        taskCompleted ? 1 : 0,
+        resumeLatencyMs,
+        quizOutcome,
+        nextAcceptedAt ?? null,
+        nextDismissedAt ?? null,
+        nextContinuedAt ?? null,
+        (
+          this.db
+            .prepare(
+              'SELECT id FROM outcomes WHERE intervention_id = ? ORDER BY at ASC, rowid ASC LIMIT 1;',
+            )
+            .get(outcome.interventionId) as { id: string }
+        ).id,
       );
+  }
+
+  /** Returns the single logical outcome for an intervention, if it exists. */
+  getOutcomeByIntervention(interventionId: string): InterventionOutcome | null {
+    const row = this.db
+      .prepare(
+        'SELECT * FROM outcomes WHERE intervention_id = ? ORDER BY at ASC, rowid ASC LIMIT 1;',
+      )
+      .get(interventionId) as OutcomeRow | undefined;
+    return row === undefined ? null : mapOutcome(row);
   }
 
   listOutcomes(sessionId: string): InterventionOutcome[] {
     const rows = this.db
       .prepare('SELECT * FROM outcomes WHERE session_id = ? ORDER BY at ASC;')
       .all(sessionId) as OutcomeRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      interventionId: row.intervention_id,
-      sessionId: row.session_id,
-      at: row.at,
-      state: row.state as LearningState,
-      action: row.action as InterventionOutcome['action'],
-      accepted: row.accepted === 1,
-      dismissed: row.dismissed === 1,
-      taskCompleted: row.task_completed === 1,
-      resumeLatencyMs: row.resume_latency_ms,
-      quizOutcome:
-        row.quiz_outcome === 'correct' || row.quiz_outcome === 'incorrect'
-          ? row.quiz_outcome
-          : null,
-    }));
+    return rows.map(mapOutcome);
   }
 
   // ------------------------------------------------------------ resume cards
@@ -662,6 +738,31 @@ export class FocusLoopStore {
     };
   }
 
+  /**
+   * Returns every resume-card timing for a session in deterministic chronological order.
+   *
+   * The checkpoint id is included as a stable tie-breaker because two cards can be shown at
+   * the same millisecond (for example after a clock-injected restart).  Keeping this query in
+   * the store lets the engine rebuild success metrics after a restart without maintaining a
+   * second aggregate table.
+   */
+  listResumeTimings(sessionId: string): ResumeCardTiming[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM resume_cards
+         WHERE session_id = ?
+         ORDER BY shown_at ASC, checkpoint_id ASC;`,
+      )
+      .all(sessionId) as ResumeCardRow[];
+    return rows.map((row) => ({
+      checkpointId: row.checkpoint_id,
+      shownAt: row.shown_at,
+      acceptedAt: row.accepted_at ?? undefined,
+      dismissedAt: row.dismissed_at ?? undefined,
+      resumeLatencyMs: row.resume_latency_ms ?? undefined,
+    }));
+  }
+
   markResumeDecided(
     checkpointId: string,
     decision: 'accepted' | 'dismissed',
@@ -669,6 +770,9 @@ export class FocusLoopStore {
   ): ResumeCardTiming | null {
     const current = this.getResumeTiming(checkpointId);
     if (current === null) return null;
+    // The first learner decision is final. IPC retries must not move acceptedAt, reopen the
+    // success window, or turn an accepted resume into a later dismissal.
+    if (current.acceptedAt !== undefined || current.dismissedAt !== undefined) return current;
     const latencyMs = Date.parse(at) - Date.parse(current.shownAt);
     const resumeLatencyMs = Number.isFinite(latencyMs) && latencyMs >= 0 ? latencyMs : null;
 
@@ -725,6 +829,29 @@ function mapMaterial(row: MaterialRow): MaterialDocument {
     warnings: parseJson<string[]>(row.warnings, []),
     importedAt: row.imported_at,
   };
+}
+
+function mapOutcome(row: OutcomeRow): InterventionOutcome {
+  const acceptedAt = row.accepted_at ?? undefined;
+  const dismissedAt = row.dismissed_at ?? undefined;
+  const continuedAt = row.continued_at ?? undefined;
+  return {
+    id: row.id,
+    interventionId: row.intervention_id,
+    sessionId: row.session_id,
+    at: row.at,
+    state: row.state as LearningState,
+    action: row.action as InterventionOutcome['action'],
+    accepted: row.accepted === 1,
+    dismissed: row.dismissed === 1,
+    taskCompleted: row.task_completed === 1,
+    resumeLatencyMs: row.resume_latency_ms,
+    quizOutcome:
+      row.quiz_outcome === 'correct' || row.quiz_outcome === 'incorrect' ? row.quiz_outcome : null,
+    ...(acceptedAt === undefined ? {} : { acceptedAt }),
+    ...(dismissedAt === undefined ? {} : { dismissedAt }),
+    ...(continuedAt === undefined ? {} : { continuedAt }),
+  } as InterventionOutcome;
 }
 
 function mapSession(row: SessionRow): SessionRecord {

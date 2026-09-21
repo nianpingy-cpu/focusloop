@@ -65,10 +65,10 @@ Home
 - 风险：事件 payload 将来扩展后绕过过滤；字符预算与真实 token 预算偏差；Inspector 让开发者误以为它等于完整 Tutor prompt。
 - 实施步骤：写 Context Data Contract → 建字段 allowlist/denylist → 加敏感 payload fixtures → 统一 context/prompt inspection 导航 → 加预算与跨课程隔离回归测试。
 
-### AG2 Stuck Rescue — 部分形成（分类/政策闭环已成，动作仍偏文案）
+### AG2 Stuck Rescue — 部分形成（Phase 1 确定性策略/计划/结果闭环已完成）
 
-- 当前证据：六类 `StuckReason`；UI picker；reason→action 确定性映射；`MICRO_START/SIMPLIFY/HINT/EXAMPLE/BREAK` 等 intervention；cooldown、预算、升级规则与 outcome 记录均有测试。
-- 差距：多数“skill”仍是 intervention descriptor/文案，未生成可执行临时步骤或真正缩小任务；救援成功的定义未形成统一窗口指标；“换一种解释/例子”与 AG3 Tutor 的复用边界需固定。
+- 当前证据：六类 `StuckReason`；UI picker；reason→action 确定性映射；`MICRO_START/SIMPLIFY/HINT/EXAMPLE/BREAK` 等 intervention；cooldown、预算、升级规则与 outcome 记录均有测试。AG10 fixtures 通过真实 `decideIntervention` 路由，并覆盖 `OVERLOADED` 下明确 reason 的优先级、无 reason/未知 reason、跨 session/task/future、重复事件与 repeated-help precedence。
+- 差距：完整产品 E2E 已编写但受 Electron/Playwright 启动参数阻塞；真实任务变更和工具执行仍等待 AG4/AG8；“换一种解释/例子”与 AG3 Tutor 的复用边界需固定。
 - 验收标准：六类原因逐一触发预期 action；主动打断只能由 deterministic policy 决定；所有展示均可接受/拒绝并记录；接受后能进入具体下一步；在规定窗口内以“开始/完成下一微步、无重复求助”计算 outcome；离线仍可完成每类基础救援。
 - 依赖：AG1；AG8 的动作合同（对可执行救援）；AG10 scenario harness。
 - 风险：同一求助重复消费；干预过频；把“疲劳”固化为长期画像；SIMPLIFY 名义完成但任务不变。
@@ -137,14 +137,14 @@ Home
 - 风险：多 provider 行为不一致；streaming 与 schema 校验冲突；重试放大成本；本地模型能力不足导致隐藏降级。
 - 实施步骤：ADR 分离 Provider 与 AgentRuntime → runtime contract → abort/timeout → structured adapter → retry/backoff → provider chain → token estimator/budget → optional adapters → conformance suite。
 
-### AG10 Evaluation & Guardrails — 部分形成（工程测试强，Agent Eval Suite 未形成）
+### AG10 Evaluation & Guardrails — 部分形成（deterministic JSON-only runner；完整 E2E/LLM eval 未形成）
 
-- 当前证据：当前基线共有 703 个通过的 Vitest 测试；state/policy/continuity/persistence/engine/IPC 测试较完善，并有 Electron + Playwright golden path；Tutor 有格式、模式、引用、grounding、预算 guardrail；隐私边界已有文档和若干测试。
-- 差距：没有版本化 scenario dataset、统一 evaluator、expected/allowed/forbidden 断言、真实模型抽样评测、质量趋势报告；没有系统的 tool safety、跨语言、干扰度、resume quality 与 privacy regression 套件。
+- 当前证据：`@focusloop/agent-evals` 提供版本化 scenario schema、同步 JSON-only runner，以及 AG1/AG2/AG5 固定场景；AG2 场景直接驱动生产策略/救援 evaluator。该 runner 不连接真实模型、provider、tool 或 store，也不等于完整 E2E。
+- 差距：没有真实模型抽样评测、质量趋势报告；没有系统的 tool safety、跨语言、干扰度、resume quality 与 privacy regression 套件。
 - 验收标准：每个 AG 至少有 happy/edge/adversarial 场景；deterministic gates 100% 稳定；LLM eval 固定模型/参数并报告通过率与方差；发布门槛含 grounding、tool correctness、privacy zero-tolerance、concision、continuity；场景不得含真实用户数据；失败能定位到 capability/runtime/provider。
 - 依赖：应横切全阶段，不能等功能全部完成。
 - 风险：用字符串匹配冒充质量；eval 数据泄漏进 prompt；在线模型漂移导致 CI 抖动；只测英文。
-- 实施步骤：定义 JSON scenario schema/runner → 迁移现有 fixtures → 先建 AG1/2/3/5 deterministic suite → tool safety suite → 中英 model eval（非阻塞起步）→ 基线报告 → 逐步设 release gate。
+- 实施步骤：定义 JSON scenario schema/runner（最小阶段已完成）→ 迁移并扩展 AG1/2/5 fixtures → AG3 deterministic suite → tool safety suite → 中英 model eval（非阻塞起步）→ 基线报告 → 逐步设 release gate。
 
 ## 3. 分阶段调度、依赖和 fan-out 边界
 

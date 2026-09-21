@@ -1218,6 +1218,31 @@ body:has(.simulator) .agent-context {
   margin-top: 10px;
 }
 
+.agent--rescue {
+  border-top: 3px solid var(--accent);
+}
+
+.agent__reason,
+.agent__estimate {
+  margin-bottom: 4px;
+}
+
+.agent__plan {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 14px;
+  padding-left: 22px;
+}
+
+.agent__plan li {
+  padding-left: 3px;
+}
+
+.agent__plan li strong,
+.agent__plan li span {
+  display: block;
+}
+
 /*
  * The contextual tutor (AG3).
  *

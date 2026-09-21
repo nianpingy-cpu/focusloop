@@ -188,32 +188,27 @@ describe('parseResumeDecision', () => {
 
 describe('parseResolveIntervention', () => {
   const valid = {
+    sessionId: 's1',
     interventionId: 'i1',
-    accepted: true,
-    dismissed: false,
-    taskCompleted: false,
+    resolution: 'accept',
   };
 
-  it('accepts booleans and no quiz outcome', () => {
-    expect(parseResolveIntervention(CHANNEL, valid)).toMatchObject(valid);
+  it('accepts each lifecycle resolution', () => {
+    for (const resolution of ['accept', 'dismiss', 'continue'] as const) {
+      expect(parseResolveIntervention(CHANNEL, { ...valid, resolution })).toEqual({
+        ...valid,
+        resolution,
+      });
+    }
   });
 
-  it('normalises a missing quiz outcome to null', () => {
-    expect(parseResolveIntervention(CHANNEL, valid).quizOutcome).toBeNull();
+  it('rejects an unknown resolution', () => {
+    expectFailure(() => parseResolveIntervention(CHANNEL, { ...valid, resolution: 'retry' }));
   });
 
-  it('accepts a valid quiz outcome', () => {
-    expect(
-      parseResolveIntervention(CHANNEL, { ...valid, quizOutcome: 'correct' }).quizOutcome,
-    ).toBe('correct');
-  });
-
-  it('rejects non-boolean flags', () => {
-    expectFailure(() => parseResolveIntervention(CHANNEL, { ...valid, accepted: 'yes' }));
-  });
-
-  it('rejects an unknown quiz outcome', () => {
-    expectFailure(() => parseResolveIntervention(CHANNEL, { ...valid, quizOutcome: 'maybe' }));
+  it('requires session and intervention ownership identifiers', () => {
+    expectFailure(() => parseResolveIntervention(CHANNEL, { ...valid, sessionId: '' }));
+    expectFailure(() => parseResolveIntervention(CHANNEL, { ...valid, interventionId: '' }));
   });
 });
 

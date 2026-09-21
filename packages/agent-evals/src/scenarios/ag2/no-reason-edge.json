@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-no-reason-edge",
+  "capability": "AG2",
+  "kind": "edge",
+  "input": { "state": "FOCUSED" },
+  "expected": [
+    { "type": "equals", "path": "action", "value": "NO_ACTION" },
+    { "type": "equals", "path": "reasonKey", "value": "reason.none" },
+    { "type": "equals", "path": "stepKeys", "value": [] },
+    { "type": "equals", "path": "estimatedMinutes", "value": 0 },
+    { "type": "equals", "path": "source", "value": null },
+    { "type": "equals", "path": "status", "value": "pending" }
+  ],
+  "forbidden": []
+}

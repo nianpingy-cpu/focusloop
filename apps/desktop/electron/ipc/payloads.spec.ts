@@ -173,12 +173,11 @@ describe('the preload and the main process agree on every payload', () => {
       parseResolveIntervention(
         IPC_CHANNELS.resolveIntervention,
         payload.resolveIntervention({
+          sessionId: 'session-1',
           interventionId: 'i1',
-          accepted: true,
-          dismissed: false,
-          taskCompleted: false,
+          resolution: 'accept',
         }),
       ),
-    ).toMatchObject({ interventionId: 'i1', accepted: true });
+    ).toEqual({ sessionId: 'session-1', interventionId: 'i1', resolution: 'accept' });
   });
 });

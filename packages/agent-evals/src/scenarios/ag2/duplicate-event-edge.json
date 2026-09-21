@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-duplicate-event-edge",
+  "capability": "AG2",
+  "kind": "edge",
+  "input": {
+    "reason": "went-wrong",
+    "acceptedAt": "2026-01-01T00:00:00.000Z",
+    "now": "2026-01-01T00:01:00.000Z",
+    "events": [
+      { "id": "same-complete", "type": "TASK_COMPLETED", "at": "2026-01-01T00:00:30.000Z" },
+      { "id": "same-complete", "type": "TASK_COMPLETED", "at": "2026-01-01T00:00:31.000Z" }
+    ]
+  },
+  "expected": [
+    { "type": "equals", "path": "status", "value": "succeeded" },
+    { "type": "equals", "path": "evidenceEventIds", "value": ["same-complete"] }
+  ],
+  "forbidden": []
+}

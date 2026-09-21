@@ -18,8 +18,11 @@ import type {
   MaterialDocument,
   MicroTask,
   ResolveInterventionRequest,
+  ResolveInterventionResponse,
   ResumeCardView,
   ResumeDecisionResponse,
+  ResumePolicyOverrides,
+  RescueAction,
   SessionSnapshot,
   SimulatorAvailability,
   SimulatorCommand,
@@ -31,8 +34,9 @@ import type {
   TutorProviderInfo,
   TutorReply,
   TutorUnavailableReason,
+  RescueView,
 } from '@focusloop/shared-types';
-import { findMaterialForCourse, message } from '@focusloop/shared-types';
+import { findMaterialForCourse, isStuckReason, message } from '@focusloop/shared-types';
 import { buildAgentContext } from './agent-context';
 import {
   DEFAULT_INSIGHT_RANGE,
@@ -55,6 +59,7 @@ import {
   DEFAULT_POLICY_CONFIG,
   createIntervention,
   decideIntervention,
+  buildRescueView as buildPolicyRescueView,
   recordOutcome,
   type InterventionPolicyConfig,
 } from '@focusloop/intervention-policy';
@@ -80,6 +85,16 @@ import {
   providerInfo,
   unsentReport,
 } from './tutor-ask';
+
+type LegacyResolveInterventionRequest = {
+  readonly interventionId: string;
+  readonly accepted: boolean;
+  readonly dismissed: boolean;
+  readonly taskCompleted: boolean;
+  readonly quizOutcome?: 'correct' | 'incorrect' | null;
+};
+
+type RescueResolveRequest = ResolveInterventionRequest | LegacyResolveInterventionRequest;
 
 /** The `app_meta` key the interface language is stored under. */
 export const LOCALE_KEY = 'locale';
@@ -117,6 +132,8 @@ export interface FocusLoopEngineOptions {
   readonly idFactory?: () => string;
   readonly stateConfig?: Partial<StateEngineConfig>;
   readonly policyConfig?: Partial<InterventionPolicyConfig>;
+  /** Thresholds used when rebuilding the resume success metric. */
+  readonly resumePolicyConfig?: ResumePolicyOverrides;
   readonly simulatorEnabled?: boolean;
 }
 
@@ -132,6 +149,7 @@ export class FocusLoopEngine {
   private readonly simulatorEnabled: boolean;
   private readonly stateConfig: Partial<StateEngineConfig>;
   private readonly policyConfig: Partial<InterventionPolicyConfig>;
+  private readonly resumePolicyConfig: ResumePolicyOverrides;
   /**
    * The tutor's conversations, keyed by session, in memory.
    *
@@ -149,6 +167,7 @@ export class FocusLoopEngine {
     this.idFactory = options.idFactory ?? (() => randomUUID());
     this.stateConfig = options.stateConfig ?? {};
     this.policyConfig = options.policyConfig ?? {};
+    this.resumePolicyConfig = options.resumePolicyConfig ?? {};
     this.simulatorEnabled = options.simulatorEnabled ?? true;
   }
 
@@ -718,6 +737,7 @@ export class FocusLoopEngine {
         resumeCard: this.getResumeCard(request.sessionId),
         decision: null,
         interventionId: null,
+        rescue: this.getPendingRescue(request.sessionId),
       };
     }
 
@@ -737,6 +757,9 @@ export class FocusLoopEngine {
       resumeCard: resume.resumeCard,
       decision: policy.decision,
       interventionId: policy.interventionId,
+      // Always rebuild from persistence.  A dispatch may produce no new
+      // intervention while an earlier explicit rescue is still pending.
+      rescue: this.getPendingRescue(request.sessionId),
     };
   }
 
@@ -786,6 +809,7 @@ export class FocusLoopEngine {
       resumeCard: resume.resumeCard,
       decision: policy.decision,
       interventionId: policy.interventionId,
+      rescue: this.getPendingRescue(session.id),
     };
   }
 
@@ -870,6 +894,7 @@ export class FocusLoopEngine {
         course,
         recentEvents: this.store.listEvents(session.id),
         now: checkpoint.createdAt,
+        config: this.resumePolicyConfig,
       }),
       timing,
     };
@@ -907,6 +932,20 @@ export class FocusLoopEngine {
       throw new EngineError('checkpoint-not-found', `Unknown checkpoint: ${checkpointId}`);
     }
 
+    const interventionId = `intervention-resume:${checkpointId}`;
+    const existingTiming = this.store.getResumeTiming(checkpointId);
+    if (
+      existingTiming !== null &&
+      (existingTiming.acceptedAt !== undefined || existingTiming.dismissedAt !== undefined)
+    ) {
+      const record = this.requireSession(checkpoint.sessionId);
+      const outcome =
+        this.store
+          .listOutcomes(checkpoint.sessionId)
+          .find((item) => item.interventionId === interventionId) ?? null;
+      return { timing: existingTiming, state: record.engineState.state, outcome };
+    }
+
     const now = this.clock();
     const timing = this.store.markResumeDecided(checkpointId, decision, now);
 
@@ -917,7 +956,6 @@ export class FocusLoopEngine {
       payload: { checkpointId },
     });
 
-    const interventionId = `intervention-resume:${checkpointId}`;
     const intervention = this.store.getIntervention(interventionId);
     let outcome: InterventionOutcome | null = null;
 
@@ -994,26 +1032,236 @@ export class FocusLoopEngine {
     return { decision, interventionId: intervention.id };
   }
 
+  private decisionFromIntervention(intervention: Intervention) {
+    return {
+      action: intervention.action,
+      state: intervention.state,
+      reason: intervention.reason,
+      confidence: 1,
+      estimatedMinutes: rescueMinutes(intervention.action),
+      ...(intervention.answersRequestId === undefined
+        ? {}
+        : { answersRequestId: intervention.answersRequestId }),
+    } as ReturnType<typeof decideIntervention>;
+  }
+
+  private buildRescueView(
+    interventionId: string,
+    decision: ReturnType<typeof decideIntervention>,
+  ): RescueView | null {
+    if (decision.answersRequestId === undefined || !isExplicitRescueAction(decision.action))
+      return null;
+    const intervention = this.store.getIntervention(interventionId);
+    if (intervention === null) return null;
+    const requestEvent = this.store
+      .listEvents(intervention.sessionId)
+      .find((event) => event.id === decision.answersRequestId);
+    const taskId = readTaskId(requestEvent);
+    const outcome = this.store.getOutcomeByIntervention(interventionId);
+    const phase = outcome?.acceptedAt === undefined ? 'offered' : 'active';
+    return buildPolicyRescueView(
+      decision,
+      { interventionId, sessionId: intervention.sessionId, taskId },
+      phase,
+    );
+  }
+
   listInterventions(sessionId: string): Intervention[] {
     return this.store.listInterventions(sessionId);
   }
 
-  resolveIntervention(request: ResolveInterventionRequest): InterventionOutcome | null {
-    const intervention = this.store.getIntervention(request.interventionId);
+  /**
+   * Rebuilds the explicit stuck-rescue card from persisted interventions and
+   * outcomes.  Nothing is kept in memory: a renderer reload and a process
+   * restart therefore produce the same offered/active view.
+   */
+  getPendingRescue(sessionId: string): RescueView | null {
+    const record = this.store.getSession(sessionId);
+    const active = this.store.getActiveSession();
+    if (
+      record === null ||
+      record.session.endedAt !== undefined ||
+      active?.session.id !== sessionId
+    ) {
+      return null;
+    }
+
+    const events = this.store.listEvents(sessionId);
+    let latestRequestId: string | null = null;
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event?.type !== 'HELP_REQUESTED') continue;
+      const reason = (event.payload as Record<string, unknown>).reason;
+      if (!isStuckReason(reason)) continue;
+      latestRequestId = event.id;
+      break;
+    }
+    // The latest explicit request owns the card.  Never fall back to an older
+    // request when this one has no answer or has already been resolved.
+    if (latestRequestId === null) return null;
+
+    const interventions = this.store.listInterventions(sessionId);
+    let intervention: Intervention | undefined;
+    for (let index = interventions.length - 1; index >= 0; index -= 1) {
+      const candidate = interventions[index];
+      if (
+        candidate !== undefined &&
+        candidate.answersRequestId === latestRequestId &&
+        isExplicitRescueAction(candidate.action)
+      ) {
+        intervention = candidate;
+        break;
+      }
+    }
+    if (intervention === undefined) return null;
+
+    const requestEvent = events.find((event) => event.id === intervention?.answersRequestId);
+    const taskId = readTaskId(requestEvent);
+    // A card for a task that is no longer current is stale.  Do not allow a
+    // delayed renderer response to act on another task.
+    if (taskId !== null && record.engineState.currentTaskId !== taskId) return null;
+
+    const outcome = this.store.getOutcomeByIntervention(intervention.id) as
+      | (InterventionOutcome & {
+          readonly acceptedAt?: string;
+          readonly dismissedAt?: string;
+          readonly continuedAt?: string;
+        })
+      | null;
+    if (outcome?.dismissedAt !== undefined || outcome?.continuedAt !== undefined) return null;
+
+    return this.buildRescueView(intervention.id, this.decisionFromIntervention(intervention));
+  }
+
+  /** Handles both the Phase-1 resolution contract and the pre-Phase-1 flags. */
+  resolveIntervention(request: ResolveInterventionRequest): ResolveInterventionResponse | null;
+  resolveIntervention(request: LegacyResolveInterventionRequest): InterventionOutcome | null;
+  resolveIntervention(
+    request: RescueResolveRequest,
+  ): ResolveInterventionResponse | InterventionOutcome | null {
+    const legacy = !('resolution' in request);
+    const interventionId = request.interventionId;
+    const intervention = this.store.getIntervention(interventionId);
     if (intervention === null) return null;
 
+    const sessionId = 'sessionId' in request ? request.sessionId : intervention.sessionId;
+    if (sessionId !== intervention.sessionId) {
+      throw new EngineError('session-not-found', 'Intervention does not belong to this session.');
+    }
+    const active = this.store.getActiveSession();
+    if (active?.session.id !== sessionId) {
+      throw new EngineError('session-ended', `Session ${sessionId} is not active.`);
+    }
+    // Only a reasoned HELP_REQUESTED produces an explicit rescue.  Proactive
+    // interventions can use the same visual action (HINT/BREAK/etc.), but
+    // they must remain generic outcomes and cannot be continued as rescues.
+    if (
+      intervention.answersRequestId === undefined ||
+      !isExplicitRescueAction(intervention.action)
+    ) {
+      if ('resolution' in request && request.resolution === 'continue') {
+        throw new EngineError('session-ended', 'Only an accepted rescue can be continued.');
+      }
+      const genericOutcome = this.resolveGenericIntervention(intervention, request);
+      return legacy ? genericOutcome : { outcome: genericOutcome, rescue: null };
+    }
+
+    const requestEvent =
+      intervention.answersRequestId === undefined
+        ? undefined
+        : this.store
+            .listEvents(sessionId)
+            .find((event) => event.id === intervention.answersRequestId);
+    const taskId = readTaskId(requestEvent);
+    const currentTaskId = active.engineState.currentTaskId;
+    if (taskId !== null && taskId !== currentTaskId) {
+      throw new EngineError('session-ended', 'Rescue is stale for the current task.');
+    }
+
+    const resolution =
+      'resolution' in request
+        ? request.resolution
+        : request.accepted
+          ? 'accept'
+          : request.dismissed
+            ? 'dismiss'
+            : 'continue';
+    if (resolution !== 'accept' && resolution !== 'dismiss' && resolution !== 'continue') {
+      throw new EngineError('session-ended', `Unknown rescue resolution: ${String(resolution)}`);
+    }
+
+    const previous = this.store.getOutcomeByIntervention(interventionId) as
+      | (InterventionOutcome & {
+          readonly acceptedAt?: string;
+          readonly dismissedAt?: string;
+          readonly continuedAt?: string;
+        })
+      | null;
+    if (resolution === 'continue' && previous?.acceptedAt === undefined) {
+      throw new EngineError('session-ended', 'A rescue must be accepted before it can continue.');
+    }
+    if (resolution === 'dismiss' && previous?.acceptedAt !== undefined) {
+      throw new EngineError('session-ended', 'An accepted rescue cannot be dismissed.');
+    }
+    if (resolution === 'accept' && previous?.dismissedAt !== undefined) {
+      throw new EngineError('session-ended', 'A dismissed rescue cannot be accepted.');
+    }
+
+    const at = this.clock();
+    const base =
+      previous ??
+      recordOutcome({
+        id: `outcome:${intervention.id}`,
+        intervention,
+        at,
+        accepted: false,
+        dismissed: false,
+        taskCompleted: false,
+        resumeLatencyMs: null,
+        quizOutcome: null,
+      });
+    const next = {
+      ...base,
+      accepted: base.accepted || resolution === 'accept',
+      dismissed: base.dismissed || resolution === 'dismiss',
+      taskCompleted:
+        'taskCompleted' in request
+          ? base.taskCompleted || request.taskCompleted
+          : base.taskCompleted,
+      quizOutcome:
+        'quizOutcome' in request ? (request.quizOutcome ?? base.quizOutcome) : base.quizOutcome,
+      ...(base.acceptedAt === undefined && resolution === 'accept' ? { acceptedAt: at } : {}),
+      ...(base.dismissedAt === undefined && resolution === 'dismiss' ? { dismissedAt: at } : {}),
+      ...(base.continuedAt === undefined && resolution === 'continue' ? { continuedAt: at } : {}),
+    } as InterventionOutcome;
+    this.store.saveOutcome(next);
+    const outcome = this.store.getOutcomeByIntervention(interventionId);
+    return legacy ? outcome : { outcome, rescue: this.getPendingRescue(sessionId) };
+  }
+
+  private resolveGenericIntervention(
+    intervention: Intervention,
+    request: RescueResolveRequest,
+  ): InterventionOutcome {
+    const existing = this.store.getOutcomeByIntervention(intervention.id);
+    if (existing !== null) return existing;
+    const legacy = !('resolution' in request);
+    const resolution = legacy ? (request.accepted ? 'accept' : 'dismiss') : request.resolution;
+    const at = this.clock();
     const outcome = recordOutcome({
       id: `outcome:${intervention.id}`,
       intervention,
-      at: this.clock(),
-      accepted: request.accepted,
-      dismissed: request.dismissed,
-      taskCompleted: request.taskCompleted,
+      at,
+      accepted: resolution === 'accept',
+      dismissed: resolution === 'dismiss',
+      taskCompleted: legacy ? request.taskCompleted : false,
       resumeLatencyMs: null,
-      quizOutcome: request.quizOutcome ?? null,
+      quizOutcome: legacy ? (request.quizOutcome ?? null) : null,
+      ...(resolution === 'accept' ? { acceptedAt: at } : {}),
+      ...(resolution === 'dismiss' ? { dismissedAt: at } : {}),
     });
     this.store.saveOutcome(outcome);
-    return outcome;
+    return this.store.getOutcomeByIntervention(intervention.id) ?? outcome;
   }
 
   listOutcomes(sessionId: string): InterventionOutcome[] {
@@ -1037,7 +1285,13 @@ export class FocusLoopEngine {
       session: record.session,
       course: this.store.getCourse(record.session.courseId),
       outcomes: this.store.listOutcomes(record.session.id),
+      interventions: this.store.listInterventions(record.session.id),
       checkpointCount: this.store.listCheckpoints(record.session.id).length,
+      checkpoints: this.store.listCheckpoints(record.session.id),
+      resumeTimings: this.store.listResumeTimings(record.session.id),
+      events: this.store.listEvents(record.session.id),
+      resumePolicyConfig: this.resumePolicyConfig,
+      rescueSuccessWindowMs: this.policyConfig.rescueSuccessWindowMs,
       now: this.clock(),
     });
   }
@@ -1192,6 +1446,39 @@ export class FocusLoopEngine {
 function findTask(course: Course | null, taskId: string | null): MicroTask | null {
   if (course === null || taskId === null) return null;
   return course.microTasks.find((task) => task.id === taskId) ?? null;
+}
+
+function isExplicitRescueAction(action: string): action is RescueAction {
+  return (
+    action === 'MICRO_START' ||
+    action === 'SIMPLIFY' ||
+    action === 'HINT' ||
+    action === 'EXAMPLE' ||
+    action === 'BREAK'
+  );
+}
+
+function rescueMinutes(action: string): number {
+  switch (action) {
+    case 'MICRO_START':
+      return 5;
+    case 'SIMPLIFY':
+      return 3;
+    case 'HINT':
+      return 2;
+    case 'EXAMPLE':
+      return 4;
+    case 'BREAK':
+      return 5;
+    default:
+      return 0;
+  }
+}
+
+function readTaskId(event: LearningEvent | undefined): string | null {
+  const payload = event?.payload as Record<string, unknown> | undefined;
+  const taskId = payload?.['taskId'];
+  return typeof taskId === 'string' && taskId.length > 0 ? taskId : null;
 }
 
 function toSession(

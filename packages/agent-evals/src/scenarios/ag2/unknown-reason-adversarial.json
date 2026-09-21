@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-unknown-reason-adversarial",
+  "capability": "AG2",
+  "kind": "adversarial",
+  "input": { "reason": "not-a-stuck-reason", "state": "FOCUSED" },
+  "expected": [
+    { "type": "equals", "path": "action", "value": "NO_ACTION" },
+    { "type": "equals", "path": "reasonKey", "value": "reason.none" },
+    { "type": "equals", "path": "stepKeys", "value": [] },
+    { "type": "equals", "path": "estimatedMinutes", "value": 0 },
+    { "type": "equals", "path": "source", "value": null }
+  ],
+  "forbidden": [
+    { "type": "forbidden-value", "value": "MICRO_START" },
+    { "type": "forbidden-value", "value": "deterministic-local" }
+  ]
+}

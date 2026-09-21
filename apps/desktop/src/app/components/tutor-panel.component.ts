@@ -46,6 +46,7 @@ import {
             [attr.aria-label]="t('tutor.title')"
             (keydown.escape)="onEscape($event)"
           >
+            <p class="muted small tutor__description">{{ t('tutor.contextHint') }}</p>
             <div class="tutor__modes">
               @for (mode of modes; track mode) {
                 <button

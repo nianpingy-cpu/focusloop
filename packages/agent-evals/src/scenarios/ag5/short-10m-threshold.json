@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "ag5-short-10m-threshold",
+  "capability": "AG5",
+  "kind": "edge",
+  "description": "Ten minutes remains short while the production threshold is fifteen minutes.",
+  "input": {
+    "gapMs": 600000,
+    "now": "2026-09-21T12:11:00.000Z",
+    "checkpoint": {
+      "conceptTitle": "Lists",
+      "currentTaskTitle": "Read one node",
+      "currentStep": 1,
+      "nextAction": "Read the next node"
+    },
+    "interruptionEvents": [{ "id": "i-ten-minute", "type": "RESUME_OFFERED" }],
+    "evidenceEvents": [],
+    "success": { "shownAt": "2026-09-21T12:10:00.000Z" },
+    "privateNote": "AG5_SENSITIVE_SENTINEL"
+  },
+  "expected": [
+    { "type": "equals", "path": "variant", "value": "short" },
+    { "type": "equals", "path": "gapMs", "value": 600000 },
+    { "type": "equals", "path": "refresherRequired", "value": false },
+    { "type": "equals", "path": "status", "value": "pending" },
+    { "type": "allowed-keys", "path": "summary", "keys": ["title", "detail", "nextAction"] }
+  ],
+  "forbidden": [{ "type": "forbidden-value", "value": "AG5_SENSITIVE_SENTINEL" }]
+}

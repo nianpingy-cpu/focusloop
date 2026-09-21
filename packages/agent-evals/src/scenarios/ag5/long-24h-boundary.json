@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "ag5-long-24h-boundary",
+  "capability": "AG5",
+  "kind": "edge",
+  "description": "A twenty-four-hour gap requires a short refresher before resuming.",
+  "input": {
+    "gapMs": 86400000,
+    "now": "2026-09-22T12:01:00.000Z",
+    "checkpoint": {
+      "conceptTitle": "Graphs",
+      "currentTaskTitle": "Review paths",
+      "currentStep": 3,
+      "nextAction": "Review the path invariant"
+    },
+    "interruptionEvents": [{ "id": "i-long", "type": "INTERRUPTION_DETECTED" }],
+    "evidenceEvents": [],
+    "success": { "shownAt": "2026-09-22T12:00:00.000Z" },
+    "private": "AG5_SENSITIVE_SENTINEL"
+  },
+  "expected": [
+    { "type": "equals", "path": "variant", "value": "long" },
+    { "type": "equals", "path": "gapMs", "value": 86400000 },
+    { "type": "equals", "path": "refresherRequired", "value": true },
+    { "type": "equals", "path": "status", "value": "pending" },
+    { "type": "allowed-keys", "path": "summary", "keys": ["title", "detail", "nextAction"] },
+    { "type": "equals", "path": "summary.detail", "value": "resume.context.away" }
+  ],
+  "forbidden": [{ "type": "forbidden-value", "value": "AG5_SENSITIVE_SENTINEL" }]
+}

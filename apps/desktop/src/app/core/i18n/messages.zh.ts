@@ -209,6 +209,12 @@ export const zh: Record<MessageKey, string> = {
   'dashboard.tasks': '微任务',
   'dashboard.interruptions': '打断次数',
   'dashboard.latency': '平均恢复耗时',
+  'dashboard.resumeSuccess': '恢复成功率',
+  'dashboard.resumeSuccess.sample':
+    '已评估 {evaluated} 次，成功 {succeeded} 次 · {pending} 次待观察',
+  'dashboard.rescueSuccess': '解困成功率',
+  'dashboard.rescueSuccess.sample':
+    '已评估 {evaluated} 次，成功 {succeeded} 次 · 再次求助 {repeated} 次 · 待观察 {pending} 次',
   'dashboard.outcomes': '干预结果',
   'dashboard.col.action': '动作',
   'dashboard.col.shown': '展示',
@@ -227,6 +233,7 @@ export const zh: Record<MessageKey, string> = {
   // --------------------------------------------------------- resume card
   'resume.aria': '从你停下的地方继续',
   'resume.welcome': '欢迎回来',
+  'resume.refresher': '30 秒快速回忆：',
   'resume.done': '已完成',
   'resume.nothingDone': '还没有完成的内容——这很正常。',
   'resume.open': '仍未解决',
@@ -238,6 +245,8 @@ export const zh: Record<MessageKey, string> = {
   'resume.dismiss': '先不用',
   'resume.context.checkpoint': '检查点：{id}',
   'resume.context.shownAt': '展示时间：{at}',
+  'resume.context.variant': '恢复档位：{variant}',
+  'resume.context.gap': '离开时长（毫秒）：{gap}',
   'resume.context.completed': '已完成：{items}',
   'resume.context.unresolved': '未解决：{items}',
   'resume.context.next': '下一步：{action}',
@@ -245,8 +254,15 @@ export const zh: Record<MessageKey, string> = {
 
   // -------------------------------------------------------- agent panel
   'agent.suggesting': '建议',
+  'agent.accept': '接受',
+  'agent.accepting': '正在接受…',
   'agent.showMe': '给我看看',
   'agent.notNow': '稍后再说',
+  'agent.estimate': '预计 {minutes} 分钟',
+  'agent.rescue.ready': '方案已准备好',
+  'agent.rescue.title': '从一个小步骤继续',
+  'agent.rescue.plan': '援助步骤',
+  'agent.continue': '继续',
   'agent.action.MICRO_START': '从最小的一步开始',
   'agent.action.SIMPLIFY': '把当前任务拆小',
   'agent.action.HINT': '这里有个提示',
@@ -256,6 +272,8 @@ export const zh: Record<MessageKey, string> = {
   'agent.action.RESUME': '从你停下的地方继续',
   'agent.action.NO_ACTION': '暂时没有建议',
   'agent.inspector.title': '智能体看到了什么',
+  'agent.inspector.description':
+    '这是主进程返回的共享 AG1 上下文报告，展示本次时刻的有界字段和明确列出的未包含内容。',
   'agent.inspector.state': '状态',
   'agent.inspector.concept': '概念',
   'agent.inspector.task': '任务',
@@ -285,12 +303,25 @@ export const zh: Record<MessageKey, string> = {
   'action.practice.example': '动手做这个练习：{title}',
   'action.read.summarise': '读完之后，用一句话把它概括出来：{title}',
 
+  // 卡住救援——离线、确定性的微步骤
+  'rescue.microStart.first': '先只找出这一步要求你做的第一个动作。',
+  'rescue.simplify.identify': '先说清楚这一步最终要得到什么结果。',
+  'rescue.simplify.first': '只完成第一小部分，其余部分暂时不动。',
+  'rescue.simplify.check': '停一下，检查第一部分是否成立，再继续。',
+  'rescue.hint.action': '先找出任务说明里的动作词。',
+  'rescue.hint.condition': '只使用一个已知条件，尝试最小的下一步。',
+  'rescue.example.pattern': '先看这个结构：输入、一次操作、一次检查。',
+  'rescue.example.apply': '把这个结构套到当前任务的一小部分上。',
+  'rescue.break.pause': '先离开五分钟；当前任务和位置会保留。',
+  'rescue.break.return': '回来后，从同一个尚未完成的小动作继续。',
+
   // continuity — the resume card's own wording
   'resume.title.course': '回到《{course}》',
   'resume.title.task': '回到：{task}',
   'resume.context.plain': '你当时正在处理「{concept}」。目标是：{goal}',
   'resume.context.moment': '你刚刚还在处理「{concept}」。目标是：{goal}',
   'resume.context.away': '你当时正在处理「{concept}」，中间离开了 {duration}。目标是：{goal}',
+  'resume.refresher.long': '继续前，先用 {seconds} 秒按自己的话回忆上一条思路。',
 
   // intervention policy — why the agent decided what it decided
   'reason.budget': '今天的干预额度已经用完了。',
@@ -338,5 +369,7 @@ export const zh: Record<MessageKey, string> = {
   'tutor.concept': '概念',
   'tutor.step': '步骤',
   'tutor.instructions': '这一步要做什么',
+  'tutor.contextHint':
+    '导师还会加入你的问题和有界的会话对话，并执行总计 4,000 字符的 prompt 预算（包括系统 prompt）。',
   'reason.none': '现在不需要任何建议。',
 };

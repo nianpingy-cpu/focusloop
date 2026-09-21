@@ -14,18 +14,18 @@
 
 ## 当前判断
 
-| 能力                         | 当前状态       | 下一交付重点                                            |
-| ---------------------------- | -------------- | ------------------------------------------------------- |
-| AG1 Learning Context         | 已形成，待收口 | 字段级隐私 allowlist、恶意 payload 回归、Inspector 对齐 |
-| AG2 Stuck Rescue             | 部分形成       | 把干预文案接成可执行微步骤，统一 outcome 口径           |
-| AG3 Contextual Tutor         | 已形成，待收口 | 双语质量集、细粒度来源、Runtime 流式/取消               |
-| AG4 Task Adaptation          | 未形成         | AdaptiveTask、提案/确认、持久化与恢复                   |
-| AG5 Cognitive Resume         | 部分形成       | 三档与 success 已完成；继续补卡点证据、adaptive restore |
-| AG6 Learning Reflection      | 未形成         | 行为证据、最小样本、确认后偏好                          |
-| AG7 Memory                   | 部分形成       | scope/retention、偏好存储、检查与删除                   |
-| AG8 Tools & Actions          | 未形成         | Tool contract、权限、确认、幂等、审计                   |
-| AG9 Model Runtime            | 部分形成       | Runtime façade、结构化输出、abort/stream/retry/budget   |
-| AG10 Evaluation & Guardrails | 部分形成       | 场景数据集、runner、质量与安全发布门槛                  |
+| 能力                         | 当前状态                                   | 下一交付重点                                            |
+| ---------------------------- | ------------------------------------------ | ------------------------------------------------------- |
+| AG1 Learning Context         | 已形成，待收口                             | 字段级隐私 allowlist、恶意 payload 回归、Inspector 对齐 |
+| AG2 Stuck Rescue             | 部分形成（Phase 1 确定性救援闭环已完成）   | E2E 环境阻塞；真实任务执行等待 AG4/AG8                  |
+| AG3 Contextual Tutor         | 已形成，待收口                             | 双语质量集、细粒度来源、Runtime 流式/取消               |
+| AG4 Task Adaptation          | 未形成                                     | AdaptiveTask、提案/确认、持久化与恢复                   |
+| AG5 Cognitive Resume         | 部分形成                                   | 三档与 success 已完成；继续补卡点证据、adaptive restore |
+| AG6 Learning Reflection      | 未形成                                     | 行为证据、最小样本、确认后偏好                          |
+| AG7 Memory                   | 部分形成                                   | scope/retention、偏好存储、检查与删除                   |
+| AG8 Tools & Actions          | 未形成                                     | Tool contract、权限、确认、幂等、审计                   |
+| AG9 Model Runtime            | 部分形成                                   | Runtime façade、结构化输出、abort/stream/retry/budget   |
+| AG10 Evaluation & Guardrails | 部分形成（deterministic JSON-only runner） | 场景数据集、质量与安全发布门槛；尚非完整 E2E/LLM eval   |
 
 ## 交付顺序
 
@@ -37,6 +37,17 @@
 6. 最后开放 AG6 Reflection 与长期偏好。
 
 两条硬门槛：AG4 的结构性写入必须等待 AG8 confirmation/idempotency 通过；AG6 必须等待 AG7 preference inspection/delete 完成。
+
+### 2026-09-22 status clarification
+
+- AG2 Phase 1 is complete at the deterministic policy/rescue-plan/outcome-evaluator boundary. The
+  AG2 evals exercise the real `decideIntervention` route, including explicit-reason precedence while
+  the learning state is `OVERLOADED`, and adversarial event filtering.
+- AG10 currently means a deterministic, synchronous, JSON-only scenario runner. It does not mean a
+  model evaluation service, provider/runtime test, tool/store E2E, or complete AG1-AG10 end-to-end
+  gate.
+- AG4 and AG8 remain unfinished. AG2's structural task/tool execution remains follow-up work; the
+  desktop E2E is authored but currently blocked before app launch by the Electron/Playwright runtime.
 
 ## 维护约定
 

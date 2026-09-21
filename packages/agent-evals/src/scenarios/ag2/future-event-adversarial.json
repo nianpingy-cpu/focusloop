@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-future-event-adversarial",
+  "capability": "AG2",
+  "kind": "adversarial",
+  "input": {
+    "reason": "cannot-recall",
+    "acceptedAt": "2026-01-01T00:00:00.000Z",
+    "now": "2026-01-01T00:01:00.000Z",
+    "events": [
+      { "id": "future-complete", "type": "TASK_COMPLETED", "at": "2026-01-01T00:02:00.000Z" }
+    ]
+  },
+  "expected": [
+    { "type": "equals", "path": "status", "value": "pending" },
+    { "type": "equals", "path": "evidenceEventIds", "value": [] }
+  ],
+  "forbidden": []
+}

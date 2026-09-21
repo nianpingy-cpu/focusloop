@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-went-wrong",
+  "capability": "AG2",
+  "kind": "happy",
+  "input": { "reason": "went-wrong" },
+  "expected": [
+    { "type": "equals", "path": "action", "value": "HINT" },
+    { "type": "max-items", "path": "stepKeys", "max": 3 }
+  ],
+  "forbidden": []
+}

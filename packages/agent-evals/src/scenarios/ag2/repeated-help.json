@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-repeated-help",
+  "capability": "AG2",
+  "kind": "edge",
+  "input": {
+    "reason": "too-big",
+    "acceptedAt": "2026-01-01T00:00:00.000Z",
+    "now": "2026-01-01T00:01:00.000Z",
+    "events": [{ "id": "help-2", "type": "HELP_REQUESTED", "at": "2026-01-01T00:00:30.000Z" }]
+  },
+  "expected": [{ "type": "equals", "path": "status", "value": "repeated-help" }],
+  "forbidden": []
+}

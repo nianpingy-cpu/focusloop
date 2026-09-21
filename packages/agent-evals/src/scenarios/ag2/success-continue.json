@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-success-continue",
+  "capability": "AG2",
+  "kind": "happy",
+  "input": {
+    "reason": "went-wrong",
+    "acceptedAt": "2026-01-01T00:00:00.000Z",
+    "continuedAt": "2026-01-01T00:05:00.000Z",
+    "now": "2026-01-01T00:05:00.000Z"
+  },
+  "expected": [{ "type": "equals", "path": "status", "value": "succeeded" }],
+  "forbidden": []
+}

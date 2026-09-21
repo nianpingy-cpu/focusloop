@@ -85,6 +85,40 @@ enrichment (for example, generating an example for a hint). In that case:
 You can verify the second claim by reading `packages/llm-provider/src/deepseek-provider.ts`: the
 request body contains exactly `model`, `messages`, `stream` and the sampling options.
 
+### Agent Context allowlist and event projection
+
+The developer Inspector displays the shared AG1 `AgentContextReport` returned by the main process. It
+is an allowlist, not a view over the database. Its fields are limited to:
+
+- `session`: session id, start time, elapsed time, and completed/total task counts;
+- `concept`: the current concept id, title, summary, and key points;
+- `task`: the current task id, title, instructions, kind, estimate, and position;
+- `material`: one matched section excerpt, its title/heading, and whether the excerpt was truncated;
+- `learningState` and a bounded projection of the current checkpoint (no checkpoint, session,
+  concept, or task persistence ids; text, lists, and message parameters are capped);
+- `recentEvents`: at most the latest 12 learning events; and
+- `omissions`: an explicit account of fields or records left out by the bounds.
+
+The checkpoint store and this report also have different purposes. The local checkpoint keeps the
+identifiers needed to resume a session; the report creates a fresh cognitive-summary object and does
+not expose those identifiers. Learner-authored checkpoint text is capped at 320 characters per field,
+lists at 6 items, and localized-message parameters at 4 entries.
+
+The event log and this report have different purposes. The complete event record, including its
+timestamp, type, source, and typed payload, is stored locally in SQLite so the state machine and
+dashboard can replay it. The report is a bounded event projection for the current moment; older events
+are omitted and recorded as such. A `TAB_LEFT` event's optional `origin` is retained only in the local
+event record after bridge validation (scheme and host at most); it is not selected into any model
+prompt.
+
+The contextual Tutor applies a second, narrower projection. It sends the current concept and task
+wording, the bounded material excerpt, the learner's question, and a bounded in-process conversation
+transcript. It does not serialize the AG1 event list, event payloads, database rows, checkpoints, or
+`TAB_LEFT.origin`. The Tutor's total prompt budget is 4,000 UTF-16 characters, including the system
+prompt; question, transcript, context, and excerpt bounds are applied before a request leaves the
+process. Thus “stored locally” does not mean “sent to the model”, and an event appearing in the local
+Inspector does not imply that its payload was transmitted.
+
 ## What the app can see, and what it does about it
 
 The renderer is sandboxed with `contextIsolation: true`, `nodeIntegration: false` and

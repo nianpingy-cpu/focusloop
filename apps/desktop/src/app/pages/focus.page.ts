@@ -342,6 +342,8 @@ export class FocusPage implements OnDestroy {
   private readonly i18n = inject(I18nService);
   private timerHandle: ReturnType<typeof setInterval> | null = null;
   private timer = signal<FocusTimerState>(createFocusTimer());
+  private lastRescuePauseRequest = 0;
+  private lastRescueContinueRequest = 0;
   private readonly completedView = signal(false);
   private readonly planOpenState = signal(PLAN_INITIAL_OPEN);
   protected readonly planOpen = this.planOpenState.asReadonly();
@@ -374,6 +376,21 @@ export class FocusPage implements OnDestroy {
   protected readonly railAttr = computed(() => (this.rail() ? '' : null));
   protected readonly plan = computed(() => buildPlan(this.openTasks()));
   protected readonly nextTask = computed<MicroTask | null>(() => this.openTasks()[0] ?? null);
+
+  /** A BREAK rescue is accepted outside this page; keep the local commitment honest. */
+  private readonly rescueClock = effect(() => {
+    const pauseRequest = this.state.rescuePauseRequest();
+    if (pauseRequest > this.lastRescuePauseRequest) {
+      this.lastRescuePauseRequest = pauseRequest;
+      if (this.timer().phase === 'active') this.pause();
+    }
+
+    const continueRequest = this.state.rescueContinueRequest();
+    if (continueRequest > this.lastRescueContinueRequest) {
+      this.lastRescueContinueRequest = continueRequest;
+      if (this.timer().phase === 'paused') this.resume();
+    }
+  });
 
   /** Set by the two ways out of the chooser: both destroy the focused element, so both owe it on. */
   private stuckReturnFocus = false;
@@ -583,6 +600,7 @@ export class FocusPage implements OnDestroy {
   ngOnDestroy(): void {
     this.clearTimer();
     this.manageStuckFocus.destroy();
+    this.rescueClock.destroy();
   }
 
   protected openTasks(): readonly MicroTask[] {

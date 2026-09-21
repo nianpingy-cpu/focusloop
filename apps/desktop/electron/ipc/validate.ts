@@ -202,29 +202,13 @@ export function parseResolveIntervention(
   value: unknown,
 ): ResolveInterventionRequest {
   const record = asRecord(channel, value);
+  const sessionId = asString(channel, record, 'sessionId');
   const interventionId = asString(channel, record, 'interventionId');
-
-  for (const key of ['accepted', 'dismissed', 'taskCompleted'] as const) {
-    if (typeof record[key] !== 'boolean') fail(channel, `"${key}" must be a boolean`);
+  const resolution = asString(channel, record, 'resolution');
+  if (resolution !== 'accept' && resolution !== 'dismiss' && resolution !== 'continue') {
+    fail(channel, '"resolution" must be "accept", "dismiss" or "continue"');
   }
-
-  const quizOutcome = record['quizOutcome'];
-  if (
-    quizOutcome !== undefined &&
-    quizOutcome !== null &&
-    quizOutcome !== 'correct' &&
-    quizOutcome !== 'incorrect'
-  ) {
-    fail(channel, '"quizOutcome" must be "correct", "incorrect" or null');
-  }
-
-  return {
-    interventionId,
-    accepted: record['accepted'] as boolean,
-    dismissed: record['dismissed'] as boolean,
-    taskCompleted: record['taskCompleted'] as boolean,
-    quizOutcome: (quizOutcome ?? null) as 'correct' | 'incorrect' | null,
-  };
+  return { sessionId, interventionId, resolution };
 }
 
 const SIMULATOR_COMMANDS = new Set<string>([

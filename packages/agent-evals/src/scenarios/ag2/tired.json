@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "ag2-tired",
+  "capability": "AG2",
+  "kind": "happy",
+  "input": { "reason": "tired" },
+  "expected": [
+    { "type": "equals", "path": "action", "value": "BREAK" },
+    { "type": "max-items", "path": "stepKeys", "max": 3 }
+  ],
+  "forbidden": []
+}
