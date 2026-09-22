@@ -247,7 +247,7 @@ FocusLoop 不做 ADHD、智力、人格或心理健康诊断，也不根据行�
 4. **永不做什么**：不复制一套 reason/action 参考表（eval 直接驱动生产纯函数）。
 5. **数据与边界**：`shared-types/src/rescue.ts` + `intervention-policy/src/rescue.ts`；事件落本机。
 6. **状态与证据**：**分支完成** — `feat/agent-phase1-evals-rescue` @ `0f19c9f`，**当前没有 PR**。
-7. **已知限制**：未合并；桌面链路与 BREAK 计时器 E2E 被 Electron/Playwright 启动参数问题阻塞。
+7. **已知限制**：未合并；桌面链路与 BREAK 计时器的 E2E **在本机未通过**（`main` 上 `golden path` 为绿），归因见 #107。
 8. **依赖**：B2、B3、B4；完整六类 e2e 依赖 AG4/AG8 的动作契约。
 9. **怎么验证**：18 个 AG2 JSON 场景（happy/edge/adversarial）重复运行结果一致。
 

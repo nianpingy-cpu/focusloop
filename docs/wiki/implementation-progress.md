@@ -8,14 +8,14 @@
 
 ## 台账总表
 
-| 切片               | 日期       | 范围                               | 状态         | 证据                                                           | 已知限制                            |
-| ------------------ | ---------- | ---------------------------------- | ------------ | -------------------------------------------------------------- | ----------------------------------- |
-| AG1 (#99)          | 2026-09-20 | 有界上下文、omission、Inspector    | 已合并       | `63acc28`                                                      | 13 类事件投影 allowlist 在分支      |
-| AG2 (#100)         | 2026-09-20 | 六类卡点原因，原因先于行动         | 已合并       | `534bc1c`                                                      | 动作层未闭环（AG4/AG8）             |
-| AG3 (#101)         | 2026-09-20 | Tutor 契约、引擎、transcript、面板 | **PR 已开**  | PR [#101](https://github.com/nianpingy-cpu/focusloop/pull/101) | 未合并；领域层英文字符串违反 i18n   |
-| Phase 0 / Slice 1  | 2026-09-21 | AG10 harness + AG1 字段投影        | **分支完成** | `0f19c9f`（无 PR）                                             | 未合并；`main` 上没有 `agent-evals` |
-| Phase 1 / Slice 2  | 2026-09-21 | AG5 三档 + 重新参与指标            | **分支完成** | `0f19c9f`（无 PR）                                             | 未合并；E2E 阻塞；指标口径待改名    |
-| Phase 1 / AG2 切片 | 2026-09-22 | rescue plan + outcome evaluator    | **分支完成** | `0f19c9f`（无 PR）                                             | 未合并；E2E 阻塞                    |
+| 切片               | 日期       | 范围                               | 状态         | 证据                                                           | 已知限制                                        |
+| ------------------ | ---------- | ---------------------------------- | ------------ | -------------------------------------------------------------- | ----------------------------------------------- |
+| AG1 (#99)          | 2026-09-20 | 有界上下文、omission、Inspector    | 已合并       | `63acc28`                                                      | 13 类事件投影 allowlist 在分支                  |
+| AG2 (#100)         | 2026-09-20 | 六类卡点原因，原因先于行动         | 已合并       | `534bc1c`                                                      | 动作层未闭环（AG4/AG8）                         |
+| AG3 (#101)         | 2026-09-20 | Tutor 契约、引擎、transcript、面板 | **PR 已开**  | PR [#101](https://github.com/nianpingy-cpu/focusloop/pull/101) | 未合并；领域层英文字符串违反 i18n               |
+| Phase 0 / Slice 1  | 2026-09-21 | AG10 harness + AG1 字段投影        | **分支完成** | `0f19c9f`（无 PR）                                             | 未合并；`main` 上没有 `agent-evals`             |
+| Phase 1 / Slice 2  | 2026-09-21 | AG5 三档 + 重新参与指标            | **分支完成** | `0f19c9f`（无 PR）                                             | 未合并；指标口径待改名；本机 E2E 未通过（#107） |
+| Phase 1 / AG2 切片 | 2026-09-22 | rescue plan + outcome evaluator    | **分支完成** | `0f19c9f`（无 PR）                                             | 未合并；本机 E2E 未通过（#107）                 |
 
 ## Phase 0 / Slice 1
 
@@ -80,9 +80,16 @@
 
 ### 分支本地证据（不可作为合并证据）
 
-- **E2E 没有跑过**：启动应用前被当前 Electron/Playwright 组合阻断——Electron 44 拒绝 Playwright 注入的
-  `--remote-debugging-port=0`，因此**没有执行到任何产品断言**。按状态阶梯，这一条直接阻止本切片标为
-  「完成」，它只能停在「分支完成」。
+- **E2E 在本机没有通过**（已实测，2026-09-22）：`pnpm e2e` **能**启动 Electron 并运行测试，并不是“启动前被阻断”。实测结果是
+  `golden-path.spec.ts:124`（learn → interrupted → resume）失败，套件在该用例处中止，其余 16 个未运行；
+  而 `main` @ `e596d6f` 上的 `golden path` 检查是绿的（[CI run](https://github.com/nianpingy-cpu/focusloop/actions/runs/35619326202)）。
+  因此本切片停在「分支完成」的原因不是环境阻断，而是**本机 E2E 未通过**，
+  差异归因见 #107。
+
+> 之前这里写的是“Electron 44 拒绝 Playwright 注入的 `--remote-debugging-port=0`，没有执行到任何产品断言”。
+> 那句话是从未合并切片的文档里抄来的，**我没有先测就写进了台账**。保留这句话是为了说明它错在哪里：
+> 套件确实跑起来了。
+
 - 仓库级 737 项测试（分支本地）；`@focusloop/continuity` 41、`@focusloop/agent-core` 230、
   `@focusloop/persistence` 48、`@focusloop/agent-evals` 12 项。
 - 全仓库 typecheck、lint、build、文档、Prettier 和 diff whitespace 校验通过。
@@ -112,7 +119,8 @@
 ### 已知未完成
 
 - AG2 已有 offered → accept → plan → continue 桌面链路，以及 BREAK 暂停/恢复计时器的 E2E；
-  **该测试仍在应用启动前被 Electron 44 拒绝 `--remote-debugging-port=0` 阻塞**。
+  **本机跑 `pnpm e2e` 时该套件在 `golden-path.spec.ts:124`（interrupted → resume）失败、后续用例未运行**
+  （`main` 上 `golden path` 为绿；上文 §分支本地证据 记录了原“启动前被阻断”说法的来源与更正）。归因与修复见 #107。
 - 临时任务变更、工具执行和完整六类 E2E 仍需 AG4/AG8 的 action contract。
 
 ## 未合并清单（本页必须持续跟踪）
@@ -124,8 +132,10 @@
 
 ## 开放问题（不得随状态一起丢失）
 
-1. **E2E 启动阻塞**：Electron 44 + Playwright 的 `--remote-debugging-port=0` 不兼容，使所有新增切片无法
-   进入「E2E 验证」。这是基础设施问题而非产品问题，但它把大量切片钉在「分支完成」。
+1. **本机 E2E 与 CI 不一致**：本机 `pnpm e2e` 在 `golden-path.spec.ts:124` 失败而 CI 的 `golden path` 为绿。
+   归因见 #107。两种读法都有可能（本机与两个 CI runner 之一是同一个 Windows），本页**不判定哪一边正确**，
+   只记录事实：本机跑不出绿。这是**测试可信度**问题，
+   不是“启动被阻断”。
 2. **Resume 指标口径**：现有「成功率」把再次求助也算成成功，需按
    [Resume 策略与指标](./resume-policy-and-success.md) 拆成 `reengaged` / `progressed` / `stalledAgain`。
 3. **遥测表述冲突**：方案页 AG10 的「上报聚合指标」与 `docs/privacy.md` 的 “No telemetry” 冲突；
@@ -136,5 +146,5 @@
 ### 下一切片
 
 1. 把 `0f19c9f` 拆成可评审切片并开 PR（先 AG10 harness + AG1 投影，再 AG5 三档，再 AG2 rescue）。
-2. 解决 E2E 启动阻塞，否则状态阶梯的上两级永远不可用。
+2. 解决本机 E2E 与 CI 不一致的问题（#107），否则状态阶梯的上两级不可用。
 3. 然后按 [交付路线图](./delivery-roadmap.md) 进入 AG9 Model Runtime。
