@@ -370,13 +370,18 @@ export class FocusPage implements OnDestroy {
   /** Keep the local commitment coherent when the lazy focus page is entered or rebuilt. */
   private readonly syncTimer = effect(() => {
     const snapshot = this.snapshot();
-    untracked(() =>
+    untracked(() => {
       this.focusTimer.sync(
         snapshot?.session.id,
         snapshot?.session.currentTaskId,
         Date.now(),
-      ),
-    );
+      );
+      if (this.focusTimer.state().phase === 'active' && this.timerHandle === null) {
+        this.startInterval();
+      } else if (this.focusTimer.state().phase !== 'active') {
+        this.clearTimer();
+      }
+    });
   });
 
   /** Set by the two ways out of the chooser: both destroy the focused element, so both owe it on. */
