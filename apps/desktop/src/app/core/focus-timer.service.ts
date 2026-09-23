@@ -1,9 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import {
-  createFocusTimer,
-  tick,
-  type FocusTimerState,
-} from './focus-timer';
+import { createFocusTimer, tick, type FocusTimerState } from './focus-timer';
 
 interface FocusTimerOwner {
   readonly sessionId: string;
@@ -26,11 +22,7 @@ export class FocusTimerService {
   private owner: FocusTimerOwner | null = null;
 
   /** Reconcile the local commitment with the session currently published by the main process. */
-  sync(
-    sessionId: string | undefined,
-    taskId: string | undefined,
-    now: number,
-  ): void {
+  sync(sessionId: string | undefined, taskId: string | undefined, now: number): void {
     if (sessionId === undefined || taskId === undefined) {
       this.owner = null;
       this.state.set(createFocusTimer());

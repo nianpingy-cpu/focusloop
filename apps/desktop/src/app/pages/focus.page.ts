@@ -371,11 +371,7 @@ export class FocusPage implements OnDestroy {
   private readonly syncTimer = effect(() => {
     const snapshot = this.snapshot();
     untracked(() => {
-      this.focusTimer.sync(
-        snapshot?.session.id,
-        snapshot?.session.currentTaskId,
-        Date.now(),
-      );
+      this.focusTimer.sync(snapshot?.session.id, snapshot?.session.currentTaskId, Date.now());
       if (this.focusTimer.state().phase === 'active' && this.timerHandle === null) {
         this.startInterval();
       } else if (this.focusTimer.state().phase !== 'active') {
