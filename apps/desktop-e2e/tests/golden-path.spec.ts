@@ -900,6 +900,7 @@ test('the reason the learner gives is answered according to which kind of stuck 
 });
 
 test('an active focus commitment survives leaving and returning to the route', async () => {
+  await clickSidebarLink('Home');
   await window.getByTestId('course-card').first().getByTestId('start-session').click();
   await window.getByTestId('start-task').first().click();
 
