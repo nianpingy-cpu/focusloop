@@ -33,6 +33,12 @@ import { focusableWithin, nextIndex } from '../core/focus-trap';
             <p class="muted">{{ context(view) }}</p>
           </header>
 
+          @if (view.card.refresher; as refresher) {
+            <p class="resume__refresher" data-testid="resume-refresher">
+              {{ i18n.translate(refresher) }}
+            </p>
+          }
+
           <div class="resume__grid">
             <section>
               <h3>{{ t('resume.done') }}</h3>
