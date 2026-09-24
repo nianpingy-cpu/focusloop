@@ -8,13 +8,13 @@ import {
   DEFAULT_FOCUS_MINUTES,
   addMinute,
   createFocusTimer,
-  formatFocusTime,
   pause as pauseTimer,
   reset as resetTimer,
   resume as resumeTimer,
   start as startTimer,
   tick as tickTimer,
 } from '../core/focus-timer';
+import { focusClockValue } from '../core/focus-clock-value';
 import { I18nService } from '../core/i18n/i18n.service';
 import { STATE_KEYS, STUCK_REASON_KEYS, kindLabel } from '../core/i18n/labels';
 import { formatDuration } from '../core/format';
@@ -444,10 +444,7 @@ export class FocusPage implements OnDestroy {
     return formatDuration(this.snapshot()?.progress.elapsedMs ?? 0);
   }
   protected clockValue(): string {
-    const milliseconds =
-      this.timer().remainingMs ||
-      (this.phase() === 'active' ? (this.task()?.estimatedMinutes ?? 0) * 60_000 : 0);
-    return formatFocusTime(milliseconds);
+    return focusClockValue(this.timer(), this.phase(), this.task()?.estimatedMinutes ?? 0);
   }
   protected clockDashOffset(): number {
     return this.phase() === 'complete' ? 0 : CLOCK_CIRCUMFERENCE * (1 - this.timer().progress);
