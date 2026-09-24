@@ -104,7 +104,7 @@ import {
                   <p class="muted small">{{ sourceLine() }}</p>
                 } @else {
                   <p class="eyebrow">{{ t('tutor.noAnswer') }}</p>
-                  <p class="tutor__text">{{ result.reason }}</p>
+                  <p class="tutor__text">{{ t(result.reasonKey) }}</p>
                   @if (result.conceptTitle) {
                     <p class="muted small">{{ t('tutor.concept') }}: {{ result.conceptTitle }}</p>
                   }

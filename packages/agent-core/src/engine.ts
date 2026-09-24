@@ -73,8 +73,6 @@ import { buildTutorPrompt, buildTutorRetryPrompt, isRetryable, readTutorReply } 
 import {
   TutorTranscript,
   composeRetryPrompt,
-  describeRejection,
-  describeUnavailable,
   fallbackFor,
   formatAnswer,
   providerInfo,
@@ -404,12 +402,7 @@ export class FocusLoopEngine {
     });
 
     if (built.status === 'refused') {
-      return this.unavailable(
-        built.reason,
-        describeUnavailable(built.reason),
-        context,
-        built.report,
-      );
+      return this.unavailable(built.reason, context, built.report);
     }
 
     /*
@@ -428,12 +421,7 @@ export class FocusLoopEngine {
        * output is documented never to parse. Calling it would produce a rejection and then a retry,
        * which is two calls and no answer — so the honest outcome is the one the learner can act on.
        */
-      return this.unavailable(
-        'no-model',
-        describeUnavailable('no-model'),
-        context,
-        unsentReport(built.report),
-      );
+      return this.unavailable('no-model', context, unsentReport(built.report));
     }
 
     let completion = await this.complete(built.system, built.prompt);
@@ -446,7 +434,6 @@ export class FocusLoopEngine {
        */
       return this.unavailable(
         'provider-failed',
-        describeUnavailable('provider-failed'),
         context,
         built.report,
         providerInfo(provider, true, completion.failure),
@@ -539,7 +526,6 @@ export class FocusLoopEngine {
         if (completion.degraded) {
           return this.unavailable(
             'provider-failed',
-            describeUnavailable('provider-failed'),
             context,
             { sent, omitted: omissions },
             providerInfo(provider, true, completion.failure),
@@ -561,7 +547,7 @@ export class FocusLoopEngine {
           status: 'rejected',
           reason: reading.reason,
           provider: providerInfo(provider, false, null),
-          fallback: fallbackFor(describeRejection(reading.reason), context),
+          fallback: fallbackFor(reading.reason, context),
         },
         context: { sent, omitted: [...omissions] },
       };
@@ -604,7 +590,6 @@ export class FocusLoopEngine {
   /** One shape for "no model answered", so the four reasons cannot drift apart in three call sites. */
   private unavailable(
     reason: TutorUnavailableReason,
-    sentence: string,
     context: AgentContext,
     report: TutorContextReport,
     provider?: TutorProviderInfo,
@@ -614,7 +599,7 @@ export class FocusLoopEngine {
         status: 'unavailable',
         reason,
         provider: provider ?? providerInfo(this.providers.primary, false, null),
-        fallback: fallbackFor(sentence, context),
+        fallback: fallbackFor(reason, context),
       },
       context: report,
     };

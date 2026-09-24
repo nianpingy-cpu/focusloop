@@ -352,6 +352,24 @@ const en = {
   'tutor.concept': 'Concept',
   'tutor.step': 'Step',
   'tutor.instructions': 'What this step asks',
+  'tutor.unavailable.no-question':
+    'There was no question in that message, so there was nothing to ask about.',
+  'tutor.unavailable.request-too-long':
+    'Your question and this step do not both fit. Try a shorter question.',
+  'tutor.unavailable.no-model':
+    'No model is connected, so there is no answer this time. Everything above is still yours to work from.',
+  'tutor.unavailable.provider-failed':
+    'The model could not be reached, so there is no answer right now. The step and material are still here.',
+  'tutor.rejection.unparseable':
+    'The model did not answer in the shape the tutor needs, and asking it once more did not help.',
+  'tutor.rejection.unexpected-part':
+    'The model gave a kind of answer this question does not allow, and asking it once more did not help.',
+  'tutor.rejection.missing-part':
+    'The model left out something this kind of question needs, and asking it once more did not help.',
+  'tutor.rejection.unquoted-confirmation':
+    'The model did not quote anything you wrote, so the tutor will not show a confirmation of it.',
+  'tutor.rejection.not-from-the-material':
+    'The model answered from a section that is not in front of you, so the tutor will not show it.',
 } as const;
 
 export default en;

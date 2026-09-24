@@ -232,6 +232,9 @@ export type TutorUnavailableReason =
    */
   | 'request-too-long';
 
+/** Closed reasons that can be translated by the renderer on a tutor fallback. */
+export type TutorFallbackReason = TutorRejection | TutorUnavailableReason;
+
 export interface TutorProviderInfo {
   readonly id: string;
   readonly model: string;
@@ -251,14 +254,11 @@ export interface TutorProviderInfo {
  * which meant the two states with no section carried no passage at all. `instructions` is here for the
  * same reason: with no material, the step the learner is on is the only ground there is.
  *
- * `reason` is an English sentence the domain writes, not a `MessageKey`. That is a deliberate
- * departure from the design note, which said `DomainMessageKey` — this codebase's convention for
- * learner-visible, domain-explained prose is a plain string (`CompletionResult.failure.reason`,
- * `LearningEvent.reason`), and the alternative would be ~20 new bilingual keys in a change with no
- * renderer in it. The *chrome* around the fallback (labels, buttons) is a message key as always.
+ * `reason` is a closed code. The renderer maps it to a `DomainMessageKey`, so this package never
+ * chooses the learner's language or writes the fallback sentence.
  */
 export interface TutorFallback {
-  readonly reason: string;
+  readonly reason: TutorFallbackReason;
   readonly excerpt: MaterialExcerpt;
   readonly conceptTitle: string | null;
   readonly taskTitle: string | null;

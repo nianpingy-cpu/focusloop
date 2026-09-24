@@ -3,7 +3,6 @@ import { ProviderError, createProviderSelection } from '@focusloop/llm-provider'
 import { TUTOR_LIMITS, type AIProvider, type CompletionRequest } from '@focusloop/shared-types';
 import { EngineError } from './engine';
 import { DEMO_COURSE_ID } from './demo-course';
-import { describeRejection, describeUnavailable } from './tutor-ask';
 import { createTestEngine, type TestEngine } from './test-helpers';
 
 function failingProvider(): AIProvider & { readonly requests: CompletionRequest[] } {
@@ -872,7 +871,7 @@ describe('FocusLoopEngine', () => {
           inputCharacters: 0,
           excerptCharacters: 0,
         });
-        expect(answer.outcome.fallback.reason).toBe(describeUnavailable('no-model'));
+        expect(answer.outcome.fallback.reason).toBe('no-model');
         // The excerpt is the object rather than a nullable source, so "no section" is an empty excerpt
         // with a heading of `null` rather than a second absent value for the screen to branch on.
         expect(answer.outcome.fallback.excerpt).toEqual({
@@ -902,7 +901,7 @@ describe('FocusLoopEngine', () => {
         // Not `no-model`: the provider is online and would have answered. A learner whose message was
         // empty is told about their message.
         expect(answer.outcome.reason).toBe('no-question');
-        expect(answer.outcome.fallback.reason).toBe(describeUnavailable('no-question'));
+        expect(answer.outcome.fallback.reason).toBe('no-question');
       } finally {
         scripted.close();
       }
@@ -1022,7 +1021,7 @@ describe('FocusLoopEngine', () => {
         expect(answer.outcome.status).toBe('rejected');
         if (answer.outcome.status !== 'rejected') return;
         expect(answer.outcome.reason).toBe('unquoted-confirmation');
-        expect(answer.outcome.fallback.reason).toBe(describeRejection('unquoted-confirmation'));
+        expect(answer.outcome.fallback.reason).toBe('unquoted-confirmation');
       } finally {
         scripted.close();
       }

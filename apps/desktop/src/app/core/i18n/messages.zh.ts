@@ -338,5 +338,16 @@ export const zh: Record<MessageKey, string> = {
   'tutor.concept': '概念',
   'tutor.step': '步骤',
   'tutor.instructions': '这一步要做什么',
+  'tutor.unavailable.no-question': '这条消息里没有问题，所以导师无从回答。',
+  'tutor.unavailable.request-too-long': '你的问题和当前步骤无法同时放进上下文，请把问题缩短一些。',
+  'tutor.unavailable.no-model':
+    '当前没有连接模型，所以这次无法作答。你仍然可以根据上面的内容继续学习。',
+  'tutor.unavailable.provider-failed': '目前无法连接模型，所以暂时没有回答。步骤和材料仍然在这里。',
+  'tutor.rejection.unparseable': '模型的回答格式不符合导师的要求，再试一次也没有改善。',
+  'tutor.rejection.unexpected-part': '模型给出了这种问题不允许的回答内容，再试一次也没有改善。',
+  'tutor.rejection.missing-part': '模型漏掉了这种问题所需的内容，再试一次也没有改善。',
+  'tutor.rejection.unquoted-confirmation': '模型没有引用你写过的话，因此导师不会把它显示为确认。',
+  'tutor.rejection.not-from-the-material':
+    '模型引用的章节不在你当前查看的内容中，因此导师不会显示这条回答。',
   'reason.none': '现在不需要任何建议。',
 };

@@ -6,11 +6,10 @@ import {
   type ProviderFailure,
   type TutorContextReport,
   type TutorFallback,
+  type TutorFallbackReason,
   type TutorPart,
   type TutorProviderInfo,
-  type TutorRejection,
   type TutorTurn,
-  type TutorUnavailableReason,
 } from '@focusloop/shared-types';
 
 /**
@@ -245,54 +244,6 @@ export function providerInfo(
 }
 
 /**
- * Why no model answered, in the domain's own words.
- *
- * Plain English rather than a `MessageKey`, which is the departure the contract documents: this
- * codebase's convention for learner-visible, domain-explained prose is a string (`LearningEvent.reason`,
- * `CompletionResult.failure.reason`), and the alternative is a set of bilingual keys in a change with no
- * renderer in it. The chrome around the fallback stays a message key.
- *
- * Each sentence says which of the four happened, because they call for different things from the
- * learner: two of them he said something the tutor could not use, and two of them the tutor could not
- * reach a model.
- */
-export function describeUnavailable(reason: TutorUnavailableReason): string {
-  switch (reason) {
-    case 'no-question':
-      return 'There was no question in that message, so there was nothing to ask about.';
-    case 'request-too-long':
-      return 'Your question and this step do not both fit, so the tutor did not ask the model. Try a shorter question.';
-    case 'no-model':
-      return 'No model is connected, so the tutor has nothing to answer with. Everything above is still yours to work from.';
-    case 'provider-failed':
-      return 'The model could not be reached, so the tutor cannot answer right now. The step and the material are still here.';
-  }
-}
-
-/**
- * Why a reply was refused, in the domain's own words.
- *
- * The two grounding reasons are worded as a refusal to *show* rather than as a model error, because
- * that is the product decision: an answer whose confirmation does not quote the learner, or which
- * cites a section that is not in front of them, is not shown at all. Saying "the model made a mistake"
- * would invite the learner to treat the rest of it as nearly right.
- */
-export function describeRejection(reason: TutorRejection): string {
-  switch (reason) {
-    case 'unparseable':
-      return 'The model did not answer in the shape the tutor needs, and asking it once more did not help.';
-    case 'unexpected-part':
-      return 'The model answered with something this question does not allow, and asking it once more did not help.';
-    case 'missing-part':
-      return 'The model left out something this kind of question is for, and asking it once more did not help.';
-    case 'unquoted-confirmation':
-      return 'The model did not quote anything you wrote, so the tutor will not show you a confirmation of it.';
-    case 'not-from-the-material':
-      return 'The model answered from a section that is not the one in front of you, so the tutor will not show it.';
-  }
-}
-
-/**
  * What the learner sees when there is no answer.
  *
  * Carries what the app already knows and says so when that is nothing much: `reason` is the only part
@@ -301,7 +252,10 @@ export function describeRejection(reason: TutorRejection): string {
  * than as a nullable source, so "no section" is an empty excerpt with a heading of `null` rather than a
  * second absent value to branch on.
  */
-export function fallbackFor(reason: string, context: AgentContext | null): TutorFallback {
+export function fallbackFor(
+  reason: TutorFallbackReason,
+  context: AgentContext | null,
+): TutorFallback {
   const excerpt: MaterialExcerpt = context?.material ?? {
     materialId: null,
     title: null,

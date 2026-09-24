@@ -2,16 +2,19 @@ import { describe, expect, it } from 'vitest';
 import {
   TUTOR_MODES,
   TUTOR_PART_KINDS,
+  DOMAIN_MESSAGE_KEYS,
   type MaterialExcerpt,
   type SessionSnapshot,
   type TutorAnswer,
   type TutorOutcome,
 } from '@focusloop/shared-types';
 import en from './i18n/messages.en';
+import { zh } from './i18n/messages.zh';
 import {
   TUTOR_MODE_KEYS,
   TUTOR_MODE_ORDER,
   TUTOR_PART_KEYS,
+  TUTOR_FALLBACK_KEYS,
   buildTutorView,
   tutorAnswerApplies,
   tutorEntryVisible,
@@ -70,6 +73,19 @@ function answer(
 }
 
 describe('the translation keys the tutor owns', () => {
+  it('maps every fallback code to a distinct English and Chinese sentence', () => {
+    const reasons = Object.keys(TUTOR_FALLBACK_KEYS) as (keyof typeof TUTOR_FALLBACK_KEYS)[];
+    const keys = reasons.map((reason) => TUTOR_FALLBACK_KEYS[reason]);
+
+    expect(new Set(keys).size).toBe(reasons.length);
+    expect(DOMAIN_MESSAGE_KEYS).toEqual(expect.arrayContaining(keys));
+    for (const key of keys) {
+      expect(en[key].trim()).not.toBe('');
+      expect(zh[key].trim()).not.toBe('');
+      expect(zh[key]).not.toBe(en[key]);
+    }
+  });
+
   it('names every mode in the contract, exactly once', () => {
     /*
      * Asserted against `TUTOR_MODES` rather than against a list written here, so a seventh mode added to
@@ -164,7 +180,7 @@ describe('buildTutorView', () => {
         reason: 'unparseable',
         provider: { id: 'scripted', model: 'm', degraded: false, failure: null },
         fallback: {
-          reason: 'The model did not answer in the shape the tutor needs.',
+          reason: 'unparseable',
           excerpt: EXCERPT,
           conceptTitle: 'Rotations',
           taskTitle: 'Read section 3',
@@ -175,7 +191,7 @@ describe('buildTutorView', () => {
 
     expect(view.status).toBe('no-answer');
     if (view.status !== 'no-answer') return;
-    expect(view.reason).toBe('The model did not answer in the shape the tutor needs.');
+    expect(view.reasonKey).toBe('tutor.rejection.unparseable');
     expect(view.conceptTitle).toBe('Rotations');
     expect(view.taskTitle).toBe('Read section 3');
     expect(view.instructions).toBe('Read it and note the invariant');
@@ -189,7 +205,7 @@ describe('buildTutorView', () => {
         reason: 'no-model',
         provider: { id: 'mock', model: 'mock', degraded: false, failure: null },
         fallback: {
-          reason: 'No model is connected.',
+          reason: 'no-model',
           excerpt: EMPTY_EXCERPT,
           conceptTitle: null,
           taskTitle: null,
@@ -200,7 +216,7 @@ describe('buildTutorView', () => {
 
     expect(view.status).toBe('no-answer');
     if (view.status !== 'no-answer') return;
-    expect(view.reason).toBe('No model is connected.');
+    expect(view.reasonKey).toBe('tutor.unavailable.no-model');
     expect(view.excerpt).toEqual(EMPTY_EXCERPT);
     expect(view.conceptTitle).toBeNull();
   });
@@ -241,7 +257,7 @@ describe('buildTutorView', () => {
           reason: 'missing-part',
           provider: { id: 'scripted', model: 'm', degraded: false, failure: null },
           fallback: {
-            reason: 'The model left something out.',
+            reason: 'missing-part',
             excerpt: EMPTY_EXCERPT,
             conceptTitle: null,
             taskTitle: null,

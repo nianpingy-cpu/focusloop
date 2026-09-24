@@ -4,15 +4,11 @@ import {
   type AgentContext,
   type MaterialExcerpt,
   type TutorPart,
-  type TutorRejection,
-  type TutorUnavailableReason,
 } from '@focusloop/shared-types';
 import { readTutorReply } from './tutor';
 import {
   TutorTranscript,
   composeRetryPrompt,
-  describeRejection,
-  describeUnavailable,
   fallbackFor,
   formatAnswer,
   providerInfo,
@@ -276,42 +272,10 @@ describe('providerInfo', () => {
   });
 });
 
-describe('the sentences the learner is shown', () => {
-  const unavailableReasons: readonly TutorUnavailableReason[] = [
-    'no-model',
-    'provider-failed',
-    'no-question',
-    'request-too-long',
-  ];
-  const rejectionReasons: readonly TutorRejection[] = [
-    'unparseable',
-    'unexpected-part',
-    'missing-part',
-    'unquoted-confirmation',
-    'not-from-the-material',
-  ];
-
-  it('says something different for each reason', () => {
-    /*
-     * The assertion is distinctness, not non-emptiness. Every branch returns a non-empty string by
-     * construction, so a loop asserting that could not fail; what can fail is two members sharing a
-     * sentence, which is a rename away and would leave the learner unable to tell "there was no
-     * question" from "no model is connected" — the two things the fallback exists to separate.
-     */
-    const unavailable = unavailableReasons.map(describeUnavailable);
-    const rejected = rejectionReasons.map(describeRejection);
-
-    expect(new Set(unavailable).size, unavailable.join(' | ')).toBe(unavailableReasons.length);
-    expect(new Set(rejected).size, rejected.join(' | ')).toBe(rejectionReasons.length);
-    for (const sentence of [...unavailable, ...rejected])
-      expect(sentence.length).toBeGreaterThan(20);
-  });
-});
-
 describe('fallbackFor', () => {
-  it('carries the step and the material the app already knows', () => {
-    expect(fallbackFor('because', contextWith())).toEqual({
-      reason: 'because',
+  it('carries a closed reason code, the step and the material the app already knows', () => {
+    expect(fallbackFor('no-model', contextWith())).toEqual({
+      reason: 'no-model',
       excerpt: EXCERPT,
       conceptTitle: 'Rotations',
       taskTitle: 'Read section 3',
@@ -323,7 +287,7 @@ describe('fallbackFor', () => {
     // `excerpt` is non-nullable in the contract on purpose: the states that need a fallback are exactly
     // the ones where there is no section, so a second absent value would be a second thing to branch on
     // in the screen that most needs to be simple.
-    const fallback = fallbackFor('because', null);
+    const fallback = fallbackFor('no-question', null);
 
     expect(fallback.excerpt).toEqual({
       materialId: null,
@@ -335,6 +299,6 @@ describe('fallbackFor', () => {
     expect(fallback.conceptTitle).toBeNull();
     expect(fallback.taskTitle).toBeNull();
     expect(fallback.instructions).toBeNull();
-    expect(fallback.reason).toBe('because');
+    expect(fallback.reason).toBe('no-question');
   });
 });
