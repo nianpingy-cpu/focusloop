@@ -71,6 +71,21 @@ describe('AG2 rescue plans', () => {
       buildRescuePlan({ interventionId: 'i1', sessionId: 's1', taskId: '', action: 'HINT' }),
     ).toBeNull();
   });
+  it('resolves action from the decision and embedded intervention, and rejects an empty task', () => {
+    expect(
+      buildRescuePlan({
+        interventionId: 'i1',
+        sessionId: 's1',
+        decision: decision('BREAK'),
+      })?.action,
+    ).toBe('BREAK');
+    expect(
+      buildRescuePlan({ intervention: { id: 'i2', sessionId: 's2', action: 'EXAMPLE' } })?.action,
+    ).toBe('EXAMPLE');
+    expect(
+      buildRescuePlan({ interventionId: 'i1', sessionId: 's1', taskId: '', action: 'HINT' }),
+    ).toBeNull();
+  });
   it('reveals the plan only after acceptance', () => {
     const seed = { interventionId: 'i1', sessionId: 's1', taskId: 't1' };
     expect(buildRescueView(decision('HINT'), seed, 'offered').plan).toBeNull();
@@ -160,5 +175,30 @@ describe('AG2 rescue success evaluator', () => {
         rescueSuccessWindowMs: -1,
       }),
     ).toThrow(RangeError);
+  });
+  it('uses accepted outcome time, ignores invalid evidence and accepts untasked events for an untasked plan', () => {
+    const untasked = buildRescuePlan(decision('HINT'), {
+      interventionId: 'i2',
+      sessionId: 'session-1',
+    })!;
+    expect(
+      evaluateRescueSuccess({
+        plan: untasked,
+        outcome: { accepted: true, dismissed: false, at: T0 },
+        events: [
+          { ...event('other-task', 'TASK_COMPLETED', at(1)), payload: { taskId: 'task-1' } },
+          { ...event('untasked', 'QUIZ_CORRECT', at(2)), payload: {} },
+        ],
+        now: at(3),
+      }),
+    ).toMatchObject({ status: 'succeeded', evidenceEventIds: ['untasked'] });
+    expect(
+      evaluateRescueSuccess({
+        plan,
+        outcome: { accepted: true, dismissed: true, at: T0 },
+        events: [event('ignored', 'TASK_COMPLETED', at(1))],
+        now: at(300_000),
+      }),
+    ).toMatchObject({ status: 'pending', evidenceEventIds: [] });
   });
 });

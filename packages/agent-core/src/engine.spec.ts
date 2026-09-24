@@ -336,6 +336,52 @@ describe('FocusLoopEngine', () => {
       expect(ctx.engine.getPendingRescue(session.id)).toBeNull();
     });
 
+    it('ignores an unknown rescue resolution and does not treat Continue as acceptance', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      const asked = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { reason: 'went-wrong' },
+      });
+      expect(asked.rescue?.phase).toBe('offered');
+      expect(
+        ctx.engine.resolveRescue({
+          sessionId: session.id,
+          interventionId: 'missing-intervention',
+          resolution: 'accept',
+        }),
+      ).toMatchObject({ outcome: null });
+      expect(
+        ctx.engine.resolveRescue({
+          sessionId: session.id,
+          interventionId: asked.interventionId!,
+          resolution: 'continue',
+        }),
+      ).toMatchObject({ outcome: null, rescue: { phase: 'offered' } });
+      expect(ctx.engine.listOutcomes(session.id)).toHaveLength(0);
+    });
+
+    it('dismisses an offered rescue once and keeps the saved outcome on replay', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      const asked = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { reason: 'went-wrong' },
+      });
+      const request = {
+        sessionId: session.id,
+        interventionId: asked.interventionId!,
+        resolution: 'dismiss' as const,
+      };
+      const dismissed = ctx.engine.resolveRescue(request);
+      expect(dismissed.outcome?.dismissed).toBe(true);
+      expect(dismissed.rescue).toBeNull();
+      expect(ctx.engine.resolveRescue(request).outcome).toEqual(dismissed.outcome);
+      expect(ctx.engine.listOutcomes(session.id)).toHaveLength(1);
+    });
+
     it('answers a reasoned help request through the engine, not only in the policy package', () => {
       /*
        * `docs/testing.md` asks agent-core to prove every policy rule *through the engine*, and the
