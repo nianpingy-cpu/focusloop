@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
 import type { ElementRef, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import type { MicroTask, MicroTaskKind, StuckReason } from '@focusloop/shared-types';
@@ -333,6 +333,8 @@ export class FocusPage implements OnDestroy {
   private readonly i18n = inject(I18nService);
   private timerHandle: ReturnType<typeof setInterval> | null = null;
   private timer = signal<FocusTimerState>(createFocusTimer());
+  private handledRescuePause = 0;
+  private handledRescueContinue = 0;
   private readonly completedView = signal(false);
   private readonly planOpenState = signal(PLAN_INITIAL_OPEN);
   protected readonly planOpen = this.planOpenState.asReadonly();
@@ -365,6 +367,20 @@ export class FocusPage implements OnDestroy {
   protected readonly railAttr = computed(() => (this.rail() ? '' : null));
   protected readonly plan = computed(() => buildPlan(this.openTasks()));
   protected readonly nextTask = computed<MicroTask | null>(() => this.openTasks()[0] ?? null);
+
+  /** A learner accepted a BREAK plan, so pause the local focus clock until Continue. */
+  private readonly followRescueTimer = effect(() => {
+    const pauseRequest = this.state.rescuePauseRequest();
+    const continueRequest = this.state.rescueContinueRequest();
+    if (pauseRequest > this.handledRescuePause) {
+      this.handledRescuePause = pauseRequest;
+      untracked(() => this.pause());
+    }
+    if (continueRequest > this.handledRescueContinue) {
+      this.handledRescueContinue = continueRequest;
+      untracked(() => this.resume());
+    }
+  });
 
   /** Set by the two ways out of the chooser: both destroy the focused element, so both owe it on. */
   private stuckReturnFocus = false;
@@ -573,6 +589,7 @@ export class FocusPage implements OnDestroy {
   }
   ngOnDestroy(): void {
     this.clearTimer();
+    this.followRescueTimer.destroy();
     this.manageStuckFocus.destroy();
   }
 
