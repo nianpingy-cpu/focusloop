@@ -104,7 +104,7 @@ import { focusableWithin, nextIndex } from '../core/focus-trap';
 })
 export class ResumeCardComponent implements OnDestroy {
   private readonly state = inject(AppStateService);
-  private readonly i18n = inject(I18nService);
+  protected readonly i18n = inject(I18nService);
 
   protected readonly t = this.i18n.t;
   protected readonly card = this.state.resumeCard;
