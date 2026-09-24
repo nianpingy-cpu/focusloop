@@ -14,6 +14,7 @@ import {
   parseNoArgs,
   parseTutorAsk,
   parseResolveIntervention,
+  parseResolveRescue,
   parseResumeDecision,
   parseSessionId,
   parseSetLocale,
@@ -168,6 +169,16 @@ export function createHandlers(service: FocusLoopService) {
       channel: IPC_CHANNELS.resolveIntervention,
       parse: parseResolveIntervention,
       handle: (request) => engine.resolveIntervention(request),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.getPendingRescue,
+      parse: parseSessionId,
+      handle: (sessionId) => engine.getPendingRescue(sessionId),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.resolveRescue,
+      parse: parseResolveRescue,
+      handle: (request) => engine.resolveRescue(request),
     }),
     defineHandler({
       channel: IPC_CHANNELS.getSimulatorAvailability,

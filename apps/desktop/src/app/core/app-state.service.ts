@@ -20,6 +20,7 @@ import type {
   Locale,
   MaterialDocument,
   ResumeCardView,
+  RescueView,
   AgentContextReport,
   TutorAnswer,
   TutorMode,
@@ -71,6 +72,9 @@ export class AppStateService {
   readonly dashboard = signal<DashboardSummary | null>(null);
   readonly decision = signal<InterventionDecision | null>(null);
   readonly interventionId = signal<string | null>(null);
+  readonly rescue = signal<RescueView | null>(null);
+  readonly rescuePauseRequest = signal(0);
+  readonly rescueContinueRequest = signal(0);
   readonly lastError = signal<string | null>(null);
   readonly busy = signal(false);
   readonly recentEvents = signal<readonly LearningEvent[]>([]);
@@ -145,6 +149,9 @@ export class AppStateService {
       this.snapshot.set(snapshot);
       this.dashboard.set(dashboard);
       this.agentContext.set(agentContext);
+      this.rescue.set(
+        snapshot === null ? null : await this.api.getPendingRescue(snapshot.session.id),
+      );
       this.resumeCard.set(
         snapshot === null ? null : await this.api.getResumeCard(snapshot.session.id),
       );
@@ -236,6 +243,7 @@ export class AppStateService {
       });
       this.resumeCard.set(null);
       this.decision.set(null);
+      this.rescue.set(null);
       await this.refreshDerived();
     });
   }
@@ -325,6 +333,11 @@ export class AppStateService {
   }
 
   async dismissIntervention(accepted: boolean): Promise<void> {
+    const rescue = this.rescue();
+    if (rescue !== null) {
+      await this.resolveRescue(accepted ? 'accept' : 'dismiss');
+      return;
+    }
     const interventionId = this.interventionId();
     if (interventionId === null) {
       this.decision.set(null);
@@ -339,6 +352,36 @@ export class AppStateService {
       });
       this.decision.set(null);
       this.interventionId.set(null);
+    });
+  }
+
+  async resolveRescue(resolution: 'accept' | 'dismiss' | 'continue'): Promise<void> {
+    const rescue = this.rescue();
+    if (rescue === null) return;
+    await this.run(async () => {
+      const response = await this.api.resolveRescue({
+        sessionId: rescue.sessionId,
+        interventionId: rescue.interventionId,
+        resolution,
+      });
+      if (
+        resolution === 'accept' &&
+        rescue.decision.action === 'BREAK' &&
+        response.outcome?.accepted
+      ) {
+        this.rescuePauseRequest.update((count) => count + 1);
+      }
+      if (
+        resolution === 'continue' &&
+        rescue.decision.action === 'BREAK' &&
+        response.outcome?.continuedAt !== undefined
+      ) {
+        this.rescueContinueRequest.update((count) => count + 1);
+      }
+      this.rescue.set(response.rescue);
+      this.decision.set(null);
+      this.interventionId.set(null);
+      this.dashboard.set(await this.api.getDashboard());
     });
   }
 
@@ -414,6 +457,7 @@ export class AppStateService {
     if (response === null) return;
     this.decision.set(response.decision);
     this.interventionId.set(response.interventionId);
+    this.rescue.set(response.rescue);
     if (response.resumeCard !== null) this.resumeCard.set(response.resumeCard);
   }
 
@@ -429,6 +473,7 @@ export class AppStateService {
     this.agentContext.set(await this.api.getAgentContext());
     if (snapshot !== null) {
       this.resumeCard.set(await this.api.getResumeCard(snapshot.session.id));
+      this.rescue.set(await this.api.getPendingRescue(snapshot.session.id));
       this.recentEvents.set(await this.api.listEvents(snapshot.session.id));
     } else {
       /*
@@ -437,6 +482,7 @@ export class AppStateService {
        * look wrong, it blocks the screen it is covering.
        */
       this.resumeCard.set(null);
+      this.rescue.set(null);
       this.recentEvents.set([]);
     }
     await this.refreshToday();

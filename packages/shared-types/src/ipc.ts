@@ -4,6 +4,7 @@ import type { LearningCheckpoint } from './checkpoint';
 import type { DashboardSummary } from './dashboard';
 import type { LearningEvent, SessionEndReason } from './events';
 import type { InterventionDecision, InterventionOutcome } from './intervention';
+import type { RescueView } from './rescue';
 import type { InsightsRequest, InsightsSummary } from './insights';
 import type { MaterialDocument } from './material';
 import type { AppSettings, Locale, ThemePreference } from './settings';
@@ -40,6 +41,8 @@ export const IPC_CHANNELS = {
   askTutor: 'focusloop:tutor:ask',
   listOutcomes: 'focusloop:outcome:list',
   resolveIntervention: 'focusloop:intervention:resolve',
+  getPendingRescue: 'focusloop:intervention:pending-rescue',
+  resolveRescue: 'focusloop:intervention:resolve-rescue',
   simulateEvent: 'focusloop:simulator:dispatch',
   getSimulatorAvailability: 'focusloop:simulator:available',
   getBridgeInfo: 'focusloop:bridge:info',
@@ -116,6 +119,7 @@ export interface DispatchEventResponse {
   /** Non-null whenever the policy produced something other than NO_ACTION. */
   readonly decision: InterventionDecision | null;
   readonly interventionId: string | null;
+  readonly rescue: RescueView | null;
 }
 
 export interface ResolveInterventionRequest {
@@ -124,6 +128,17 @@ export interface ResolveInterventionRequest {
   readonly dismissed: boolean;
   readonly taskCompleted: boolean;
   readonly quizOutcome?: 'correct' | 'incorrect' | null;
+}
+
+export interface ResolveRescueRequest {
+  readonly sessionId: string;
+  readonly interventionId: string;
+  readonly resolution: 'accept' | 'dismiss' | 'continue';
+}
+
+export interface ResolveRescueResponse {
+  readonly outcome: InterventionOutcome | null;
+  readonly rescue: RescueView | null;
 }
 
 export interface SessionSnapshot {
@@ -210,6 +225,8 @@ export interface FocusLoopApi {
   getDashboard(): Promise<DashboardSummary>;
   listOutcomes(sessionId: string): Promise<readonly InterventionOutcome[]>;
   resolveIntervention(request: ResolveInterventionRequest): Promise<InterventionOutcome | null>;
+  getPendingRescue(sessionId: string): Promise<RescueView | null>;
+  resolveRescue(request: ResolveRescueRequest): Promise<ResolveRescueResponse>;
 
   getSimulatorAvailability(): Promise<SimulatorAvailability>;
   simulate(command: SimulatorCommand): Promise<DispatchEventResponse>;
