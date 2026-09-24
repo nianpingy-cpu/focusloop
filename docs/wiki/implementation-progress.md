@@ -138,8 +138,8 @@
    不是“启动被阻断”。
 2. **Resume 指标口径**：现有「成功率」把再次求助也算成成功，需按
    [Resume 策略与指标](./resume-policy-and-success.md) 拆成 `reengaged` / `progressed` / `stalledAgain`。
-3. **遥测表述冲突**：方案页 AG10 的「上报聚合指标」与 `docs/privacy.md` 的 “No telemetry” 冲突；
-   收敛前以 privacy.md 为准（即当前没有任何上报）。
+3. **遥测口径已收敛**：AG10 评测报告仅在开发者本机或 CI 中生成；生产应用无遥测、分析或崩溃上报，
+   与 `docs/privacy.md` 的承诺一致。
 4. **`0f19c9f` 里的 docs 改动**：该提交同时改了 `docs/wiki/*`。拆分/合并时以本页与
    [功能清单](./project-features.md) 为准，避免两套说法再次分叉。
 
