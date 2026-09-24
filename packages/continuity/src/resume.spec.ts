@@ -134,6 +134,29 @@ describe('buildResumeCard', () => {
     expect(classifyResumeGap(Number.NaN)).toBe('medium');
   });
 
+  it('uses a completed return instead of an older open interruption in event-array order', () => {
+    const olderLeft = {
+      id: 'e-old-left',
+      sessionId: 'session-tiny',
+      at: T0,
+      type: 'TAB_LEFT',
+      source: 'extension',
+      payload: {},
+    } as LearningEvent;
+    const returnedNow = { ...tabReturned(0), at: T1 };
+    const card = buildResumeCard({
+      checkpoint: checkpointFor(createInitialState(T0)),
+      session: tinySession(),
+      course: tinyCourse(),
+      // Deliberately reverse timestamp order: older open start follows the return in the array.
+      recentEvents: [returnedNow, olderLeft],
+      now: T1,
+    });
+
+    expect(card.gapMs).toBe(0);
+    expect(card.lastContext.key).toBe('resume.context.moment');
+  });
+
   it('uses validated configurable thresholds', () => {
     expect(resolveResumePolicyConfig({ shortThresholdMs: 100, longThresholdMs: 500 })).toEqual({
       shortThresholdMs: 100,

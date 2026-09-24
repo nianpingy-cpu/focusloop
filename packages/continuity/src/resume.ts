@@ -60,8 +60,11 @@ export function classifyResumeGap(
   return 'medium';
 }
 
-/** Uses the most recent completed interruption, or measures a newer open one to now. */
-export function deriveResumeGapMs(events: readonly LearningEvent[], now: string): number | null {
+/** Selects one timestamp-ordered interruption record for both policy and card prose. */
+function selectResumeInterruption(
+  events: readonly LearningEvent[],
+  now: string,
+): { readonly event: LearningEvent; readonly gapMs: number } | null {
   const nowMs = Date.parse(now);
   if (!Number.isFinite(nowMs)) return null;
   const entries = events.map((event, index) => ({ event, index, atMs: Date.parse(event.at) }));
@@ -91,9 +94,14 @@ export function deriveResumeGapMs(events: readonly LearningEvent[], now: string)
       completed.atMs > started.atMs ||
       (completed.atMs === started.atMs && completed.index > started.index))
   ) {
-    return interruptionDuration(completed.event);
+    return { event: completed.event, gapMs: interruptionDuration(completed.event) };
   }
-  return started === undefined ? null : nowMs - started.atMs;
+  return started === undefined ? null : { event: started.event, gapMs: nowMs - started.atMs };
+}
+
+/** Uses the most recent completed interruption, or measures a newer open one to now. */
+export function deriveResumeGapMs(events: readonly LearningEvent[], now: string): number | null {
+  return selectResumeInterruption(events, now)?.gapMs ?? null;
 }
 
 function interruptionDuration(event: LearningEvent): number {
@@ -110,7 +118,8 @@ function interruptionDuration(event: LearningEvent): number {
  */
 export function buildResumeCard(input: BuildResumeCardInput): ResumeCard {
   const { checkpoint, course, recentEvents, session, now } = input;
-  const gapMs = deriveResumeGapMs(recentEvents, now);
+  const interruption = selectResumeInterruption(recentEvents, now);
+  const gapMs = interruption?.gapMs ?? null;
   const variant = classifyResumeGap(gapMs, input.config);
   const tasks = [...course.microTasks].sort((a, b) => a.order - b.order);
   const currentTask: MicroTask | null =
@@ -139,7 +148,7 @@ export function buildResumeCard(input: BuildResumeCardInput): ResumeCard {
       currentTask === null
         ? message('resume.title.course', { course: course.title })
         : message('resume.title.task', { task: currentTask.title }),
-    lastContext: describeLastContext(checkpoint, recentEvents, gapMs),
+    lastContext: describeLastContext(checkpoint, interruption),
     completed: completed.slice(-itemLimit),
     unresolved: [...checkpoint.unresolved].slice(-Math.min(itemLimit, MAX_UNRESOLVED_ITEMS)),
     nextAction: checkpoint.nextBestAction,
@@ -149,32 +158,17 @@ export function buildResumeCard(input: BuildResumeCardInput): ResumeCard {
 
 function describeLastContext(
   checkpoint: LearningCheckpoint,
-  recentEvents: readonly LearningEvent[],
-  gapMs: number | null,
+  interruption: { readonly event: LearningEvent; readonly gapMs: number } | null,
 ): LocalizedMessage {
   const base = { concept: checkpoint.conceptTitle, goal: checkpoint.goal };
-  const interruption = findLastInterruption(recentEvents);
-  const hasOpenInterruption = recentEvents.some(
-    (event) => event.type === 'TAB_LEFT' || event.type === 'IDLE_STARTED',
-  );
-  if (interruption === null && !hasOpenInterruption) return message('resume.context.plain', base);
+  if (interruption === null) return message('resume.context.plain', base);
 
-  const awayMs = gapMs ?? interruption?.awayMs ?? null;
-  if (awayMs === null || awayMs <= 0) return message('resume.context.moment', base);
+  if (interruption.gapMs <= 0) return message('resume.context.moment', base);
 
-  return message('resume.context.away', { ...base, duration: formatDuration(awayMs) });
-}
-
-function findLastInterruption(
-  recentEvents: readonly LearningEvent[],
-): { awayMs: number | null } | null {
-  for (let index = recentEvents.length - 1; index >= 0; index -= 1) {
-    const event = recentEvents[index];
-    if (event === undefined) continue;
-    if (event.type === 'TAB_RETURNED') return { awayMs: event.payload.awayMs };
-    if (event.type === 'IDLE_ENDED') return { awayMs: event.payload.idleMs };
-  }
-  return null;
+  return message('resume.context.away', {
+    ...base,
+    duration: formatDuration(interruption.gapMs),
+  });
 }
 
 function formatDuration(ms: number): string {
