@@ -316,9 +316,19 @@ test('the dashboard re-aggregates when the window changes', async () => {
 
   const overlap =
     Math.min(ring.y + ring.height, legend.y + legend.height) - Math.max(ring.y, legend.y);
-  expect(overlap, "the legend shares the ring's row instead of sitting under it").toBeGreaterThan(
-    Math.min(ring.height, legend.height) / 2,
-  );
+  /*
+   * Side by side when the row is wide enough for both, wrapped when it is not. The wrap is a responsive
+   * decision, not the defect: the Windows runner measures a row that cannot hold both and wraps, where
+   * `overlap` is -20 there and +132 here. Asserting the overlap unconditionally asserted this machine's
+   * window width — the same mistake the tutor test made with `'above'`, caught the same way, by CI. The
+   * width is measured, so the expectation follows the layout instead of assuming it; a legend that wraps
+   * while the row *does* have room for it is still caught, because then `sideBySide` is true.
+   */
+  if (rowBox.width >= ring.width + legend.width) {
+    expect(overlap, "the legend shares the ring's row instead of sitting under it").toBeGreaterThan(
+      Math.min(ring.height, legend.height) / 2,
+    );
+  }
   expect(hint.y, 'the hint sits below the row').toBeGreaterThanOrEqual(
     rowBox.y + rowBox.height - 1,
   );
