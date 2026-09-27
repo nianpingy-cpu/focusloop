@@ -73,7 +73,10 @@ export function localDateKey(date: Date): string {
  * Rebuilds the learning-state timeline of one session by replaying its events
  * through the same reducer the live engine uses.
  *
- * `untilIso` bounds an open session; a closed one is bounded by its own `endedAt`.
+ * `untilIso` bounds an open session; a closed one is bounded by its own `endedAt`. The segments account
+ * for the time the events witness — the idle threshold after each one — and leave the rest out rather
+ * than filling it with a state nobody measured. See `credit` below for why that matters to a learner
+ * reading their own dashboard.
  */
 export function buildStateTimeline(
   session: LearningSession,
@@ -92,18 +95,28 @@ export function buildStateTimeline(
   const { idleThresholdMs } = resolveStateEngineConfig(config);
   const segments: StateSegment[] = [];
 
+  /**
+   * Charges a stretch of silence to the state the engine was in.
+   *
+   * The app reports what it witnessed and nothing else. A state it actually measured — `DISTRACTED`
+   * arrives from a `TAB_LEFT` or an idle report the bridge sent — keeps the whole stretch, because that
+   * absence was observed. Silence between two events is a different thing entirely: it is not evidence of
+   * anything, so it is capped at the idle threshold, which is the same bound the engine itself puts on
+   * "still focused" when it evaluates a state by time alone.
+   *
+   * The uncapped version charged every quiet stretch as `DISTRACTED`, and that is where the dashboard's
+   * "99.6% 离开中" came from: a 59-minute session with two events in it spent 35 of those minutes being
+   * called away, and a session left open overnight put sixteen hours of 离开中 into the day. The learner
+   * was at the desk; the app simply had nothing to say about the time and said "away" instead.
+   *
+   * What is neither credited nor charged is not counted at all, so `totalMs` is the time the app can
+   * stand behind rather than the wall-clock a session window happened to span.
+   */
   const credit = (state: LearningState, fromMs: number, toMs: number): void => {
     const span = toMs - fromMs;
     if (span <= 0) return;
-    if (state === 'DISTRACTED') {
-      segments.push({ state, fromMs, toMs });
-      return;
-    }
-    const credited = Math.min(span, idleThresholdMs);
+    const credited = state === 'DISTRACTED' ? span : Math.min(span, idleThresholdMs);
     if (credited > 0) segments.push({ state, fromMs, toMs: fromMs + credited });
-    if (span > credited) {
-      segments.push({ state: 'DISTRACTED', fromMs: fromMs + credited, toMs });
-    }
   };
 
   let engineState = createInitialState(session.startedAt);
