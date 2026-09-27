@@ -322,8 +322,11 @@ test('the dashboard re-aggregates when the window changes', async () => {
   expect(hint.y, 'the hint sits below the row').toBeGreaterThanOrEqual(
     rowBox.y + rowBox.height - 1,
   );
+  // The row, not the ring: a hint boxed into the ring's column is exactly the ring's width, so comparing
+  // against the ring would pass for the one layout this line exists to catch. The hint and the row are
+  // both block children of the same panel, so they are equally wide when the hint is a footnote to both.
   expect(hint.width, 'the hint spans the row, not one column of it').toBeGreaterThanOrEqual(
-    ring.width,
+    rowBox.width - 1,
   );
 
   await expect(window.locator('.banner--error')).toHaveCount(0);
