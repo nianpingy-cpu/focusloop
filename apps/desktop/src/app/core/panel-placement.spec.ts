@@ -40,5 +40,10 @@ describe('resolvePanelPlacement', () => {
   it('opens below when the panel has not been measured yet', () => {
     // Height 0 is the "no layout yet" case, and below is the direction it opened in before.
     expect(resolvePanelPlacement({ top: 100, bottom: 125 }, 0, VIEWPORT, GAP)).toBe('below');
+    /*
+     * Including when the anchor is off the bottom of the window, where the roomier-side branch would
+     * otherwise answer "above" for a panel it has not measured.
+     */
+    expect(resolvePanelPlacement({ top: 700, bottom: 760 }, 0, VIEWPORT, GAP)).toBe('below');
   });
 });

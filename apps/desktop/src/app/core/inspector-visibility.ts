@@ -16,11 +16,13 @@ const DASHBOARD_ROUTE = '/dashboard';
  * Whether this URL is the dashboard route.
  *
  * Segments rather than a bare prefix: `/dashboard-roundup` is a different screen, and hiding the inspector
- * there because the first ten characters match would be a bug nobody would find by looking.
+ * there because the first ten characters match would be a bug nobody would find by looking. `;` is there
+ * for Angular's matrix parameters, which are part of the path — nothing navigates that way today, and a
+ * route that hid the panel would be a silent exception to the rule.
  */
 function isDashboardRoute(url: string): boolean {
   if (url === DASHBOARD_ROUTE) return true;
-  return ['/', '?', '#'].some((separator) => url.startsWith(DASHBOARD_ROUTE + separator));
+  return ['/', '?', '#', ';'].some((separator) => url.startsWith(DASHBOARD_ROUTE + separator));
 }
 
 export function contextInspectorVisibleOn(url: string): boolean {

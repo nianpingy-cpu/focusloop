@@ -5,6 +5,8 @@ describe('contextInspectorVisibleOn', () => {
   it('does not lay the inspector over the dashboard', () => {
     expect(contextInspectorVisibleOn('/dashboard')).toBe(false);
     expect(contextInspectorVisibleOn('/dashboard?window=today')).toBe(false);
+    // Angular's matrix parameters are part of the path, so this is still the dashboard route.
+    expect(contextInspectorVisibleOn('/dashboard;window=today')).toBe(false);
   });
 
   it('keeps it on the screens the learner works in', () => {

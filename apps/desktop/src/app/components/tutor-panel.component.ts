@@ -224,6 +224,11 @@ export class TutorPanelComponent implements OnDestroy {
      * narrow window, and an answer adds a result block — so the decision has to follow the element. A
      * ResizeObserver reports both the first layout and every later change, which is why there is no
      * "measure once when it opens" call here, and why a panel that grows past the room under it flips.
+     *
+     * The row the control sits in is observed as well, because the anchor can move without resizing:
+     * opening the stuck-reason chooser makes that flex row wrap, the button drops to the next line, and a
+     * placement decided a moment earlier is then wrong. A translation fires no resize on the anchor; it
+     * does change the row's height.
      */
     effect((onCleanup) => {
       const panel = this.panel()?.nativeElement;
@@ -233,6 +238,8 @@ export class TutorPanelComponent implements OnDestroy {
         this.place();
       });
       observer.observe(panel);
+      const row = this.anchor()?.nativeElement.parentElement;
+      if (row !== null && row !== undefined) observer.observe(row);
       this.place();
 
       onCleanup(() => {

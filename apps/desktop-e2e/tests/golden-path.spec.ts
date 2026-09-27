@@ -1006,6 +1006,26 @@ test('the tutor asks the main process, and says so when no model is connected', 
   await expect(window.getByTestId('tutor-panel')).toBeVisible();
 
   /*
+   * The panel opens *above* its control on this screen, and stays inside the window. That is the whole of
+   * the fix — it used to be pinned below, where this control sits near the bottom edge, so it hung off the
+   * window with its question box half outside — and until this line nothing checked it: the placement was
+   * measured, applied as a class, and never read back, so the suite passed whether the component measured
+   * the right element, the wrong one, or never measured at all.
+   *
+   * Both halves are asserted on purpose. `data-placement` is the mechanism, and a bounding box inside the
+   * viewport is the property a learner actually cares about; a future change that kept the attribute and
+   * broke the geometry would pass one and fail the other.
+   */
+  await expect(window.getByTestId('tutor-panel')).toHaveAttribute('data-placement', 'above');
+  const panelBox = await window.getByTestId('tutor-panel').boundingBox();
+  // Asked of the page rather than the test: an Electron window has no viewport for `viewportSize()` to
+  // report, and it returns null there.
+  const pageViewportHeight = await window.evaluate(() => window.innerHeight);
+  expect(panelBox).not.toBeNull();
+  expect(panelBox?.y ?? -1).toBeGreaterThanOrEqual(0);
+  expect((panelBox?.y ?? 0) + (panelBox?.height ?? 0)).toBeLessThanOrEqual(pageViewportHeight + 1);
+
+  /*
    * Ask is disabled until a mode is chosen *and* something is written. The engine refuses an empty question
    * with `no-question` and a sentence, which is right for a caller that sends one — and the wrong thing to
    * let a learner do, because a button that can only ever produce a refusal should not be pressable.

@@ -243,9 +243,10 @@ const PEEK_CLOSE_DELAY_MS = 150;
     <fl-agent-panel />
     <fl-resume-card />
     <!--
-      The inspector is a fixed overlay, which suits a screen you are working in and not one you are
-      reading: on the dashboard it sat across the "today" card and the totals it was standing over.
-      Kept everywhere else, collapsed to one line in the corner until it is asked for.
+      The inspector is a fixed overlay, and the dashboard is where it does harm: it sits across the
+      "today" card in the sidebar and the totals that screen exists to show. Kept on every other route,
+      collapsed to one line in the corner until it is asked for. Developer builds only either way — the
+      panel itself gates on simulatorEnabled, which the main process reports.
     -->
     @if (contextInspectorVisible()) {
       <fl-agent-context-panel />

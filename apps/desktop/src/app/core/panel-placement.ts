@@ -35,6 +35,14 @@ export function resolvePanelPlacement(
   viewportHeight: number,
   gap: number,
 ): PanelPlacement {
+  /*
+   * Not measured yet — the panel does not exist, or has no layout. Below is where it has always opened,
+   * and the measurement arrives on the next frame. Stated first because the roomier-side branch below
+   * would otherwise answer "above" for an anchor that happens to sit below the window, which is a
+   * different question than the one this case is asking.
+   */
+  if (panelHeight <= 0) return 'below';
+
   const below = viewportHeight - anchor.bottom - gap;
   if (below >= panelHeight) return 'below';
 
@@ -43,9 +51,8 @@ export function resolvePanelPlacement(
 
   /*
    * Neither side holds the whole panel, so it will be cut off somewhere: it opens where more of it is
-   * left. The panel's height is capped in the stylesheet, so this is the "tall panel, short window" case
-   * rather than a stand-in for "we could not measure it" — that case is `panelHeight === 0`, which the
-   * first test sends below, where it opened before.
+   * left. The panel's height is capped in the stylesheet, so reaching this needs a tall panel in a short
+   * window rather than a missing measurement — that case is handled above.
    */
   return above > below ? 'above' : 'below';
 }
