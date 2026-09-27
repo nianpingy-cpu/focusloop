@@ -1018,9 +1018,13 @@ test('the tutor asks the main process, and says so when no model is connected', 
    */
   await expect(window.getByTestId('tutor-panel')).toHaveAttribute('data-placement', 'above');
   const panelBox = await window.getByTestId('tutor-panel').boundingBox();
-  // Asked of the page rather than the test: an Electron window has no viewport for `viewportSize()` to
-  // report, and it returns null there.
-  const pageViewportHeight = await window.evaluate(() => window.innerHeight);
+  /*
+   * Asked of the page rather than the test: an Electron window has no viewport for `viewportSize()` to
+   * report, and it returns null there. `globalThis` rather than `window` because this file's Playwright
+   * page is called `window` and shadows the DOM global inside this callback — which the typecheck caught
+   * after the runtime did not, since Playwright runs these files without checking them.
+   */
+  const pageViewportHeight = await window.evaluate(() => globalThis.innerHeight);
   expect(panelBox).not.toBeNull();
   expect(panelBox?.y ?? -1).toBeGreaterThanOrEqual(0);
   expect((panelBox?.y ?? 0) + (panelBox?.height ?? 0)).toBeLessThanOrEqual(pageViewportHeight + 1);
