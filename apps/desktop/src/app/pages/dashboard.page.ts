@@ -145,6 +145,15 @@ const DONUT_RADIUS = 42;
                   </div>
                 </div>
 
+                <!--
+                  The denominator in words. Every share here is of *recorded* time, and a learner reading
+                  "99.6% away" — which is what an implicit denominator produced — is owed the rule that
+                  produced the number next to it.
+                -->
+                <p class="muted small" data-testid="focus-ratio-hint">
+                  {{ t('dashboard.focusRatio.hint') }}
+                </p>
+
                 <ul class="legend">
                   @for (share of stateShares(); track share.state) {
                     <li>

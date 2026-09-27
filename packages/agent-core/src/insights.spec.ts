@@ -143,6 +143,24 @@ describe('buildStateTimeline', () => {
     expect(focused?.toMs).toBe(Date.parse(at(15, 10, 1)));
   });
 
+  it('bounds the tail of an open session at its last event plus the idle threshold', () => {
+    /*
+     * `TAB_LEFT` is a witnessed departure, but nothing witnesses how long it lasted: the app was left
+     * open, so there is no end action to bound it. The tail is capped like any other silent stretch —
+     * the alternative charged four days of `DISTRACTED` to the learner for one tab switch, and kept
+     * growing while the app stayed open.
+     */
+    const events = [
+      event('e1', 'TASK_STARTED', at(15, 10), { taskId: 't1' }),
+      event('e2', 'TAB_LEFT', at(15, 10, 1)),
+    ];
+    const segments = buildStateTimeline(session(at(15, 10)), events, at(18, 12));
+    expect(segments).toEqual([
+      { state: 'FOCUSED', fromMs: Date.parse(at(15, 10)), toMs: Date.parse(at(15, 10, 1)) },
+      { state: 'DISTRACTED', fromMs: Date.parse(at(15, 10, 1)), toMs: Date.parse(at(15, 10, 3)) },
+    ]);
+  });
+
   it('bounds an open session at `until`', () => {
     const segments = buildStateTimeline(session(at(15, 10)), [], at(15, 10, 1));
     expect(segments.reduce((sum, s) => sum + (s.toMs - s.fromMs), 0)).toBe(60_000);
@@ -262,12 +280,17 @@ describe('buildInsightsSummary', () => {
 
   it('splits a stretch that crosses local midnight across both days', () => {
     /*
-     * Two minutes either side of midnight, because two minutes is what an event-free session accounts for
-     * now — the stretch has to straddle the boundary to be a test of the split at all.
+     * Driven by events, with the threshold given here rather than taken from the default: an event-free
+     * session accounts for two minutes now, so a fixture that leaned on the default would quietly turn
+     * into a test of the threshold value instead of a test of the split.
      */
     const overnight = source({
+      // Ends at the second event, so the only minute-pair under test is the one that straddles midnight.
       session: session(at(15, 23, 59), at(16, 0, 1)),
-      events: [],
+      events: [
+        event('e1', 'TASK_STARTED', at(15, 23, 59), { taskId: 't1' }),
+        event('e2', 'TASK_COMPLETED', at(16, 0, 1), { taskId: 't1' }),
+      ],
     });
     const summary = buildInsightsSummary({
       range: 'week',
@@ -275,11 +298,13 @@ describe('buildInsightsSummary', () => {
       sources: [overnight],
       courses: COURSES,
       currentSessionId: SESSION_ID,
+      config: { idleThresholdMs: 5 * 60_000 },
     });
     const first = summary.daily.find((day) => day.date === dayKey(15));
     const second = summary.daily.find((day) => day.date === dayKey(16));
-    expect(first?.durationMs).toBeGreaterThan(0);
-    expect(second?.durationMs).toBeGreaterThan(0);
+    // One minute on each side of midnight, from the event pair rather than from the threshold.
+    expect(first?.durationMs).toBe(60_000);
+    expect(second?.durationMs).toBe(60_000);
     expect((first?.durationMs ?? 0) + (second?.durationMs ?? 0)).toBe(summary.totalMs);
   });
 
