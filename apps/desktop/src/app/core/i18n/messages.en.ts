@@ -191,7 +191,7 @@ const en = {
   'dashboard.focusRatio.hint':
     'Shares are of recorded time: silence is counted neither as time nor as being away.',
   'dashboard.session.title': 'This session',
-  'dashboard.states.title': 'Time by state',
+  'dashboard.states.title': 'Recorded time by state',
   'dashboard.activity.title': 'Daily activity',
   'dashboard.activity.hint': 'Darker means more recorded time that day.',
   'dashboard.activity.empty': 'Nothing recorded in this window yet.',
@@ -200,7 +200,7 @@ const en = {
   'dashboard.window.interruptions': 'Interruptions',
   'dashboard.window.sessions': 'Sessions',
   'dashboard.outcomes.none': 'No intervention has been shown yet.',
-  'dashboard.courses.title': 'Time by course',
+  'dashboard.courses.title': 'Recorded time by course',
 
   // Short unit labels for the chart legends.
   'unit.s': '{s}s',

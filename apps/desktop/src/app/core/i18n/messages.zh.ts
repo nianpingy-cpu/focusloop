@@ -176,7 +176,7 @@ export const zh: Record<MessageKey, string> = {
   'dashboard.range.all': '全部',
 
   'dashboard.hero.total': '有记录时长',
-  'dashboard.hero.daily': '日均有记录',
+  'dashboard.hero.daily': '日均有记录时长',
   'dashboard.hero.over.one': '1 天有记录',
   'dashboard.hero.over.other': '共 {days} 天有记录',
   'dashboard.focusRatio': '专注占比',
@@ -191,7 +191,7 @@ export const zh: Record<MessageKey, string> = {
   'dashboard.window.interruptions': '打断次数',
   'dashboard.window.sessions': '会话数',
   'dashboard.outcomes.none': '还没有展示过干预。',
-  'dashboard.courses.title': '课程时长占比',
+  'dashboard.courses.title': '课程占比',
 
   // Chinese does not space a number from its unit, so these carry no padding.
   'unit.s': '{s}秒',

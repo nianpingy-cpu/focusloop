@@ -145,15 +145,6 @@ const DONUT_RADIUS = 42;
                   </div>
                 </div>
 
-                <!--
-                  The denominator in words. Every share here is of *recorded* time, and a learner reading
-                  "99.6% away" — which is what an implicit denominator produced — is owed the rule that
-                  produced the number next to it.
-                -->
-                <p class="muted small" data-testid="focus-ratio-hint">
-                  {{ t('dashboard.focusRatio.hint') }}
-                </p>
-
                 <ul class="legend">
                   @for (share of stateShares(); track share.state) {
                     <li>
@@ -165,6 +156,15 @@ const DONUT_RADIUS = 42;
                   }
                 </ul>
               </div>
+              <!--
+                A footnote to both columns rather than a third one. The donut row is a flex row with the
+                ring on a fixed basis and the legend growing; a paragraph placed inside it took a line to
+                itself and pushed the legend off the ring's row. Below the row it spans the panel, which
+                is what a note about both columns should do.
+              -->
+              <p class="muted small" data-testid="focus-ratio-hint">
+                {{ t('dashboard.focusRatio.hint') }}
+              </p>
             }
           </div>
 
