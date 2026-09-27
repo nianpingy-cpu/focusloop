@@ -1030,7 +1030,7 @@ test('the tutor asks the main process, and says so when no model is connected', 
   await expect(result).toContainText('No model is connected');
   await expect(result).toContainText(stepTitle);
 
-  // A fallback is not a dead end: the step it was asked about is still underneath it.
+  // A fallback is not a dead end: the step it was asked about is still on the screen behind it.
   await expect(window.getByTestId('task-title')).toBeVisible();
   await expect(window.locator('.banner--error')).toHaveCount(0);
 
@@ -1064,7 +1064,12 @@ test('the tutor asks the main process, and says so when no model is connected', 
   await expect(window.getByTestId('tutor-panel')).toBeHidden();
   await window.getByTestId('tutor-entry').click();
   await expect(window.getByTestId('tutor-panel')).toBeVisible();
-  await window.getByTestId('task-title').click();
+  /*
+   * Focus is moved off the panel without pressing anything on the page. The panel opens above the control
+   * row once there is no room below it, and what it then sits over is the step's own title — so a click
+   * aimed at that title tests the layout rather than the thing being asserted, which is where focus is.
+   */
+  await window.getByTestId('tutor-question').evaluate((element) => element.blur());
   await window.keyboard.press('Escape');
   await expect(window.getByTestId('tutor-panel')).toBeVisible();
 
