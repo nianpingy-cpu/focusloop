@@ -29,12 +29,19 @@ jobs:
     #
     # Linux is pinned rather than left on `ubuntu-latest`. On 19 October 2026 that label migrates to
     # Ubuntu 26 (actions/runner-images#14748), and a runner image is not something to find out about
-    # from a red build on the day it moves: nothing in this repository asked for a new OS. `ubuntu-24.04`
-    # is the image the moving label points at today, so no gate runs anywhere new — the point is that it
-    # cannot start doing so on its own. It is also an LTS with a long support window, so this is a
-    # supported place to sit rather than a stopgap. Moving to 26 is still open to whoever wants it; it
-    # should be a change to this label with a run to answer for it (#18), which is why the other two
-    # labels are left alone: they have no announced migration, and pinning them is a separate decision.
+    # from a red build on the day it moves: nothing in this repository asked for a new OS.
+    #
+    # This is not a move to a different image; it is the same image, named. `ubuntu-24.04` is what
+    # `ubuntu-latest` points at today, so no gate here runs anywhere new — the job that said
+    # `ubuntu-latest` and the job that says `ubuntu-24.04` are one job on one image. The argument is
+    # asymmetric on purpose: that is safe by observation, where pinning to any *other* image — 22.04, or
+    # a 26 preview — would be an unverified change no run here has exercised. 24.04 is also an LTS with
+    # a long support window, so this is a supported place to sit rather than a stopgap.
+    #
+    # It defers the move rather than refusing it: whoever wants 26 changes this one label and lets a run
+    # answer for it. The Windows and macOS labels are left alone because neither has an announced
+    # migration — pinning a label that has not been observed moving is a different decision, and this
+    # repository pins no label today, so that standard is not being quietly introduced here (#18).
     strategy:
       fail-fast: false
       matrix:
