@@ -33,6 +33,51 @@ async function launch(): Promise<{ app: ElectronApplication; window: Page }> {
   return { app: launched, window: firstWindow };
 }
 
+/** How long a closed app is given to actually leave before the next launch is refused. */
+const PROCESS_EXIT_TIMEOUT_MS = 15_000;
+
+/**
+ * Closes the app and waits for its process to be gone, not merely asked to go.
+ *
+ * `main.ts` takes the single-instance lock before anything else runs, so a process that is still alive
+ * when the next launch arrives makes that launch die on the spot — and the way it dies is a lie. The
+ * second instance quits on the lock, and the test reports "Target page, context or browser has been
+ * closed", which reads like a renderer crash. Measured here on 2026-09-28: `app.close()` happened to
+ * resolve only once the process had exited, so this wait is insurance on this machine rather than a fix
+ * for something I could reproduce — the launch that dies on the lock is the part that reproduces, and
+ * the probe that shows it is in #44.
+ *
+ * Waiting is what turns "the previous instance still holds the lock" into one failure that names its
+ * cause, which is the difference between a five-test cascade and a sentence (#44).
+ */
+async function closeAndWait(application: ElectronApplication): Promise<void> {
+  const child = application.process();
+  const exited = new Promise<void>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+    child.once('exit', () => resolve());
+  });
+
+  await application.close();
+
+  let timer: NodeJS.Timeout | undefined;
+  const stillAlive = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(true), PROCESS_EXIT_TIMEOUT_MS);
+  });
+  const left = await Promise.race([exited.then(() => false), stillAlive]);
+  clearTimeout(timer);
+
+  if (left) {
+    throw new Error(
+      `the Electron process (pid ${String(
+        child.pid,
+      )}) was still alive ${PROCESS_EXIT_TIMEOUT_MS}ms after close(); the next launch would die on the single-instance lock (#44)`,
+    );
+  }
+}
+
 test.beforeAll(async () => {
   userDataDir = mkdtempSync(join(tmpdir(), 'focusloop-e2e-'));
   ({ app, window } = await launch());
@@ -45,7 +90,12 @@ test.afterAll(async () => {
    * every future failure gets harder to read (#107).
    */
   try {
-    await app?.close();
+    /*
+     * Waited on rather than fired and forgotten. A process left holding the single-instance lock
+     * outlives this run and breaks the *next* one with a message about a closed page, which is the
+     * trap #44 describes; the failure is swallowed here so teardown cannot add a second red result.
+     */
+    if (app !== undefined) await closeAndWait(app);
   } catch {
     // Best-effort: the app may already be gone if a test tore it down mid-flight.
   }
@@ -375,7 +425,16 @@ test('the theme can be switched and the choice survives a restart', async () => 
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'dark');
 
   // The preference, not the resolved theme, is what gets stored.
-  await app.close();
+  await closeAndWait(app);
+  ({ app, window } = await launch());
+  await expect(window.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+  /*
+   * And a second restart in a row. One restart succeeding is what hid this in the first place (#44):
+   * the relaunch that arrives while the previous process is still leaving is the one that cannot
+   * start, and a single restart never produces that launch.
+   */
+  await closeAndWait(app);
   ({ app, window } = await launch());
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'dark');
 
@@ -447,7 +506,7 @@ test('the interface can be switched to Chinese, and the choice survives a restar
   await expect(window.getByTestId('tutor-panel')).toBeHidden();
 
   // 3. A restart keeps the language: the store owns it, not the renderer.
-  await app.close();
+  await closeAndWait(app);
   ({ app, window } = await launch());
   await expect(window.getByRole('heading', { name: '让你的学习一直连得上' })).toBeVisible();
 
