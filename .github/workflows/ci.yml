@@ -26,10 +26,19 @@ jobs:
     # The product ships on Windows, is developed on macOS and is built on Linux runners, so the
     # gates run where each of those facts matters. `fail-fast: false` so that one platform's failure
     # does not hide what the other two have to say.
+    #
+    # Linux is pinned rather than left on `ubuntu-latest`. On 19 October 2026 that label migrates to
+    # Ubuntu 26 (actions/runner-images#14748), and a runner image is not something to find out about
+    # from a red build on the day it moves: nothing in this repository asked for a new OS. `ubuntu-24.04`
+    # is the image the moving label points at today, so no gate runs anywhere new — the point is that it
+    # cannot start doing so on its own. It is also an LTS with a long support window, so this is a
+    # supported place to sit rather than a stopgap. Moving to 26 is still open to whoever wants it; it
+    # should be a change to this label with a run to answer for it (#18), which is why the other two
+    # labels are left alone: they have no announced migration, and pinning them is a separate decision.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-24.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -123,7 +132,10 @@ jobs:
 
   package:
     name: package (smoke)
-    runs-on: ubuntu-latest
+    # Pinned, not `ubuntu-latest`: that label moves to Ubuntu 26 on 19 October 2026
+    # (actions/runner-images#14748). 24.04 is the image it points at today and is an LTS; the reasoning
+    # is written out in this file's `quality` job (#18).
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
