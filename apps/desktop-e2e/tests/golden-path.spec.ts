@@ -24,10 +24,31 @@ let userDataDir: string;
  * `page.reload()` fails outright, so a relaunch is also the only option.
  */
 async function launch(): Promise<{ app: ElectronApplication; window: Page }> {
-  const launched = await electron.launch({
-    args: [DESKTOP_MAIN, `--user-data-dir=${userDataDir}`],
-    env: hermeticEnv(),
-  });
+  /*
+   * A launch against a held lock fails *here*, not at `firstWindow()`. Measured on 2026-09-28 against a
+   * profile whose lock was held by a live instance: `electron.launch` rejected after 3.0s with
+   * "Target page, context or browser has been closed - [pid=…] <process did exit: exitCode=0,
+   * signal=null>". That names a closed page, which sends the reader into the renderer, where nothing is
+   * wrong — and the issue that filed this had reconstructed the failure as a hang on `firstWindow()`.
+   *
+   * `main.ts` quits a second instance on the single-instance lock, and it does so cleanly
+   * (`app.quit()`); an app that crashed would not exit 0. So a clean exit is the tell, and anything
+   * else keeps Playwright's own words with the place to look attached (#44).
+   */
+  const launched = await electron
+    .launch({
+      args: [DESKTOP_MAIN, `--user-data-dir=${userDataDir}`],
+      env: hermeticEnv(),
+    })
+    .catch((cause: unknown) => {
+      const detail = String(cause);
+      throw new Error(
+        detail.includes('exitCode=0')
+          ? `the app exited cleanly instead of starting: another instance still holds the single-instance lock for ${userDataDir} (#44): ${detail}`
+          : `the app failed to start; a leftover process holding the single-instance lock for ${userDataDir} is the usual cause (#44): ${detail}`,
+      );
+    });
+
   const firstWindow = await launched.firstWindow();
   await firstWindow.waitForLoadState('domcontentloaded');
   return { app: launched, window: firstWindow };
@@ -39,16 +60,15 @@ const PROCESS_EXIT_TIMEOUT_MS = 15_000;
 /**
  * Closes the app and waits for its process to be gone, not merely asked to go.
  *
- * `main.ts` takes the single-instance lock before anything else runs, so a process that is still alive
- * when the next launch arrives makes that launch die on the spot — and the way it dies is a lie. The
- * second instance quits on the lock, and the test reports "Target page, context or browser has been
- * closed", which reads like a renderer crash. Measured here on 2026-09-28: `app.close()` happened to
- * resolve only once the process had exited, so this wait is insurance on this machine rather than a fix
- * for something I could reproduce — the launch that dies on the lock is the part that reproduces, and
- * the probe that shows it is in #44.
+ * `app.close()` already carries a process-exit wait — it quits the app and then awaits the spawned child's
+ * `close` event — so this is a post-condition rather than a repair. It cannot fire on a machine where that
+ * wait works, and the suite passes identically without it. What it buys is the two things the event does
+ * not: a *named* failure if the process is somehow still there afterwards (Playwright spawns through a
+ * shell, which is the one place the wrapper's exit and Electron's can come apart), and a teardown that
+ * cannot leave the lock behind for the next run.
  *
- * Waiting is what turns "the previous instance still holds the lock" into one failure that names its
- * cause, which is the difference between a five-test cascade and a sentence (#44).
+ * It is not the regression test for #44 and does not pretend to be: the launch that dies on the lock is
+ * the part that reproduces, and that message is fixed in `launch()` where the failure lands.
  */
 async function closeAndWait(application: ElectronApplication): Promise<void> {
   const child = application.process();
@@ -60,6 +80,7 @@ async function closeAndWait(application: ElectronApplication): Promise<void> {
     child.once('exit', () => resolve());
   });
 
+  const started = Date.now();
   await application.close();
 
   let timer: NodeJS.Timeout | undefined;
@@ -71,11 +92,37 @@ async function closeAndWait(application: ElectronApplication): Promise<void> {
 
   if (left) {
     throw new Error(
-      `the Electron process (pid ${String(
+      /*
+       * The number is elapsed since `close()` was *called*, not since it returned: the message has to be
+       * true, and `close()` carries Electron's whole shutdown, which has no timeout of its own.
+       *
+       * The pid is described rather than called "the Electron process": on Windows Playwright spawns
+       * through a shell, so `app.process()` is the wrapper and this pid belongs to cmd.exe. A reader who
+       * pastes it into `tasklist` should not be told it is electron.exe.
+       */
+      `the app did not exit: pid ${String(
         child.pid,
-      )}) was still alive ${PROCESS_EXIT_TIMEOUT_MS}ms after close(); the next launch would die on the single-instance lock (#44)`,
+      )} (the shell wrapper — cmd.exe on Windows, not electron.exe) was still alive ${
+        Date.now() - started
+      }ms after close() was called; the next launch would die on the single-instance lock (#44)`,
     );
   }
+}
+
+/**
+ * Closes the app, waits for it to leave, and starts a new one — the sequence #44 is about, in one place so
+ * that a bare `app.close()` cannot creep back into the file.
+ *
+ * The pid assertion is what a restart means: a relaunch that silently reuses the old process, or fails to
+ * start at all, is not one.
+ */
+async function restartApp(): Promise<void> {
+  const previous = app.process().pid;
+  await closeAndWait(app);
+  ({ app, window } = await launch());
+  expect(app.process().pid, 'the relaunch is a new app, not the one that just closed').not.toBe(
+    previous,
+  );
 }
 
 test.beforeAll(async () => {
@@ -91,14 +138,18 @@ test.afterAll(async () => {
    */
   try {
     /*
-     * Waited on rather than fired and forgotten. A process left holding the single-instance lock
-     * outlives this run and breaks the *next* one with a message about a closed page, which is the
-     * trap #44 describes; the failure is swallowed here so teardown cannot add a second red result.
+     * Waited on rather than fired and forgotten: a process left holding the single-instance lock
+     * outlives this run and breaks the *next* one with a message about a closed page, which is the trap
+     * #44 describes. Printed rather than thrown, because teardown must not add a second red result
+     * (#107) — but not silent either, since a run that ends green with electron processes still alive is
+     * the artifact #44 recorded.
      */
     if (app !== undefined) await closeAndWait(app);
-  } catch {
-    // Best-effort: the app may already be gone if a test tore it down mid-flight.
+  } catch (error) {
+    console.error(`e2e teardown did not see the app exit: ${String(error)}`);
   }
+
+  // Its own try, so that failing to close cannot also skip the cleanup: the two risks are independent.
   if (userDataDir !== undefined) {
     try {
       rmSync(userDataDir, { recursive: true, force: true });
@@ -425,8 +476,7 @@ test('the theme can be switched and the choice survives a restart', async () => 
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'dark');
 
   // The preference, not the resolved theme, is what gets stored.
-  await closeAndWait(app);
-  ({ app, window } = await launch());
+  await restartApp();
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'dark');
 
   /*
@@ -434,8 +484,7 @@ test('the theme can be switched and the choice survives a restart', async () => 
    * the relaunch that arrives while the previous process is still leaving is the one that cannot
    * start, and a single restart never produces that launch.
    */
-  await closeAndWait(app);
-  ({ app, window } = await launch());
+  await restartApp();
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'dark');
 
   // `Auto` resolves against the OS rather than pinning a theme.
@@ -506,8 +555,7 @@ test('the interface can be switched to Chinese, and the choice survives a restar
   await expect(window.getByTestId('tutor-panel')).toBeHidden();
 
   // 3. A restart keeps the language: the store owns it, not the renderer.
-  await closeAndWait(app);
-  ({ app, window } = await launch());
+  await restartApp();
   await expect(window.getByRole('heading', { name: '让你的学习一直连得上' })).toBeVisible();
 
   // No IPC call may have failed in either language.
