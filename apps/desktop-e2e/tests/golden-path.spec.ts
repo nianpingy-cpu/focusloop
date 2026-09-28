@@ -49,7 +49,23 @@ async function launch(): Promise<{ app: ElectronApplication; window: Page }> {
       );
     });
 
-  const firstWindow = await launched.firstWindow();
+  /*
+   * A launch that resolves and then dies before a window appears. This is *not* the lock path — that one
+   * fails inside `electron.launch()` above — and it is not the common path either: measured on
+   * 2026-09-28, `windows()` is already 1 at the moment launch resolves, on all three launches of a
+   * restarting test, so this catch stays dormant in a healthy run. It exists for the failure `main.ts`
+   * records against its own bootstrap — `app.exit(1)` after `whenReady()`, which happened once on
+   * EADDRINUSE — where the app is connected, then gone, with no window: the one case left where the error
+   * names a closed page rather than saying what happened.
+   */
+  const firstWindow = await launched.firstWindow().catch((cause: unknown) => {
+    throw new Error(
+      `the app started but showed no window — it may have failed to bootstrap, so see the main-process output (#44): ${String(
+        cause,
+      )}`,
+    );
+  });
+
   await firstWindow.waitForLoadState('domcontentloaded');
   return { app: launched, window: firstWindow };
 }
@@ -96,13 +112,16 @@ async function closeAndWait(application: ElectronApplication): Promise<void> {
        * The number is elapsed since `close()` was *called*, not since it returned: the message has to be
        * true, and `close()` carries Electron's whole shutdown, which has no timeout of its own.
        *
-       * The pid is described rather than called "the Electron process": on Windows Playwright spawns
-       * through a shell, so `app.process()` is the wrapper and this pid belongs to cmd.exe. A reader who
-       * pastes it into `tasklist` should not be told it is electron.exe.
+       * The pid is described rather than called "the Electron process": Playwright spawns through
+       * `shell: true` on Windows only, so there this pid is the wrapper's — cmd.exe, not electron.exe — and
+       * on every other platform it is Electron itself. A reader who pastes it into `tasklist` should not be
+       * told the wrong thing on either.
        */
-      `the app did not exit: pid ${String(
-        child.pid,
-      )} (the shell wrapper — cmd.exe on Windows, not electron.exe) was still alive ${
+      `the app did not exit: pid ${String(child.pid)} (${
+        process.platform === 'win32'
+          ? 'the cmd.exe wrapper Playwright spawns through, not electron.exe'
+          : 'this is Electron itself'
+      }) was still alive ${
         Date.now() - started
       }ms after close() was called; the next launch would die on the single-instance lock (#44)`,
     );
@@ -113,8 +132,12 @@ async function closeAndWait(application: ElectronApplication): Promise<void> {
  * Closes the app, waits for it to leave, and starts a new one — the sequence #44 is about, in one place so
  * that a bare `app.close()` cannot creep back into the file.
  *
- * The pid assertion is what a restart means: a relaunch that silently reuses the old process, or fails to
- * start at all, is not one.
+ * The pid check is documentation, not a guard: after a launch that resolved, the application object is a
+ * fresh one over a fresh spawn, so the pids differ by construction and this cannot observe the thing its
+ * sentence suggests. What carries the weight is `closeAndWait` and the message in `launch()`. It is kept
+ * because it states the intent, with the two ways it can lie written down: OS pid reuse between the close
+ * and the next spawn (a false failure), and Windows, where the pid is the cmd.exe wrapper's rather than
+ * Electron's — so even "a new app" is not quite what it compares.
  */
 async function restartApp(): Promise<void> {
   const previous = app.process().pid;
