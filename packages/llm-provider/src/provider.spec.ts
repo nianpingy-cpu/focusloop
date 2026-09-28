@@ -43,6 +43,23 @@ describe('MockAIProvider', () => {
     expect(result.latencyMs).toBe(0);
     expect(result.providerId).toBe('mock');
   });
+
+  it('never puts a missing sentence into the text', async () => {
+    /*
+     * The symptom #6 names, in the shape a learner would meet it: the word "undefined" where a sentence
+     * should be. An empty list can no longer reach `pick` — its parameter is a non-empty tuple, so the
+     * empty case does not compile — and this is the property that would break if that type were widened
+     * back, checked over a spread of hashes rather than the one request above.
+     *
+     * Asserted as a shape rather than against copies of the two lists: duplicating the sentences here
+     * would make this test fail for the wrong reason the next time a sentence is edited.
+     */
+    for (let i = 0; i < 40; i += 1) {
+      const { text } = await provider.complete({ prompt: `question ${i}` });
+      expect(text).not.toContain('undefined');
+      expect(text).toMatch(/^[^\s].+ \[mock:[0-9a-f]{8}\]$/);
+    }
+  });
 });
 
 describe('DeepSeekProvider configuration', () => {
