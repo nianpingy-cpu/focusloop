@@ -149,11 +149,18 @@ describe('restoreWindowBounds', () => {
   });
 
   /*
-   * The size clamp exists only for the case where the app has to place the window itself. "Centred" is
+   * The size bound exists only for the case where the app has to place the window itself. "Centred" is
    * not the same as "on screen": a window taller than the display it is centred on has its top-left above
-   * the top edge, so its title bar cannot be grabbed and the learner cannot move it. Clamping to the
-   * *smallest* attached display is what makes a re-placed window land wholly inside whichever display it
-   * opens on, because a rectangle no larger than the smallest screen fits, centred, inside any of them.
+   * the top edge, so its title bar cannot be grabbed and the learner cannot move it. Bounding each
+   * dimension by the tightest attached display is what makes a re-placed window land wholly inside
+   * whichever display it opens on - a rectangle no larger than every screen, in each dimension, fits
+   * centred on any of them.
+   *
+   * Each dimension separately, not by picking the smallest display by area: a portrait screen beside a
+   * landscape one is the narrower of the two while being the taller, so taking both dimensions from it
+   * returns a height that does not fit the screen the window lands on. The cases below pin that (see
+   * "bounds each dimension separately"), and they are the evidence; the neighbouring ones guard the branches
+   * that keep a fitting size or invent no bound with nothing to fit to.
    */
   describe('when the stored position is unusable', () => {
     const away = { x: 20_000, y: 20_000, maximized: false };

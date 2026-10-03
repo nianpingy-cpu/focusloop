@@ -6,6 +6,8 @@ import { hermeticEnv } from '../hermetic-env.mjs';
 
 const MAIN = resolve(__dirname, '..', '..', 'desktop', 'dist', 'main', 'main.cjs');
 const DEFAULT = { width: 1280, height: 840 };
+/** Mirrors `WINDOW_MINIMUM` in `apps/desktop/electron/window-bounds.ts`, which this package cannot import. */
+const WINDOW_MINIMUM = { width: 960, height: 640 };
 
 interface Geometry {
   x: number;
@@ -82,16 +84,17 @@ function expectSameGeometry(actual: Geometry, expected: Geometry): void {
 }
 
 /*
- * The tightest room among the attached displays, per dimension - the bound `restoreWindowBounds` applies
- * when it has to place the window itself. Per dimension and not by area: a portrait display beside a
- * landscape one is the narrower of the two while being the taller, and what has to fit is each dimension
- * of the screen the window lands on. `Math.min` of an empty list is `Infinity`, which is the right answer
- * for "no display reported": nothing to fit to.
+ * The tightest room among the attached displays, per dimension, with the window's own minimum applied -
+ * the bound `restoreWindowBounds` computes when it has to place the window itself, restated so the
+ * expectation is the app's rule rather than a near-miss of it. Per dimension and not by area: a portrait
+ * display beside a landscape one is the narrower of the two while being the taller, and what has to fit is
+ * each dimension of the screen the window lands on. `Math.min` of an empty list is `Infinity`, which is the
+ * right answer for "no display reported": nothing to fit to.
  */
 function tightestRoom(areas: Geometry[]): { width: number; height: number } {
   return {
-    width: Math.min(...areas.map((area) => area.width)),
-    height: Math.min(...areas.map((area) => area.height)),
+    width: Math.max(WINDOW_MINIMUM.width, Math.min(...areas.map((area) => area.width))),
+    height: Math.max(WINDOW_MINIMUM.height, Math.min(...areas.map((area) => area.height))),
   };
 }
 

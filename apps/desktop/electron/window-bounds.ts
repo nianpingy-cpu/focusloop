@@ -141,9 +141,11 @@ export function restoreWindowBounds(
   /*
    * The stored position is unusable, so the window is centred on a display this function cannot name.
    * Bounding each dimension by the tightest attached display is what makes the re-placed window land
-   * wholly inside whichever display that turns out to be: a rectangle no larger than every screen, in each
-   * dimension, fits centred on any of them. Without it, a size remembered on a display that is gone can
-   * reopen taller than the one it lands on, with its title bar above the top edge and no way to move it.
+   * wholly inside whichever display that turns out to be - wherever that display can hold the window's own
+   * minimum at all, which is the one case where no size can: a rectangle no larger than every screen, in
+   * each dimension, fits centred on any of them. Without it, a size remembered on a display that is gone
+   * can reopen taller than the one it lands on, with its title bar above the top edge and no way to move
+   * it.
    *
    * The floor is the window's own minimum. A display smaller than that cannot hold the window whatever
    * this returns - the constructor enforces it anyway - so matching it here keeps the two rules that bound
