@@ -10,11 +10,12 @@ import { openDatabase } from '@focusloop/persistence';
  * `createService` reads `app.getPath('userData')` and `app.isPackaged`, and `openDataFolder` shells out �? * three things a test cannot have. Mocking the module is the alternative to not testing the orchestration
  * at all, and the orchestration is where "did the data actually go" is decided.
  */
-const openPath = vi.fn<(path: string) => Promise<string>>();
+const getPath = vi.hoisted(() => vi.fn<() => string>());
+const openPath = vi.hoisted(() => vi.fn<(path: string) => Promise<string>>());
 
 vi.mock('electron', () => ({
-  app: { getPath: (): string => 'C:\\user-data-from-electron', isPackaged: true },
-  shell: { openPath: (path: string) => openPath(path) },
+  app: { getPath, isPackaged: true },
+  shell: { openPath },
 }));
 
 const { createService } = await import('./service');
@@ -28,6 +29,7 @@ function temporaryDirectory(): string {
 }
 
 afterEach(() => {
+  getPath.mockReset();
   openPath.mockReset();
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -35,6 +37,25 @@ afterEach(() => {
 });
 
 describe('createService', () => {
+  /*
+   * The acceptance criterion, at the only level where it can be pinned: the directory the UI shows is the one
+   * Electron resolved. The e2e makes the same comparison against `--user-data-dir`, which is the same claim
+   * through a real profile; this one cannot be satisfied by a hand-written string, because the value exists
+   * only in this mock. `getPath` has no default, so a service built without `userDataPath` reads it — which
+   * is the path the app itself takes.
+   */
+  it('takes the data directory from Electron rather than deciding it', () => {
+    const directory = temporaryDirectory();
+    getPath.mockReturnValue(directory);
+    const service = createService();
+    try {
+      expect(getPath).toHaveBeenCalledWith('userData');
+      expect(service.getDataInfo().directory).toBe(directory);
+    } finally {
+      service.dispose();
+    }
+  });
+
   it('reports the directory Electron gave it, and the file it actually opened', () => {
     const directory = temporaryDirectory();
     const service = createService({ userDataPath: directory });
@@ -100,9 +121,9 @@ describe('createService', () => {
       const outcome = await service.deleteAllData();
 
       /*
-       * Windows-only in practice, so on POSIX this asserts the other half: whatever the platform says, the
-       * report and the data have to agree. `ok: false` means the session is still there, and the store is
-       * open and answering rather than closed behind a failure message.
+       * Windows-only in practice, so the maintainer's machine runs the first branch and CI's other
+       * platforms run the second. Both are the same claim — the report and the data have to agree — read
+       * through the only answer the platform can give.
        */
       if (process.platform === 'win32') {
         expect(outcome.ok).toBe(false);
@@ -119,15 +140,24 @@ describe('createService', () => {
     }
   });
 
-  it('runs one deletion however many times it is asked at once', async () => {
+  /*
+   * Identity, not equality, and that is the whole assertion.
+   *
+   * With the guard, both calls are handed the one promise, so both resolve to the same object. Without it,
+   * each call runs a full deletion of its own and the two answers are equal but distinct objects — a
+   * `toEqual` would pass in both worlds, which is the shape of a check that cannot fail. `toBe` is also the
+   * honest statement of the claim: one deletion, one answer, handed to however many callers asked.
+   *
+   * The body is synchronous today, so this cannot happen through the IPC boundary (each `invoke` is its own
+   * task) and the guard is there for the version with an `await` in it.
+   */
+  it('hands every caller the same deletion, rather than running one each', async () => {
     const directory = temporaryDirectory();
     const service = createService({ userDataPath: directory });
     try {
       const [first, second] = await Promise.all([service.deleteAllData(), service.deleteAllData()]);
 
-      // The same answer, not a second deletion on a store the first had already closed. A second run
-      // would have thrown on `close()` and surfaced as a rejected IPC call.
-      expect(first).toEqual(second);
+      expect(first).toBe(second);
       expect(existsSync(join(directory, 'focusloop.sqlite'))).toBe(true);
     } finally {
       service.dispose();
@@ -137,12 +167,14 @@ describe('createService', () => {
   /*
    * Why the deletion finds one file and not three.
    *
-   * The connection is in WAL mode while it is open �?the `-wal` and `-shm` are how SQLite shares the log,
-   * and writing to them from anywhere else fails while the connection is live (measured: `writeFileSync` on
-   * the `-shm` dies with `UNKNOWN: unknown error, open ...-shm`). `close()` checkpoints that log back into
-   * the database and removes both files, which is exactly why the store is closed before anything is
-   * unlinked. `data-files.spec.ts` covers the other half �?a database beside sidecars that are still there
-   * �?because those are what a crash or another process leaves behind.
+   * The connection is in WAL mode while it is open, so a `-shm` sits beside the database then, and
+   * `close()` checkpoints the log back into the database and removes it. That is why the store is closed
+   * before anything is unlinked, and why a clean deletion has one file left to remove.
+   *
+   * Nothing is asserted about the disk afterwards, because the success path reopens the database and seeds
+   * the built-in course, and that fresh connection creates sidecars of its own which nothing here can tell
+   * apart from leftovers. `data-files.spec.ts` covers the case this one cannot: a database beside sidecars
+   * that are still there, which is what a crash or another process leaves behind.
    */
   it('closes the database before deleting it, so SQLite has folded its WAL away first', async () => {
     const directory = temporaryDirectory();

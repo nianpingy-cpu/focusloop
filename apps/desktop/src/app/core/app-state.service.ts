@@ -313,9 +313,12 @@ export class AppStateService {
   /**
    * Drops everything the renderer holds that came out of the database.
    *
-   * `refresh` reloads every one of these, so in the ordinary case this is a moment of blank rather than a
-   * lasting change. It exists for the case where the reload does not happen at all: a failed read leaves a
-   * screen full of the learner's data with a message on it claiming the data is gone.
+   * Most of these are reloaded by `refresh`. The exceptions — the tutor's last answer, the pending
+   * decision, the outbound request and the focus-notice fold — belong to a session that no longer exists,
+   * so they are meant to stay empty rather than be reloaded.
+   *
+   * Clearing first matters for the case where the reload does not happen at all: the learner would otherwise
+   * be left looking at a screen full of their own data with a message on it saying the data is gone.
    *
    * `focusNoticeFold` and the rescue requests are presentation state rather than stored data, but they are
    * keyed to a session that no longer exists, so they go with it.

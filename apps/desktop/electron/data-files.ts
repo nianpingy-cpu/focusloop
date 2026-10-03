@@ -17,6 +17,10 @@ export type DeleteFailureReason = 'locked' | 'failed';
 
 export interface DeleteFilesOutcome {
   readonly removed: readonly string[];
+  /**
+   * The files this call could not remove. Only the one it failed on: the deletion stops there, so nothing
+   * after it was attempted and an untouched file is not a file that was left behind.
+   */
   readonly remaining: readonly string[];
   /** Null when every file that was there is gone. Otherwise the reason for the failure. */
   readonly reason: DeleteFailureReason | null;

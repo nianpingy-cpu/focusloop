@@ -54,17 +54,21 @@ interface DataNotice {
         </button>
       </div>
 
-      <!-- Announced rather than merely shown: a deletion that failed has to reach a screen reader. -->
-      @if (notice(); as message) {
-        <p
-          class="small data__notice"
-          [attr.data-kind]="message.kind"
-          role="status"
-          data-testid="data-notice"
-        >
+      <!--
+        The status line is in the DOM from the start and empty until there is something to say. A live region
+        has to exist before its content changes to be announced at all, and one born with its message already
+        in it is announced unreliably (the error banner in the shell has the same shape).
+      -->
+      <p
+        class="small data__notice"
+        [attr.data-kind]="notice()?.kind"
+        role="status"
+        data-testid="data-notice"
+      >
+        @if (notice(); as message) {
           {{ t(message.key) }}
-        </p>
-      }
+        }
+      </p>
     </div>
 
     @if (confirming()) {
@@ -84,9 +88,16 @@ interface DataNotice {
             <li>{{ t('app.data.confirm.settings') }}</li>
           </ul>
 
-          <p class="confirm__path" data-testid="data-confirm-path">
-            {{ t('app.data.confirm.path', { path: databasePath() }) }}
-          </p>
+          <!--
+            Only rendered with a path in it. If the info never loaded there is nothing to name, and a
+            sentence ending in a blank is worse than no sentence in the one dialog whose job is to say what is
+            about to be deleted.
+          -->
+          @if (databasePath().length > 0) {
+            <p class="confirm__path" data-testid="data-confirm-path">
+              {{ t('app.data.confirm.path', { path: databasePath() }) }}
+            </p>
+          }
           <p class="confirm__warning">{{ t('app.data.confirm.irreversible') }}</p>
 
           <footer class="confirm__actions">

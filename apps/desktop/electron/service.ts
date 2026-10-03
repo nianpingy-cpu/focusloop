@@ -24,7 +24,7 @@ export interface FocusLoopService {
   getDataInfo(): DataInfo;
   openDataFolder(): Promise<OpenDataFolderResponse>;
   /**
-   * Deletes every file this app has written and returns it to a first-run state, without a restart.
+   * Deletes the database and its sidecars, and returns the app to a first-run state without a restart.
    *
    * Reports what it did rather than assuming it worked: see `DeleteDataResponse`.
    */
@@ -68,10 +68,12 @@ export function createService(options: CreateServiceOptions = {}): FocusLoopServ
   /*
    * The deletion runs once, however many times it is asked for.
    *
-   * The first thing it does is close the store, so a second call that overlapped it would be driving a
-   * connection the first had already closed — `close()` on a closed handle throws, which turns a double
-   * press into an error banner instead of a second deletion. A second caller is given the answer the first
-   * one is waiting for.
+   * Honest about what this is for: the body below is entirely synchronous, so an async function returns an
+   * already-settled promise and the field is non-null only for the rest of the current task — and each IPC
+   * `invoke` is its own task, so two deletions cannot overlap today. It is here for the version of this that
+   * has an `await` in it: the first thing a deletion does is close the store, and a caller that arrived
+   * between a close and a reopen would be driving a connection nobody owns. `service.spec.ts` asserts the
+   * identity of the two answers, which is a claim the guard is the only thing that can make true.
    */
   let deletion: Promise<DeleteDataResponse> | null = null;
 
@@ -87,6 +89,11 @@ export function createService(options: CreateServiceOptions = {}): FocusLoopServ
      * Whether the deletion happened is a question about the disk, not about this function having run: the
      * file being absent is exactly a first-run state, and the file being present is exactly the case where
      * claiming success would be a lie. A database that was never there counts as gone.
+     *
+     * The file rather than `outcome.reason`, which is the other available answer and the wrong one: a
+     * sidecar that will not unlink *after* the database has gone leaves `reason` set, but the learner's rows
+     * went with the database, so reporting "nothing was deleted, your data is still there" would be false.
+     * The stray `-wal` is harmless (a fresh database at the same path ignores a log that is not its own).
      */
     if (existsSync(databasePath)) {
       // The learner's data is still there, so the app has to keep working: reopen the file that survived

@@ -1616,10 +1616,10 @@ test('an active focus commitment survives leaving and returning to the route', a
 
 /*
  * Last in this file, and it has to be: this is the one test that deletes everything the tests above spent
- * the run storing, so anything after it *in this file* would be asserting against a first-run app. The
- * files that run later alphabetically launch their own profiles (`window-bounds.spec.ts` and
- * `hermetic-env.spec.ts` each create a temp `--user-data-dir`), so no other suite shares this one's state —
- * which is also why nothing but this comment enforces the order.
+ * the run storing, so anything after it *in this file* would be asserting against a first-run app. No other
+ * suite shares this state, because the only file that launches against a profile of its own is
+ * `window-bounds.spec.ts` (which creates a temp `--user-data-dir` per test; `hermetic-env.spec.ts` never
+ * launches anything). Nothing but this comment enforces the order, which is why it says what is true.
  *
  * It ends on a session, which is also what makes its last assertions the interesting ones: "back to a
  * first-run state without a restart" is only shown by the app still working afterwards, not by the screen
@@ -1669,8 +1669,13 @@ test('the learner can find their data and delete all of it, without a restart', 
     try {
       await window.getByTestId('data-delete').click();
       await window.getByTestId('data-confirm').click();
+
+      /*
+       * The notice names the cause, and there is only ever one notice: a failure for any other reason would
+       * raise a different message, and a success would raise the opposite one, so this single assertion
+       * distinguishes all three outcomes.
+       */
       await expect(window.getByTestId('data-notice')).toContainText('open in another program');
-      await expect(window.getByTestId('data-notice')).not.toContainText('has been deleted');
     } finally {
       other.close();
     }
