@@ -623,6 +623,12 @@ test('a run of identical events is folded into one row', async () => {
     'title',
     'QUIZ_CORRECT',
   );
+  /*
+   * And the wording beside it, because nothing else asserts it: the unit spec exercises the maps, the
+   * monitor only proves the *absence* of raw vocabulary, and the attribute above would still pass if the
+   * row rendered the wrong key's words.
+   */
+  await expect(window.locator('.timeline li').first()).toContainText('Answer was right');
   const rowsBefore = await window.locator('.timeline li').count();
 
   // A single "overload" fires three HELP_REQUESTED events back to back. That is how one
@@ -633,6 +639,7 @@ test('a run of identical events is folded into one row', async () => {
 
   const newest = window.locator('.timeline li').first();
   await expect(newest.locator('strong')).toHaveAttribute('title', 'HELP_REQUESTED');
+  await expect(newest).toContainText('You asked for help');
   await expect(newest.locator('.timeline__count')).toHaveText('×3');
   // The shorthand is not the accessible name.
   await expect(newest.locator('.timeline__count')).toHaveAttribute('aria-label', '3 times');

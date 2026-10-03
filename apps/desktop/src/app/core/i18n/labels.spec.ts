@@ -65,15 +65,18 @@ describe('the event history vocabulary', () => {
 
   it('reads as history rather than as the log', () => {
     /*
-     * The wording is for the learner, so no entry is the enum member, a bare identifier, or an ALL_CAPS
-     * token - which is what stops the map being "fixed" by pointing a key at its own name or at another
-     * member's.
+     * The wording is for the learner, so no entry is the enum member, an ALL_CAPS token, or another
+     * member's name - which is what stops the map being "fixed" by pointing a key at its own name or at a
+     * neighbour's. The last check is the one the sources need: they are lower-case words, so neither the
+     * ALL_CAPS test nor the inequality reaches them, and `'event.source.user': 'agent'` would otherwise
+     * pass while putting the wrong provenance on every row.
      *
      * The component's *fallback* is deliberately not covered here: `eventTypeLabel` returns the raw value
      * for a record naming something this build does not know, and that path lives in `DashboardPage`, which
      * has no component spec. An earlier version of this file "tested" it by building the expected string
      * itself, which could not fail; a tautology is worse than an acknowledged gap.
      */
+    const memberNames: readonly string[] = [...LEARNING_EVENT_TYPES, ...SOURCES];
     for (const entry of [
       ...LEARNING_EVENT_TYPES.map((type) => [type, EVENT_TYPE_KEYS[type]] as const),
       ...SOURCES.map((source) => [source, EVENT_SOURCE_KEYS[source]] as const),
@@ -81,8 +84,9 @@ describe('the event history vocabulary', () => {
       const [member, key] = entry;
       for (const wording of [en[key], zh[key]]) {
         expect(wording, `${member} reads as ${JSON.stringify(wording)}`).not.toBe(member);
-        expect(wording).not.toMatch(/^[A-Z][A-Z_]*$/);
-        expect(wording.trim()).toBe(wording);
+        expect(wording, `${member} reads as another member's name`).not.toMatch(/^[A-Z][A-Z_]*$/);
+        expect(memberNames, `${member} reads as another member's name`).not.toContain(wording);
+        expect(wording, `${member} has surrounding whitespace`).toBe(wording.trim());
       }
     }
   });

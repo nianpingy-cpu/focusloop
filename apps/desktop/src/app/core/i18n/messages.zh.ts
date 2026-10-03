@@ -257,7 +257,7 @@ export const zh: Record<MessageKey, string> = {
   'event.type.TAB_RETURNED': '你回到了这个标签页',
   'event.type.IDLE_STARTED': '你停止了操作',
   'event.type.IDLE_ENDED': '你重新开始操作',
-  'event.type.RESUME_REQUESTED': '提供了继续的选项',
+  'event.type.RESUME_REQUESTED': '你选择继续了',
   'event.type.RESUME_DISMISSED': '你选择了暂不继续',
   'event.type.SESSION_ENDED': '会话结束',
   'event.type.AGENT_PROPOSAL_EXECUTED': '应用了一项建议的变更',

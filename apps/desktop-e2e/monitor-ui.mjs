@@ -206,10 +206,21 @@ try {
      *
      * Scoped to the timeline rather than the whole body: the page also renders the course title, which can
      * come from the first heading of a markdown file, so `# DATA_STRUCTURES_NOTES` is a learner's text and
-     * not this bug. The sources are one word lower-case (`simulator`, `system`) and cannot be told from
-     * ordinary wording here; the unit spec covers those, and so do the `title` attributes this cannot see -
-     * which is the point of putting the raw vocabulary there.
+     * not this bug.
+     *
+     * The types are what this can check. The sources are one word lower-case (`simulator`, `system`) and
+     * cannot be told from ordinary wording by a pattern - that half is the unit spec's, which does reach
+     * them - and neither can it see the `title` attributes, which is the point of putting the raw
+     * vocabulary there. A record naming something this build does not know is also *supposed* to print raw
+     * (the component's fallback), and this would fail on it: that cannot happen in this walk, which runs
+     * against a fresh profile, but it would be the first thing to check if this step ever fires oddly.
      */
+    const rows = await window.locator('.timeline li').count();
+    if (rows === 0) {
+      // A missing element and an empty history both land here, which is why the count is checked first:
+      // reading `innerText` of nothing would instead throw a generic timeout that names no screen at all.
+      throw new Error('the dashboard has no history rows, so this guard would prove nothing');
+    }
     const timeline = await window.locator('.timeline').innerText();
     const rawVocabulary = [...new Set(timeline.match(/[A-Z]{2,}(_[A-Z]+)+/g) ?? [])];
     if (rawVocabulary.length > 0) {
