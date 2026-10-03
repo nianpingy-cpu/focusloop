@@ -57,14 +57,11 @@ function maximized(app: ElectronApplication): Promise<boolean> {
 }
 
 /*
- * The whole display rectangle, not its work area. "Reachable" means the title bar can be grabbed, and
- * the region to test that against is the one the platform itself constrains a window to: macOS clamps to
- * the visible frame, which excludes the menu bar, so the work area would be a stricter claim than the
- * necessary one on a leg this suite also runs (`.github/workflows/ci.yml` runs the whole directory on
- * `macos-latest` as well as `windows-latest`).
+ * The usable rectangle of each display, not the whole screen: "wholly on a display" is the guarantee the
+ * size clamp provides, and the work area is the region that has to hold for a title bar to be grabbable.
  */
-function displayBounds(app: ElectronApplication): Promise<Geometry[]> {
-  return app.evaluate(({ screen }) => screen.getAllDisplays().map((display) => display.bounds));
+function workAreas(app: ElectronApplication): Promise<Geometry[]> {
+  return app.evaluate(({ screen }) => screen.getAllDisplays().map((display) => display.workArea));
 }
 
 /**
@@ -84,18 +81,31 @@ function expectSameGeometry(actual: Geometry, expected: Geometry): void {
   }
 }
 
-/** The window's top-left has to be on a display, or its title bar cannot be reached at all. */
-function expectReachable(actual: Geometry, displays: Geometry[]): void {
-  const onADisplay = displays.some(
-    (display) =>
-      actual.x >= display.x &&
-      actual.x < display.x + display.width &&
-      actual.y >= display.y &&
-      actual.y < display.y + display.height,
+/**
+ * The whole window has to be inside a work area, not merely overlapping one.
+ *
+ * This has teeth because the app decides whether the stored position is kept: with an unusable position it
+ * omits `x`/`y` and the window opens centred, so a fitting size lands wholly inside; a window that kept the
+ * position would sit at (20000, 20000) and fail here. It is *not* used to assert that an oversized size is
+ * fitted - that is the app's clamp in `window-bounds.ts`, and it is covered by the unit spec, because
+ * Windows constrains an oversized window by itself, so no end-to-end run can tell the clamp's removal from
+ * its presence.
+ *
+ * The 2px slack is the frame rounding `expectSameGeometry` documents, not a weakening: a window clamped to
+ * exactly its display's work area is observed a pixel larger.
+ */
+function expectWhollyOnSomeWorkArea(actual: Geometry, areas: Geometry[]): void {
+  const slack = 2;
+  const inside = areas.some(
+    (area) =>
+      actual.x >= area.x - slack &&
+      actual.y >= area.y - slack &&
+      actual.x + actual.width <= area.x + area.width + slack &&
+      actual.y + actual.height <= area.y + area.height + slack,
   );
   expect(
-    onADisplay,
-    `the window's top-left (${actual.x}, ${actual.y}) is outside every display (${JSON.stringify(displays)})`,
+    inside,
+    `the window ${JSON.stringify(actual)} is not wholly inside any work area ${JSON.stringify(areas)}`,
   ).toBe(true);
 }
 
@@ -193,7 +203,7 @@ test('a position on a display that is gone is dropped, and the size is kept', as
   const app = await launch(profile);
   try {
     const bounds = await windowBounds(app);
-    expectReachable(bounds, await displayBounds(app));
+    expectWhollyOnSomeWorkArea(bounds, await workAreas(app));
     // The size is still honoured; only the position was unusable.
     expect(Math.abs(bounds.width - 1100)).toBeLessThanOrEqual(2);
     expect(Math.abs(bounds.height - 700)).toBeLessThanOrEqual(2);
@@ -222,7 +232,7 @@ test('a record that cannot be trusted opens at the default size', async () => {
     const app = await launch(profile);
     try {
       const bounds = await windowBounds(app);
-      expectReachable(bounds, await displayBounds(app));
+      expectWhollyOnSomeWorkArea(bounds, await workAreas(app));
       expect(
         Math.abs(bounds.width - DEFAULT.width),
         `${label}: expected the default width, got ${bounds.width}`,
@@ -234,17 +244,27 @@ test('a record that cannot be trusted opens at the default size', async () => {
   }
 });
 
-test('a stored size too large for the display still leaves the window reachable', async () => {
+test('a stored size too large for the display is fitted rather than left unusable', async () => {
   /*
-   * A plausible record whose size no longer fits: the position is dropped and the size is kept, so the
-   * window is centred - and centring something larger than the work area can put its top-left at a
-   * negative coordinate, above the top edge, where the title bar cannot be grabbed. This is the case the
-   * "drop the position, keep the size" rule would fail on, so it is pinned rather than reasoned about.
+   * A plausible record whose size no longer fits, from a display that is gone. The position is dropped and
+   * the size is clamped by `restoreWindowBounds`, so the window opens centred and whole.
+   *
+   * Only the outcome is asserted here; the clamp itself is asserted where it lives (the unit spec), because
+   * this platform constrains an oversized window even without it - measured: removing the clamp leaves this
+   * case green. Keeping the assertion means a change that leaves the window *not* fitting is still caught;
+   * it just cannot be the evidence for the clamp.
    */
   const profile = newProfile({ x: 20_000, y: 20_000, width: 3000, height: 1900, maximized: false });
   const app = await launch(profile);
   try {
-    expectReachable(await windowBounds(app), await displayBounds(app));
+    const areas = await workAreas(app);
+    const bounds = await windowBounds(app);
+    expectWhollyOnSomeWorkArea(bounds, areas);
+    const tightest = areas.reduce((tight, area) =>
+      area.width * area.height < tight.width * tight.height ? area : tight,
+    );
+    expect(bounds.width).toBeLessThanOrEqual(tightest.width + 2);
+    expect(bounds.height).toBeLessThanOrEqual(tightest.height + 2);
   } finally {
     await app.close();
   }

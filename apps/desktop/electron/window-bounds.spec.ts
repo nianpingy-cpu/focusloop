@@ -147,6 +147,67 @@ describe('restoreWindowBounds', () => {
       maximized: true,
     });
   });
+
+  /*
+   * The size clamp exists only for the case where the app has to place the window itself. "Centred" is
+   * not the same as "on screen": a window taller than the display it is centred on has its top-left above
+   * the top edge, so its title bar cannot be grabbed and the learner cannot move it. Clamping to the
+   * *smallest* attached display is what makes a re-placed window land wholly inside whichever display it
+   * opens on, because a rectangle no larger than the smallest screen fits, centred, inside any of them.
+   */
+  describe('when the stored position is unusable', () => {
+    const away = { x: 20_000, y: 20_000, maximized: false };
+
+    it('clamps a size larger than the display it will land on', () => {
+      expect(
+        restoreWindowBounds({ ...away, width: 3000, height: 1900 }, [PRIMARY], FALLBACK),
+      ).toEqual({ width: PRIMARY.width, height: PRIMARY.height, maximized: false });
+    });
+
+    it('clamps to the smallest attached display, not the largest', () => {
+      expect(
+        restoreWindowBounds({ ...away, width: 3000, height: 1900 }, [PRIMARY, LEFT_HAND], FALLBACK),
+      ).toEqual({ width: LEFT_HAND.width, height: LEFT_HAND.height, maximized: false });
+    });
+
+    it('leaves a size that already fits the tightest display alone', () => {
+      expect(
+        restoreWindowBounds({ ...away, width: 1200, height: 800 }, [PRIMARY, LEFT_HAND], FALLBACK),
+      ).toEqual({ width: 1200, height: 800, maximized: false });
+    });
+
+    it('does not invent a clamp when no display is reported', () => {
+      // Nothing to fit to, so the stored size stands rather than being guessed down to the fallback.
+      expect(restoreWindowBounds({ ...away, width: 3000, height: 1900 }, [], FALLBACK)).toEqual({
+        width: 3000,
+        height: 1900,
+        maximized: false,
+      });
+    });
+
+    it('still honours the maximised flag it clamped around', () => {
+      expect(
+        restoreWindowBounds(
+          { ...away, width: 3000, height: 1900, maximized: true },
+          [PRIMARY],
+          FALLBACK,
+        ),
+      ).toEqual({ width: PRIMARY.width, height: PRIMARY.height, maximized: true });
+    });
+  });
+
+  it('keeps a usable position even when the window overhangs the display', () => {
+    // A position the learner chose and that still touches a display is theirs to keep, overhang and all -
+    // only a size the app has to place itself gets clamped.
+    const overhanging = { x: 1800, y: 0, width: 3000, height: 1900, maximized: false };
+    expect(restoreWindowBounds(overhanging, [PRIMARY], FALLBACK)).toEqual({
+      width: 3000,
+      height: 1900,
+      x: 1800,
+      y: 0,
+      maximized: false,
+    });
+  });
 });
 
 describe('the stored file', () => {

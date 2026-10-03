@@ -80,6 +80,22 @@ export function intersectsAnyWorkArea(
   );
 }
 
+/**
+ * The tightest room among the attached displays, or `null` when none is reported.
+ *
+ * By area rather than by either dimension alone: a display can be narrow and tall, and what matters is
+ * which one is hardest to fit a rectangle into.
+ */
+function tightestWorkArea(workAreas: readonly WorkArea[]): WorkArea | null {
+  return workAreas.reduce<WorkArea | null>(
+    (tightest, area) =>
+      tightest === null || area.width * area.height < tightest.width * tightest.height
+        ? area
+        : tightest,
+    null,
+  );
+}
+
 export interface RestoredWindow {
   readonly width: number;
   readonly height: number;
@@ -92,9 +108,16 @@ export interface RestoredWindow {
 /**
  * What to open with.
  *
- * A size is kept whenever it is plausible; a position is kept only while it still lands on an attached
- * display. When it does not, the position is dropped rather than clamped, so the window opens centred
- * on the primary display instead of pinned to an edge of one that is gone.
+ * A position is kept only while it still lands on an attached display. When it does not, the position is
+ * dropped rather than clamped, so the window opens centred instead of pinned to the edge of a screen that
+ * is gone - and the size is clamped to the smallest attached display, because that is what turns
+ * "centred" into "on screen". When the position is usable, the size is kept exactly as it was, overhang
+ * and all.
+ *
+ * The clamp is the app's own guarantee rather than the platform's, deliberately: Windows does constrain an
+ * oversized window by itself, so removing this changes nothing there and there is no end-to-end test that
+ * can tell the difference. Not depending on that is the point - the rule is what makes the invariant
+ * true on a platform that does not, and it is testable where it lives.
  */
 export function restoreWindowBounds(
   stored: WindowState | null,
@@ -105,10 +128,29 @@ export function restoreWindowBounds(
     return { width: fallback.width, height: fallback.height, maximized: false };
   }
   const onScreen = intersectsAnyWorkArea(stored, workAreas);
+  if (onScreen) {
+    return {
+      width: stored.width,
+      height: stored.height,
+      x: stored.x,
+      y: stored.y,
+      maximized: stored.maximized,
+    };
+  }
+  /*
+   * The stored position is unusable, so the window is centred on a display this function cannot name.
+   * Clamping to the *smallest* attached work area is what makes the re-placed window land wholly inside
+   * whichever display that turns out to be: a rectangle no larger than the smallest screen fits, centred,
+   * inside any of them. Without it, a size remembered on a display that is gone can reopen taller than the
+   * one it lands on, with its title bar above the top edge and no way to move it.
+   */
+  const room = tightestWorkArea(workAreas);
+  if (room === null) {
+    return { width: stored.width, height: stored.height, maximized: stored.maximized };
+  }
   return {
-    width: stored.width,
-    height: stored.height,
-    ...(onScreen ? { x: stored.x, y: stored.y } : {}),
+    width: Math.min(stored.width, room.width),
+    height: Math.min(stored.height, room.height),
     maximized: stored.maximized,
   };
 }
