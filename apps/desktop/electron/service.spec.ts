@@ -8,7 +8,8 @@ import { openDatabase } from '@focusloop/persistence';
  * The only spec in this package that stands in for Electron.
  *
  * `createService` reads `app.getPath('userData')` and `app.isPackaged`, and `openDataFolder` shells out — three things
- * a test cannot have. Mocking the module is the alternative to not testing the orchestration
+ * a test cannot have. Mocking the module is the alternative to not testing the orchestration at all, and the
+ * orchestration is where \"did the data actually go\" is decided.
  */
 const getPath = vi.hoisted(() => vi.fn<() => string>());
 const openPath = vi.hoisted(() => vi.fn<(path: string) => Promise<string>>());

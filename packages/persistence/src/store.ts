@@ -222,7 +222,13 @@ function parseJson<T>(value: string, fallback: T): T {
  * these repositories.
  */
 export class FocusLoopStore {
-  /** Whether `db` is a live connection. False only after a `close`, which is what makes `close` idempotent. */
+  /**
+   * Whether this store has a usable connection.
+   *
+   * False from `close` until a replacement is opened and its schema is up, which is why `close` is idempotent
+   * and why a failed replacement leaves the store reporting that it cannot be used rather than claiming a
+   * handle nobody can read from.
+   */
   private connected = true;
 
   constructor(private db: SqlDatabase) {}
