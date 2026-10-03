@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -7,8 +7,8 @@ import { openDatabase } from '@focusloop/persistence';
 /*
  * The only spec in this package that stands in for Electron.
  *
- * `createService` reads `app.getPath('userData')` and `app.isPackaged`, and `openDataFolder` shells out �? * three things a test cannot have. Mocking the module is the alternative to not testing the orchestration
- * at all, and the orchestration is where "did the data actually go" is decided.
+ * `createService` reads `app.getPath('userData')` and `app.isPackaged`, and `openDataFolder` shells out — three things
+ * a test cannot have. Mocking the module is the alternative to not testing the orchestration
  */
 const getPath = vi.hoisted(() => vi.fn<() => string>());
 const openPath = vi.hoisted(() => vi.fn<(path: string) => Promise<string>>());
@@ -34,6 +34,43 @@ afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+/*
+ * The fact the deletion's honesty rests on, pinned rather than assumed.
+ *
+ * `deleteAllData` reports success when the database file is gone even if a `-wal` beside it could not be
+ * removed, which is only defensible if a log that is not the new database's own cannot bring the learner's
+ * rows back. The way to settle that is not to reason about it: commit rows in WAL mode, keep a copy of the
+ * live log, remove the database, put the log back where it was, and open the path again with the same
+ * `openDatabase` the app uses.
+ */
+describe('a log left behind by the database that was deleted', () => {
+  it('is not replayed into the fresh database at the same path', () => {
+    const directory = temporaryDirectory();
+    const databasePath = join(directory, 'focusloop.sqlite');
+    const saved = join(directory, 'saved.wal');
+
+    const old = openDatabase(databasePath);
+    old.exec('create table rows_left_behind (secret)');
+    old.prepare('insert into rows_left_behind values (?)').run('the learner wrote this');
+    // Copied while the connection is live, because closing checkpoints the log away and removes it.
+    copyFileSync(`${databasePath}-wal`, saved);
+    old.close();
+
+    rmSync(databasePath, { force: true });
+    copyFileSync(saved, `${databasePath}-wal`);
+
+    const fresh = openDatabase(databasePath);
+    try {
+      const tables = fresh.prepare("select name from sqlite_master where type = 'table'").all() as {
+        name: string;
+      }[];
+      expect(tables.map((row) => row.name)).not.toContain('rows_left_behind');
+    } finally {
+      fresh.close();
+    }
+  });
 });
 
 describe('createService', () => {

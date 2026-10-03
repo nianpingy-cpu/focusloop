@@ -313,15 +313,11 @@ export class AppStateService {
   /**
    * Drops everything the renderer holds that came out of the database.
    *
-   * Most of these are reloaded by `refresh`. The exceptions — the tutor's last answer, the pending
-   * decision, the outbound request and the focus-notice fold — belong to a session that no longer exists,
-   * so they are meant to stay empty rather than be reloaded.
-   *
-   * Clearing first matters for the case where the reload does not happen at all: the learner would otherwise
-   * be left looking at a screen full of their own data with a message on it saying the data is gone.
-   *
-   * `focusNoticeFold` and the rescue requests are presentation state rather than stored data, but they are
-   * keyed to a session that no longer exists, so they go with it.
+   * `refresh` reloads the database-derived ones (the session, the log, the card, the rescue, the dashboard,
+   * the agent context, the courses, the material, the outbound request) and `reloadInsightsQuietly` reloads
+   * the insights window. What is left is what has no session to belong to any more — the tutor's last
+   * answer, the pending decision and the intervention it refers to, and the focus-notice fold — and those
+   * are meant to stay empty rather than come back.
    */
   private forgetStoredState(): void {
     this.snapshot.set(null);

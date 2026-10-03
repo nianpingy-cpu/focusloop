@@ -28,7 +28,7 @@ export const zh: Record<MessageKey, string> = {
   'app.data': '你的数据',
   'app.data.open': '打开文件夹',
   'app.data.delete': '删除全部数据',
-  'app.data.openFailed': '系统文件管理器没有打开。上面显示的就是该文件夹。',
+  'app.data.openFailed': '系统文件管理器没有打开该文件夹。',
   'app.data.locked': '数据库正被其他程序占用，因此没有删除任何内容。请关闭那个程序后重试。',
   'app.data.failed': '没有删除任何内容。FocusLoop 无法移除该文件，你的数据仍然在。',
   'app.data.deleted': 'FocusLoop 存储的所有内容都已删除。',

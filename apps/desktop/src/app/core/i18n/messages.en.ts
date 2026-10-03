@@ -30,7 +30,7 @@ const en = {
   'app.data': 'Your data',
   'app.data.open': 'Open folder',
   'app.data.delete': 'Delete everything',
-  'app.data.openFailed': 'The system file manager did not open. The path above is the folder.',
+  'app.data.openFailed': 'The system file manager did not open the folder.',
   'app.data.locked':
     'The database is open in another program, so nothing was deleted. Close that program, then try again.',
   'app.data.failed':

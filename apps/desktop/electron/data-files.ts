@@ -3,10 +3,15 @@ import { existsSync, unlinkSync } from 'node:fs';
 /**
  * The files a FocusLoop database consists of on disk.
  *
- * SQLite writes a `-wal` and a `-shm` beside the database when it is in WAL mode, so "delete my data" is
- * three files rather than one: removing only the database leaves the write-ahead log behind, and a future
- * open that finds it has rows to replay. The database file is first so that a failure to remove it is the
- * first thing `deleteFiles` sees.
+ * SQLite writes a `-wal` and a `-shm` beside the database when it is in WAL mode, and the `-wal` holds page
+ * images — the learner's rows — until it is checkpointed, so deleting the database alone leaves a file with
+ * their content still in it. The database file is first so that a failure to remove it is the first thing
+ * `deleteFiles` sees.
+ *
+ * Removing the log is not about resurrection: measured on this machine (2026-10-03), a `-wal` left beside a
+ * freshly created database at the same path is ignored rather than replayed — SQLite ties a log to the
+ * database it belongs to, and `service.spec.ts` pins that. It is about the learner's rows not staying on
+ * disk in a file nobody is looking at.
  */
 export function databaseFiles(databasePath: string): readonly string[] {
   return [databasePath, `${databasePath}-wal`, `${databasePath}-shm`];

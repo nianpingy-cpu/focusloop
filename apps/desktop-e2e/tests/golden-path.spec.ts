@@ -1616,10 +1616,10 @@ test('an active focus commitment survives leaving and returning to the route', a
 
 /*
  * Last in this file, and it has to be: this is the one test that deletes everything the tests above spent
- * the run storing, so anything after it *in this file* would be asserting against a first-run app. No other
- * suite shares this state, because the only file that launches against a profile of its own is
- * `window-bounds.spec.ts` (which creates a temp `--user-data-dir` per test; `hermetic-env.spec.ts` never
- * launches anything). Nothing but this comment enforces the order, which is why it says what is true.
+ * the run storing, so anything after it *in this file* would be asserting against a first-run app. Every
+ * other suite in this package launches against a temp `--user-data-dir` of its own, so the only state this
+ * deletion can reach is what is above it here. Nothing but this comment enforces the order, which is why it
+ * says only what is true.
  *
  * It ends on a session, which is also what makes its last assertions the interesting ones: "back to a
  * first-run state without a restart" is only shown by the app still working afterwards, not by the screen
@@ -1701,9 +1701,25 @@ test('the learner can find their data and delete all of it, without a restart', 
   await expect(dialog).toContainText('cannot be undone');
   await expect(window.getByTestId('data-confirm-path')).toContainText('focusloop.sqlite');
 
-  // 3. Cancelling leaves the data exactly where it was.
-  await window.getByTestId('data-cancel').click();
+  /*
+   * The keyboard contract, which is the whole of what `aria-modal="true"` claims: focus is inside the dialog
+   * rather than on the page behind it, Tab wraps at both ends instead of escaping, and Escape cancels. The
+   * dialog holds two buttons in document order (keep, then delete), so the wrap is checkable in both
+   * directions. The non-modal resume card is asserted the same way; this is the same contract on the surface
+   * that removes data.
+   */
+  await expect(dialog).toBeFocused();
+  await window.keyboard.press('Tab');
+  await expect(window.getByTestId('data-cancel')).toBeFocused();
+  await window.keyboard.press('Shift+Tab');
+  await expect(window.getByTestId('data-confirm')).toBeFocused();
+  await window.keyboard.press('Tab');
+  await expect(window.getByTestId('data-cancel')).toBeFocused();
+
+  // 3. Cancelling leaves the data exactly where it was, and hands focus back to the button that opened it.
+  await window.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
+  await expect(window.getByTestId('data-delete')).toBeFocused();
   await expect(stored).toHaveText(before);
 
   // 4. Confirming deletes it, and the app says so rather than showing a success it did not have.

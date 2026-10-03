@@ -205,7 +205,15 @@ ol {
   /* `min-width: 0` is what lets the grid track reach zero; without it the sidebar's
      min-content width would keep the column open while the shell folded. */
   min-width: 0;
-  overflow: hidden;
+  /*
+   * Clipped sideways, scrollable downwards. The horizontal clip is part of the fold (a 0-width track
+   * must not leak a sliver of label into the gutter), but the column carries the navigation, the
+   * ambient summary and the whole preferences footer, and at the window's minimum height that is
+   * taller than the screen. Clipping vertically would have made the last block the one nobody could
+   * reach, and the last block is where the data controls are (#10).
+   */
+  overflow-x: hidden;
+  overflow-y: auto;
   transition: opacity 140ms ease;
   /*
    * Both columns are named, never auto-placed. Ordering the columns by document order would
