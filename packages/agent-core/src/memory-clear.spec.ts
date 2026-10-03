@@ -212,6 +212,43 @@ describe('agent memory clear (ADR 0001)', () => {
     }
   });
 
+  /*
+   * The delete-everything path (#10) rather than the per-session clear: the database is about to be
+   * removed, so there is no session left to clear one at a time. What the transcript and the outbound map
+   * hold is the learner's own words, which is why a deletion that stopped at the file would be a
+   * deletion that says less than it does.
+   */
+  it('Working: discarding transient data forgets every session at once', async () => {
+    const prompts: string[] = [];
+    const scripted = createTestEngine({
+      providers: createProviderSelection(capturingProvider(prompts)),
+    });
+    try {
+      const { session } = scripted.engine.startSession(DEMO_COURSE_ID);
+      await scripted.engine.askTutor({
+        sessionId: session.id,
+        mode: 'HINT',
+        question: 'QUESTION_BEFORE_DELETE',
+      });
+      expect(scripted.engine.getOutboundRequest(session.id)).not.toBeNull();
+
+      scripted.engine.discardTransientData();
+
+      expect(scripted.engine.getOutboundRequest(session.id)).toBeNull();
+
+      // The transcript is observable only through the next prompt, which is where it would come back.
+      await scripted.engine.askTutor({
+        sessionId: session.id,
+        mode: 'HINT',
+        question: 'QUESTION_AFTER_DELETE',
+      });
+      expect(prompts[1]).toContain('QUESTION_AFTER_DELETE');
+      expect(prompts[1]).not.toContain('QUESTION_BEFORE_DELETE');
+    } finally {
+      scripted.close();
+    }
+  });
+
   it('Episodic: clear deletes the session proposal rows as well', () => {
     const { engine, store } = ctx;
     const { session } = engine.startSession(DEMO_COURSE_ID);

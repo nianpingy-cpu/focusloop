@@ -526,6 +526,50 @@ describe('FocusLoopStore', () => {
       }
     });
 
+    /*
+     * The delete-everything path (#10), one level down: the file is removed underneath a store that the
+     * engine and every IPC handler already hold. Replacing the store object instead would leave all of
+     * them pointing at a closed database, so the connection is what moves.
+     */
+    it('moves onto a new database in place when the file behind it was deleted', () => {
+      const file = join(tmpdir(), `focusloop-test-${randomUUID()}.sqlite`);
+      const store = new FocusLoopStore(openDatabase(file));
+      try {
+        store.initialize();
+        store.saveCourse(courseFixture());
+        store.setMeta('locale', 'zh');
+
+        // This is what the delete does: close the handle, remove the files, open a fresh database at the
+        // same path. Nothing about the store object changes, which is the property under test.
+        store.close();
+        rmSync(file, { force: true });
+        rmSync(`${file}-wal`, { force: true });
+        rmSync(`${file}-shm`, { force: true });
+
+        // A brand-new file is an unmigrated one, so this is where the schema comes back.
+        expect(store.replaceDatabase(openDatabase(file)).length).toBeGreaterThan(0);
+        expect(store.getCourse('course-1')).toBeNull();
+        /*
+         * The learner's row is gone and the default is back, which is the difference between "the
+         * database is empty" and "the app is in its first-run state": the migration seeds the defaults,
+         * so `en` here is the same value a fresh install would have rather than a leftover.
+         */
+        expect(store.getMeta('locale')).toBe('en');
+
+        // And it is a working database rather than merely an empty one.
+        store.saveCourse(courseFixture());
+        expect(store.getCourse('course-1')).toEqual(courseFixture());
+      } finally {
+        // Closed here rather than at the end of the body: a failing assertion would otherwise leave the
+        // replacement handle open, and the unlink would fail with an unrelated EPERM that hides the real
+        // failure behind it.
+        store.close();
+        rmSync(file, { force: true });
+        rmSync(`${file}-wal`, { force: true });
+        rmSync(`${file}-shm`, { force: true });
+      }
+    });
+
     it('keeps sessions isolated from one another', () => {
       const engineState = createInitialState(T0);
       for (const id of ['session-1', 'session-2']) {

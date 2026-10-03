@@ -222,11 +222,25 @@ function parseJson<T>(value: string, fallback: T): T {
  * these repositories.
  */
 export class FocusLoopStore {
-  constructor(private readonly db: SqlDatabase) {}
+  constructor(private db: SqlDatabase) {}
 
   /** Idempotent. Safe to call on every boot. */
   initialize(): readonly string[] {
     return migrate(this.db);
+  }
+
+  /**
+   * Moves the store onto a different connection, and brings the schema up on it.
+   *
+   * This exists for the delete-everything path. The store is built once and handed to the engine, which
+   * hands it to everything else, so a deletion that replaced the store object would leave every holder
+   * of it pointing at a closed database; deleting the file has to change the connection underneath the
+   * object everybody already has. That is why `db` is not `readonly`. The caller owns the path — this
+   * only ever owns the handle — so the replacement is opened by the caller and passed in here.
+   */
+  replaceDatabase(db: SqlDatabase): readonly string[] {
+    this.db = db;
+    return this.initialize();
   }
 
   // ---------------------------------------------------------------- courses

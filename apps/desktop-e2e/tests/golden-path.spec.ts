@@ -1612,3 +1612,92 @@ test('an active focus commitment survives leaving and returning to the route', a
   await window.getByTestId('end-session').click();
   await expect(window.getByRole('heading', { name: 'No session running' })).toBeVisible();
 });
+
+/*
+ * Last, and it has to be: this is the one test that deletes everything the tests above spent the run
+ * storing, so anything after it would be asserting against a first-run app.
+ *
+ * It ends on a session, which is also what makes the last assertion here the interesting one: "back to a
+ * first-run state without a restart" is only shown by the app still working afterwards, not by the screen
+ * it redrew.
+ */
+test('the learner can find their data and delete all of it, without a restart', async () => {
+  // The dashboard's aggregate over the current window, which is the app's own count of what the run has
+  // stored. Read before the delete so that "the cancel changed nothing" is a comparison rather than a
+  // second guess.
+  await clickSidebarLink('Dashboard');
+  const stored = window.getByTestId('insights-interruptions');
+  await expect(stored).toBeVisible();
+  const before = await stored.innerText();
+  expect(
+    Number(before),
+    'the run stored interruptions; with 0 stored the checks below are vacuous',
+  ).toBeGreaterThan(0);
+
+  /*
+   * The path is the app's, not the test's: it is compared against the profile this launch was given, which
+   * is what `--user-data-dir` and `app.getPath('userData')` agree on. Case-insensitively, because Windows
+   * may report a different drive case than the one the test created, and a path that differs only in case
+   * is the same directory rather than a defect.
+   */
+  const shownPath = window.getByTestId('data-path');
+  await expect(shownPath).toBeVisible();
+  expect((await shownPath.innerText()).trim().toLowerCase()).toBe(userDataDir.toLowerCase());
+
+  /*
+   * `data-open-folder` is present and is not pressed: the channel behind it hands the directory to the OS
+   * file manager, and a test that presses it opens a File Explorer window on whatever machine is running
+   * the suite. What the button can be held to from here is that it exists next to the path it acts on.
+   */
+  await expect(window.getByTestId('data-open-folder')).toBeEnabled();
+
+  // 1. The first press is a question, not a decision.
+  await window.getByTestId('data-delete').click();
+  const dialog = window.getByTestId('data-confirm-dialog');
+  await expect(dialog).toBeVisible();
+
+  // It says what will be lost, and where it lives.
+  await expect(dialog).toContainText('courses');
+  await expect(dialog).toContainText('session');
+  await expect(dialog).toContainText('cannot be undone');
+  await expect(window.getByTestId('data-confirm-path')).toContainText('focusloop.sqlite');
+
+  // 2. Cancelling leaves the data exactly where it was.
+  await window.getByTestId('data-cancel').click();
+  await expect(dialog).toBeHidden();
+  await expect(stored).toHaveText(before);
+
+  // 3. Confirming deletes it, and the app says so rather than showing a success it did not have.
+  await window.getByTestId('data-delete').click();
+  await window.getByTestId('data-confirm').click();
+
+  await expect(dialog).toBeHidden();
+  await expect(window.getByTestId('data-notice')).toContainText('has been deleted');
+
+  /*
+   * The stored history is gone, in the two places the app reports it. The activity panel falls back to its
+   * empty state rather than to a row of zeros, so the count is absent rather than 0 — and the sidebar's own
+   * summary, which is a separate reading of the same database, says nothing was recorded.
+   */
+  await expect(stored).toHaveCount(0);
+  await expect(window.getByText('Nothing recorded today.')).toBeVisible();
+  await expect(window.locator('.banner--error')).toHaveCount(0);
+
+  // 4. Home is in its first-run state: nothing running, and the block that explains the app is back.
+  await clickSidebarLink('Home');
+  await expect(window.getByTestId('getting-started')).toBeVisible();
+  await expect(window.getByText('No session running. Pick a course below to begin.')).toBeVisible();
+
+  /*
+   * 5. And the app still works, which is what "without a restart" means. The built-in course is still
+   * there because it is the product's own content rather than the learner's, and a new session runs
+   * against the database the delete left behind.
+   */
+  await window.getByTestId('course-card').first().getByTestId('start-session').click();
+  await stateIs('READY');
+  await window.getByTestId('start-task').first().click();
+  await stateIs('FOCUSED');
+  await window.getByTestId('end-session').click();
+  await expect(window.getByRole('heading', { name: 'No session running' })).toBeVisible();
+  await expect(window.locator('.banner--error')).toHaveCount(0);
+});

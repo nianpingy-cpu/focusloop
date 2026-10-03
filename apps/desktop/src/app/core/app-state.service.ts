@@ -10,6 +10,8 @@ import type {
   BridgeInfo,
   Course,
   DashboardSummary,
+  DataInfo,
+  DeleteDataResponse,
   DispatchEventResponse,
   FocusLoopApi,
   InsightRange,
@@ -120,6 +122,13 @@ export class AppStateService {
    * whoever wants it.
    */
   readonly showMaterialText = signal<boolean>(DEFAULT_SHOW_MATERIAL_TEXT);
+  /**
+   * Where the database is, as the main process resolved it.
+   *
+   * Read rather than assembled: the renderer has no business knowing that `%APPDATA%` exists, and a path
+   * built here could disagree with the file the app actually opened. Null until it has been asked for.
+   */
+  readonly dataInfo = signal<DataInfo | null>(null);
   readonly insights = signal<InsightsSummary | null>(null);
   readonly insightRange = signal<InsightRange>(DEFAULT_INSIGHT_RANGE);
   /**
@@ -237,6 +246,90 @@ export class AppStateService {
       const settings = await this.api.setShowMaterialText({ showMaterialText });
       this.showMaterialText.set(settings.showMaterialText);
     });
+  }
+
+  /**
+   * Loads where the data is.
+   *
+   * Swallowed like the sidebar summary, and for the same reason: a path that fails to load leaves the
+   * panel showing nothing, and that is not worth a banner over the page the learner is using.
+   */
+  async loadDataInfo(): Promise<void> {
+    try {
+      this.dataInfo.set(await this.api.getDataInfo());
+    } catch {
+      this.dataInfo.set(null);
+    }
+  }
+
+  /** Returns whether the OS showed the folder, so the caller can say so when it did not. */
+  async openDataFolder(): Promise<boolean> {
+    try {
+      return (await this.api.openDataFolder()).opened;
+    } catch {
+      // The same news as `opened: false` — the folder did not appear — so it is reported once, there.
+      return false;
+    }
+  }
+
+  /**
+   * Deletes everything the app has stored, then puts the renderer back where a first run would leave it.
+   *
+   * Returns the main process's own account rather than a boolean, because "it is still there" has a
+   * reason and the learner has to read it. `null` means the request itself failed, which the error banner
+   * already reports.
+   *
+   * The settings are re-read on the way out because they lived in the database that was just deleted: the
+   * shell would otherwise keep showing a language and a theme that no longer exist anywhere.
+   */
+  async deleteAllData(): Promise<DeleteDataResponse | null> {
+    let outcome: DeleteDataResponse | null = null;
+
+    await this.run(async () => {
+      outcome = await this.api.deleteAllData({ confirmed: true });
+      if (!outcome.ok) return;
+
+      const settings = await this.loadSettings();
+      this.locale.set(settings.locale);
+      this.theme.set(settings.theme);
+      this.showMaterialText.set(settings.showMaterialText);
+
+      this.forgetSessionState();
+      await this.refresh();
+      await this.reloadInsightsQuietly();
+    });
+
+    return outcome;
+  }
+
+  /**
+   * Drops every copy the renderer holds of a session that no longer exists.
+   *
+   * `refresh` re-reads what the store can still answer, which is most of it. These are the renderer's own
+   * copies — the tutor's last answer, the pending decision, the developer's outbound request — and a
+   * deletion that left them on screen would be displaying data the app claims to have removed.
+   */
+  private forgetSessionState(): void {
+    this.tutorAnswer.set(null);
+    this.outboundRequest.set(null);
+    this.decision.set(null);
+    this.interventionId.set(null);
+    this.insights.set(null);
+    this.focusNoticeFold.set({ sessionId: null, folded: false });
+  }
+
+  /**
+   * Re-reads the dashboard's window after a delete.
+   *
+   * Quiet like `refreshToday`, and for the same reason: a window that fails to reload must not raise a
+   * banner over a deletion that already succeeded.
+   */
+  private async reloadInsightsQuietly(): Promise<void> {
+    try {
+      this.insights.set(await this.api.getInsights({ range: this.insightRange() }));
+    } catch {
+      this.insights.set(null);
+    }
   }
 
   async startSession(courseId: string): Promise<void> {

@@ -8,6 +8,7 @@ import type { FocusLoopService } from '../service';
 import {
   parseConfirmProposal,
   parseCourseId,
+  parseDeleteAllData,
   parseDispatchRequest,
   parseEndSession,
   parseExecuteProposal,
@@ -218,6 +219,27 @@ export function createHandlers(service: FocusLoopService) {
       channel: IPC_CHANNELS.setShowMaterialText,
       parse: parseSetShowMaterialText,
       handle: (request) => engine.setShowMaterialText(request.showMaterialText),
+    }),
+    /*
+     * The data controls go to the service rather than to the engine.
+     *
+     * They are about the file: its path, the folder it is in, and deleting it. The engine is what knows
+     * about courses and sessions, and it has no business knowing where it is stored.
+     */
+    defineHandler({
+      channel: IPC_CHANNELS.getDataInfo,
+      parse: parseNoArgs,
+      handle: () => service.getDataInfo(),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.openDataFolder,
+      parse: parseNoArgs,
+      handle: () => service.openDataFolder(),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.deleteAllData,
+      parse: parseDeleteAllData,
+      handle: () => service.deleteAllData(),
     }),
     defineHandler({
       channel: IPC_CHANNELS.getInsights,
