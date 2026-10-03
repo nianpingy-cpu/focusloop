@@ -207,16 +207,21 @@ test('the window reopens where it was closed, and maximised stays maximised', as
     await stop();
 
     /*
-     * Compared exactly, unlike every other geometry check here. The reason is not that it avoids the window
-     * manager - `moved` is the window manager's own answer to `setBounds`, read back over CDP - but that both
-     * numbers come from the same Electron API for the same window in the same state, which their
-     * documentation says are equal outside of a maximise, a minimise or fullscreen. A tolerance here would
-     * only hide an off-by-one write. It also pins that the state lands in *this* profile rather than the real
-     * user-data directory, which is what makes every other assertion here hermetic.
+     * The same 2px tolerance as everywhere else, and here the reason is measured rather than assumed. This
+     * comparison was exact for a while, on the argument that both numbers come from the same Electron API
+     * for the same window in the same state - which `macos-latest` disproved: the file is written from
+     * `getNormalBounds()` and `moved` is read from `getBounds()`, and Cocoa rounds those two getters a pixel
+     * apart even in normal state. A one-pixel difference is not an off-by-one write, so the tolerance is the
+     * honest check; what is asserted exactly is the flag, and that the file lands in *this* profile rather
+     * than the real user-data directory - which is what makes every other assertion here hermetic.
      */
     const stateFile = join(profile, 'window-state.json');
     expect(existsSync(stateFile)).toBe(true);
-    expect(JSON.parse(readFileSync(stateFile, 'utf8'))).toEqual({ ...moved, maximized: false });
+    const written = JSON.parse(readFileSync(stateFile, 'utf8')) as Geometry & {
+      maximized: boolean;
+    };
+    expect(written.maximized).toBe(false);
+    expectSameGeometry(written, moved);
 
     const second = await start();
     expectSameGeometry(await windowBounds(second), moved);
