@@ -1040,6 +1040,30 @@ textarea:focus {
   outline-offset: -1px;
 }
 
+/* ------------------------------------------------------- getting started */
+
+/*
+ * The getting-started path (#21).
+ *
+ * The list keeps its own `display`, which is the whole reason there is so little here: `display: grid`
+ * on an `<ol>` drops the markers *and* takes the list out of the accessibility tree in Chromium, so the
+ * three steps stop being announced as a list of three — and the order is the one thing the block is
+ * saying. Spacing is done on the items instead.
+ */
+.steps {
+  margin: 10px 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+
+.steps li {
+  margin-top: 4px;
+}
+
+.steps li::marker {
+  color: var(--text-muted);
+}
+
 /* ------------------------------------------------------------ file picker */
 
 /*

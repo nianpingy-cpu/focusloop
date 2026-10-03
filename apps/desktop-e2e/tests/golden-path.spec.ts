@@ -322,6 +322,33 @@ test('the suite exercises the offline mock, never a real provider', async () => 
   await expect(footer).toContainText('offline mode');
 });
 
+/*
+ * Second on purpose: the app boots with nothing running, which is the only state this block appears in.
+ * Waiting until later in the file would mean ending a session to get back to it, and the golden path
+ * below starts one.
+ */
+test('the app explains itself while nothing is running', async () => {
+  const gettingStarted = window.getByTestId('getting-started');
+  await expect(gettingStarted).toBeVisible();
+
+  // The path, in the order it happens. Read as a list rather than as loose text, because the order is
+  // the one thing the block is saying - and a list that stopped being a list would still pass a text
+  // assertion.
+  await expect(gettingStarted.getByRole('listitem')).toHaveCount(3);
+  await expect(gettingStarted.getByRole('listitem').first()).toContainText('Pick a course');
+  await expect(gettingStarted.getByRole('listitem').nth(1)).toContainText('micro task');
+  await expect(gettingStarted.getByRole('listitem').last()).toContainText('one step');
+
+  // And it ends on the product's premise rather than on the learner's homework.
+  await expect(gettingStarted).toContainText('Coming back later is the point');
+
+  // The status line it sits above is still there and still says the other thing: one line reports what
+  // is happening, the other says what to do about it.
+  await expect(gettingStarted).toContainText('No session running');
+
+  await expect(window.locator('.banner--error')).toHaveCount(0);
+});
+
 test('golden path: learn, get interrupted, resume, see the outcome', async () => {
   // 1. The app boots into Home with the built-in demo course.
   await expect(
@@ -886,6 +913,8 @@ test('ending a session leaves nothing current', async () => {
 
   await clickSidebarLink('Home');
   await expect(window.getByText('No session running. Pick a course below to begin.')).toBeVisible();
+  // And it comes back on its own, which is the other half of "contextual rather than remembered".
+  await expect(window.getByTestId('getting-started')).toBeVisible();
 
   await expect(window.locator('.banner--error')).toHaveCount(0);
 });

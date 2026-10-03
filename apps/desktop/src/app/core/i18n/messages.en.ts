@@ -65,6 +65,18 @@ const en = {
   'home.current.meta': '{completed} / {total} micro tasks · {elapsed} · state {state}',
   'home.current.continue': 'Continue session',
   'home.empty': 'No session running. Pick a course below to begin.',
+  /*
+   * How to use the app (#21), shown only while nothing is running. Written as the order the learner
+   * actually does it in, and it ends on the thing the product is for rather than on the thing it
+   * expects of them.
+   */
+  'home.start.eyebrow': 'Getting started',
+  'home.start.title': 'One session, in three steps',
+  'home.start.step.course': 'Pick a course below and open it.',
+  'home.start.step.session': 'Start a session, then start one micro task from the plan.',
+  'home.start.step.task': 'Finish it and stop whenever you like — one step is a session done.',
+  'home.start.back':
+    'Coming back later is the point, not a failure: where you left off is kept, and continuing from there is what this is for.',
   'home.courses.title': 'Courses',
   'home.courses.meta': '{concepts} concepts · {tasks} micro tasks',
   'home.courses.view': 'View course',

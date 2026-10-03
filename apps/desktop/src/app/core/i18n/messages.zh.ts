@@ -60,6 +60,13 @@ export const zh: Record<MessageKey, string> = {
   'home.current.meta': '已完成 {completed} / {total} 个微任务 · 用时 {elapsed} · 状态 {state}',
   'home.current.continue': '继续会话',
   'home.empty': '当前没有进行中的会话。从下面挑一门课程开始吧。',
+  'home.start.eyebrow': '开始使用',
+  'home.start.title': '一次会话，分三步',
+  'home.start.step.course': '在下面选一门课程，打开它。',
+  'home.start.step.session': '开始一次会话，然后从计划里开始一个微任务。',
+  'home.start.step.task': '做完就停下，随时都可以——一步就算完成了一次会话。',
+  'home.start.back':
+    '过一会儿再回来才是重点，不是失败：你停下的位置会留着，接着做下去就是它的用意。',
   'home.courses.title': '课程',
   'home.courses.meta': '{concepts} 个概念 · {tasks} 个微任务',
   'home.courses.view': '查看课程',
