@@ -288,21 +288,25 @@ The window's native background colour cannot be reached by CSS, so the main proc
 renderer paints; an in-app override is not reflected there.
 
 **The window remembers its own geometry, and the rules for that live outside Electron.** Applying the
-geometry after the window exists shows the default size for a frame and then jumps, so it is restored
-while the `BrowserWindow` is being constructed — the first frame is already the right one — and an
-unusable stored position is simply dropped so Electron centres the window rather than parking it off a
-display that is no longer attached. Those decisions are pure functions in
-`electron/window-bounds.ts`: a stored record is either fully plausible or discarded whole, because a
-half-trusted rectangle is how a window ends up 0×0 in a corner, and a position has to intersect an
-attached work area to be honoured. The file itself (`window-state.json`, beside the database) is best
-effort in both directions — an unreadable record is "no stored state", and a window that cannot write
-one still closes.
+geometry after the window exists shows the default size for a frame and then jumps, so the size and
+position are restored while the `BrowserWindow` is being constructed. Maximising cannot be: it is a
+window-manager call rather than a constructor argument, and `maximize()` shows the window if it is not
+already displayed, so it waits for `ready-to-show` alongside `show()`. A learner whose last session
+ended maximised can therefore see one frame at the previous normal size — smaller than the alternative,
+which showed a _contentless_ window for the whole renderer load. An unusable stored position is simply
+dropped, so Electron centres the window rather than parking it off a display that is no longer attached.
+Those decisions are pure functions in `electron/window-bounds.ts`: a stored record is either fully
+plausible or discarded whole, because a half-trusted rectangle is how a window ends up 0×0 in a corner,
+and a position has to intersect an attached work area to be honoured. The file itself
+(`window-state.json`, beside the database) is best effort in both directions — an unreadable record is
+"no stored state", and a window that cannot write one still closes.
 
-It sits beside the database rather than inside it deliberately. The geometry has to be readable before
-the store is open, because it is needed to construct the first window; and it has to survive the macOS
-`activate` path, which recreates a window after `service.dispose()` has already run. Electron ships an
-experimental `windowStatePersistence` option that would do part of this, but it needs a named window and
-does not give the validation and the off-display rule a place to be tested.
+It sits beside the database rather than inside it deliberately. Its real constraint is the macOS
+`activate` path, which recreates a window after `service.dispose()` has already run, so the geometry
+cannot be read from a store that may be closed; keeping it separate means the last known rectangle is
+always readable. Electron ships an experimental `windowStatePersistence` option that would do part of
+this, but it needs a named window and does not give the validation and the off-display rule a place to
+be tested.
 
 ## The shell: space is a budget, and something has to spend it
 
