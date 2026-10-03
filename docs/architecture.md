@@ -291,19 +291,23 @@ renderer paints; an in-app override is not reflected there.
 geometry after the window exists shows the default size for a frame and then jumps, so the size and
 position are restored while the `BrowserWindow` is being constructed. Maximising cannot be: it is a
 window-manager call rather than a constructor argument, and `maximize()` shows the window if it is not
-already displayed, so it waits for `ready-to-show` alongside `show()`. A learner whose last session
-ended maximised can therefore see one frame at the previous normal size — smaller than the alternative,
-which showed a _contentless_ window for the whole renderer load, and taken deliberately: maximising a
-still-hidden window would be one call and no extra frame, but only if the platform honours the maximise
-in the same operation that shows the window, which is not what the API documents. An unusable stored
-position is simply dropped, so Electron centres the window rather than parking it off a display that is
-no longer attached — and the size is clamped to the tightest attached display, because "centred" is not
-"on screen": a window taller than the display it lands on has its title bar above the top edge, where
-nothing can grab it. Those decisions are pure functions in `electron/window-bounds.ts`: a stored record
-is either fully plausible or discarded whole, because a half-trusted rectangle is how a window ends up
-0×0 in a corner; a position has to intersect an attached work area to be honoured; and the clamp applies
-only where the app has to place the window itself — a position the learner chose is theirs to keep,
-overhang and all. The file itself (`window-state.json`, beside the database) is best effort in both
+already displayed, so it waits for `ready-to-show` alongside `show()`. That is deliberate, and it costs
+one frame at the previous normal size for a learner whose last session ended maximised — smaller than the
+alternative, which showed a _contentless_ window for the whole renderer load. Maximising a still-hidden
+window would be one call and no extra frame, but `maximize()` shows the window as well as maximising it,
+so that version cannot keep `show: false`'s "nothing on screen until it has painted" — and it would only
+work if the platform treated the show and the maximise as a single operation, which its API does not say
+it does. An unusable stored position is simply dropped, so Electron centres the window rather than parking
+it off a display that is no longer attached — and the size is then bounded in **each dimension** by the
+tightest attached display, because "centred" is not "on screen": a window taller than the display it lands
+on has its title bar above the top edge, where nothing can grab it. Per dimension rather than by picking
+the smallest display by area, because a portrait screen beside a landscape one is the narrower of the two
+while being the taller, and it is the screen the window lands on that has to hold it. Those decisions are
+pure functions in `electron/window-bounds.ts`: a stored record is either fully plausible or discarded
+whole, because a half-trusted rectangle is how a window ends up 0×0 in a corner; a position has to
+intersect an attached work area to be honoured; and the bound applies only where the app has to place the
+window itself — a position the learner chose is theirs to keep, overhang and all. The file itself
+(`window-state.json`, beside the database) is best effort in both
 directions — an unreadable record is "no stored state", and a window that cannot write one still closes.
 
 It sits beside the database rather than inside it deliberately. Its real constraint is the macOS

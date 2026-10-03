@@ -81,6 +81,20 @@ function expectSameGeometry(actual: Geometry, expected: Geometry): void {
   }
 }
 
+/*
+ * The tightest room among the attached displays, per dimension - the bound `restoreWindowBounds` applies
+ * when it has to place the window itself. Per dimension and not by area: a portrait display beside a
+ * landscape one is the narrower of the two while being the taller, and what has to fit is each dimension
+ * of the screen the window lands on. `Math.min` of an empty list is `Infinity`, which is the right answer
+ * for "no display reported": nothing to fit to.
+ */
+function tightestRoom(areas: Geometry[]): { width: number; height: number } {
+  return {
+    width: Math.min(...areas.map((area) => area.width)),
+    height: Math.min(...areas.map((area) => area.height)),
+  };
+}
+
 /**
  * The whole window has to be inside a work area, not merely overlapping one.
  *
@@ -202,11 +216,17 @@ test('a position on a display that is gone is dropped, and the size is kept', as
   const profile = newProfile({ x: 20_000, y: 20_000, width: 1100, height: 700, maximized: false });
   const app = await launch(profile);
   try {
+    const areas = await workAreas(app);
     const bounds = await windowBounds(app);
-    expectWhollyOnSomeWorkArea(bounds, await workAreas(app));
-    // The size is still honoured; only the position was unusable.
-    expect(Math.abs(bounds.width - 1100)).toBeLessThanOrEqual(2);
-    expect(Math.abs(bounds.height - 700)).toBeLessThanOrEqual(2);
+    expectWhollyOnSomeWorkArea(bounds, areas);
+    /*
+     * The size is honoured where it fits and bounded where it does not, so asserting 1100x700 outright
+     * would make this a test of the runner's screen rather than of the app. What the case is about is that
+     * only the *position* was unusable.
+     */
+    const room = tightestRoom(areas);
+    expect(Math.abs(bounds.width - Math.min(1100, room.width))).toBeLessThanOrEqual(2);
+    expect(Math.abs(bounds.height - Math.min(700, room.height))).toBeLessThanOrEqual(2);
   } finally {
     await app.close();
   }
@@ -260,11 +280,9 @@ test('a stored size too large for the display is fitted rather than left unusabl
     const areas = await workAreas(app);
     const bounds = await windowBounds(app);
     expectWhollyOnSomeWorkArea(bounds, areas);
-    const tightest = areas.reduce((tight, area) =>
-      area.width * area.height < tight.width * tight.height ? area : tight,
-    );
-    expect(bounds.width).toBeLessThanOrEqual(tightest.width + 2);
-    expect(bounds.height).toBeLessThanOrEqual(tightest.height + 2);
+    const room = tightestRoom(areas);
+    expect(bounds.width).toBeLessThanOrEqual(room.width + 2);
+    expect(bounds.height).toBeLessThanOrEqual(room.height + 2);
   } finally {
     await app.close();
   }

@@ -81,19 +81,20 @@ export function intersectsAnyWorkArea(
 }
 
 /**
- * The tightest room among the attached displays, or `null` when none is reported.
+ * The tightest room among the attached displays, per dimension.
  *
- * By area rather than by either dimension alone: a display can be narrow and tall, and what matters is
- * which one is hardest to fit a rectangle into.
+ * Minimising by *area* would not do, and is worth spelling out because it looks equivalent: a portrait
+display beside a landscape one is the smallest by area while being the *tallest*, so taking both
+dimensions from it returns a height that does not fit the wide screen the window actually lands on - the
+very failure the clamp exists to prevent. The bound has to hold in each dimension separately for "fits,
+centred, on any of them" to be true. With no display reported the minimum is `Infinity` in both, which
+leaves the stored size alone: there is nothing to fit to.
  */
-function tightestWorkArea(workAreas: readonly WorkArea[]): WorkArea | null {
-  return workAreas.reduce<WorkArea | null>(
-    (tightest, area) =>
-      tightest === null || area.width * area.height < tightest.width * tightest.height
-        ? area
-        : tightest,
-    null,
-  );
+function tightestRoom(workAreas: readonly WorkArea[]): { width: number; height: number } {
+  return {
+    width: Math.min(...workAreas.map((area) => area.width)),
+    height: Math.min(...workAreas.map((area) => area.height)),
+  };
 }
 
 export interface RestoredWindow {
@@ -110,9 +111,9 @@ export interface RestoredWindow {
  *
  * A position is kept only while it still lands on an attached display. When it does not, the position is
  * dropped rather than clamped, so the window opens centred instead of pinned to the edge of a screen that
- * is gone - and the size is clamped to the smallest attached display, because that is what turns
- * "centred" into "on screen". When the position is usable, the size is kept exactly as it was, overhang
- * and all.
+ * is gone - and the size is bounded, in each dimension, by the tightest attached display, because that is
+ * what turns "centred" into "on screen". When the position is usable, the size is kept exactly as it was,
+ * overhang and all.
  *
  * The clamp is the app's own guarantee rather than the platform's, deliberately: Windows does constrain an
  * oversized window by itself, so removing this changes nothing there and there is no end-to-end test that
@@ -139,18 +140,19 @@ export function restoreWindowBounds(
   }
   /*
    * The stored position is unusable, so the window is centred on a display this function cannot name.
-   * Clamping to the *smallest* attached work area is what makes the re-placed window land wholly inside
-   * whichever display that turns out to be: a rectangle no larger than the smallest screen fits, centred,
-   * inside any of them. Without it, a size remembered on a display that is gone can reopen taller than the
-   * one it lands on, with its title bar above the top edge and no way to move it.
+   * Bounding each dimension by the tightest attached display is what makes the re-placed window land
+   * wholly inside whichever display that turns out to be: a rectangle no larger than every screen, in each
+   * dimension, fits centred on any of them. Without it, a size remembered on a display that is gone can
+   * reopen taller than the one it lands on, with its title bar above the top edge and no way to move it.
+   *
+   * The floor is the window's own minimum. A display smaller than that cannot hold the window whatever
+   * this returns - the constructor enforces it anyway - so matching it here keeps the two rules that bound
+   * a size from disagreeing, rather than returning a rectangle the window will never have.
    */
-  const room = tightestWorkArea(workAreas);
-  if (room === null) {
-    return { width: stored.width, height: stored.height, maximized: stored.maximized };
-  }
+  const room = tightestRoom(workAreas);
   return {
-    width: Math.min(stored.width, room.width),
-    height: Math.min(stored.height, room.height),
+    width: Math.max(WINDOW_MINIMUM.width, Math.min(stored.width, room.width)),
+    height: Math.max(WINDOW_MINIMUM.height, Math.min(stored.height, room.height)),
     maximized: stored.maximized,
   };
 }

@@ -170,6 +170,34 @@ describe('restoreWindowBounds', () => {
       ).toEqual({ width: LEFT_HAND.width, height: LEFT_HAND.height, maximized: false });
     });
 
+    it('bounds each dimension separately, so a portrait display cannot set the height', () => {
+      /*
+       * The decisive case. A laptop beside a rotated external, where the portrait display is smaller by
+       * *area* while being the *taller* of the two: taking both dimensions from it returns a height that
+       * overflows the screen the window actually lands on, which is the failure the bound exists to
+       * prevent. The bound has to hold in each dimension independently.
+       */
+      const laptop = { x: 0, y: 0, width: 2560, height: 1400 };
+      const portrait = { x: 2560, y: 0, width: 1200, height: 1920 };
+      expect(
+        restoreWindowBounds({ ...away, width: 3000, height: 1900 }, [laptop, portrait], FALLBACK),
+      ).toEqual({ width: 1200, height: 1400, maximized: false });
+    });
+
+    it('never returns a size below the window\u2019s own minimum', () => {
+      // A display smaller than the minimum cannot hold the window whatever this returns, and the
+      // constructor enforces its own floor anyway - so this returns that floor rather than a rectangle the
+      // window will never have.
+      const tiny = { x: 0, y: 0, width: 800, height: 600 };
+      expect(restoreWindowBounds({ ...away, width: 3000, height: 1900 }, [tiny], FALLBACK)).toEqual(
+        {
+          width: WINDOW_MINIMUM.width,
+          height: WINDOW_MINIMUM.height,
+          maximized: false,
+        },
+      );
+    });
+
     it('leaves a size that already fits the tightest display alone', () => {
       expect(
         restoreWindowBounds({ ...away, width: 1200, height: 800 }, [PRIMARY, LEFT_HAND], FALLBACK),
