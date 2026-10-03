@@ -70,8 +70,11 @@ test('the window reopens where it was closed, and maximised stays maximised', as
     await first.evaluate(({ BrowserWindow }) => {
       BrowserWindow.getAllWindows()[0]!.setBounds({ x: 120, y: 90, width: 1100, height: 700 });
     });
+    // The resize is applied by the window manager, and this suite runs on macOS as well as Windows:
+    // read the geometry only once it has actually changed, or `moved` could still be the default and
+    // the "did it move" assertion would fail for a reason that is not this app's.
+    await expect.poll(() => windowBounds(first)).not.toEqual(initial);
     const moved = await windowBounds(first);
-    expect(moved).not.toEqual(initial);
     await first.close();
     /*
      * The state has to land in *this* profile, not the real user-data directory. Without this the test
