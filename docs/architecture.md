@@ -287,6 +287,17 @@ The window's native background colour cannot be reached by CSS, so the main proc
 `nativeTheme.shouldUseDarkColors`. That covers the common case and stops a dark flash before the
 renderer paints; an in-app override is not reflected there.
 
+**The window remembers its own geometry, and the rules for that live outside Electron.** Sizes and
+positions come back one launch late if they are applied after the window exists, so the geometry is
+restored while the `BrowserWindow` is being constructed — the first frame is already the right one,
+and an unusable stored position is simply dropped so Electron centres the window rather than parking
+it off a display that is no longer attached. Those decisions are pure functions in
+`electron/window-bounds.ts`: a stored record is either fully plausible or discarded whole, because a
+half-trusted rectangle is how a window ends up 0×0 in a corner, and a position has to intersect an
+attached work area to be honoured. The file itself (`window-state.json`, beside the database) is best
+effort in both directions — an unreadable record is "no stored state", and a window that cannot write
+one still closes.
+
 ## The shell: space is a budget, and something has to spend it
 
 The shell is a two-column grid: a 232px sidebar and a scrolling content column. Two decisions there
