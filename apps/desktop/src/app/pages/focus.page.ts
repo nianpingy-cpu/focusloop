@@ -542,6 +542,16 @@ export class FocusPage implements OnDestroy {
   protected readonly dropIndex = signal<number | null>(null);
   /** What the last move was, in words, for the live region. Empty until the first one. */
   protected readonly moved = signal('');
+  /**
+   * The row the keyboard is owed, for `restoreGripFocus` to honour after the next render.
+   *
+   * A sequence number rather than the id alone, so two moves of the same row are two requests: an
+   * effect keyed on the value would not re-run for the second one, and a learner who pressed the key
+   * twice would be left wherever the first render put them.
+   */
+  private readonly focusGripRequest = signal<{ taskId: string; seq: number } | null>(null);
+  private focusGripSeq = 0;
+  private handledFocusGripSeq = 0;
 
   protected gripLabel(title: string): string {
     return this.t('focus.plan.reorder', { title });
@@ -619,6 +629,12 @@ export class FocusPage implements OnDestroy {
    * and a tab stop each, and the row is already the thing being moved. `preventDefault` is only taken
    * when the key is one this handles, so Escape during a drag cancels the drag and Escape at rest
    * still closes the panel (`onEscape` checks `defaultPrevented`).
+   *
+   * Enter and Space move the row down, and with Shift up. A `<button>` that does nothing when it is
+   * activated is a dead end for anyone whose interface is Tab-and-activate, and arrows alone assume a
+   * keyboard: with a move in one direction any order is still reachable - you move the rows above it
+   * down instead - so plain activation completes the path rather than half of it. Shift adds the other
+   * direction for the people who already have the key under a finger.
    */
   protected gripKey(event: KeyboardEvent, index: number): void {
     if (event.key === 'Escape' && this.dragFrom() !== null) {
@@ -626,7 +642,17 @@ export class FocusPage implements OnDestroy {
       this.gripCancel();
       return;
     }
-    const step = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+    const activation = event.key === 'Enter' || event.key === ' ' ? 1 : 0;
+    const step =
+      event.key === 'ArrowUp'
+        ? -1
+        : event.key === 'ArrowDown'
+          ? 1
+          : activation === 0
+            ? 0
+            : event.shiftKey
+              ? -1
+              : 1;
     if (step === 0) return;
     event.preventDefault();
     void this.moveTask(index, index + step);
@@ -638,10 +664,6 @@ export class FocusPage implements OnDestroy {
    * Not a `TASK_STARTED` and not a state change: what the learner did is say which task they mean to
    * do first, and the running task is untouched — including when the row they moved was pointed at the
    * one they are on.
-   *
-   * The announcement is written after the round trip rather than before it, so it describes what
-   * happened rather than what was asked for: a dismissal or a failed write would otherwise be
-   * announced as a move that never landed.
    */
   private async moveTask(from: number, to: number): Promise<void> {
     const tasks = this.openTasks();
@@ -649,9 +671,23 @@ export class FocusPage implements OnDestroy {
     const next = reorder(order, from, to);
     if (next === order) return;
 
+    /*
+     * A type guard rather than a runtime one: `reorder` returns the list unchanged unless `from` is a
+     * valid index, so by this line `tasks[from]` is always there. It is written out because the
+     * alternative is a `!`, and that would become a lie the moment the contract changed.
+     */
     const task = tasks[from];
+    if (task === undefined) return;
+
     await this.state.dispatch('TASKS_REORDERED', { order: next });
-    if (task === undefined || this.snapshot() === null) return;
+    /*
+     * Asked of the session, not of the call's resolution. `AppStateService.run` catches a failed IPC
+     * call and reports it in the banner, so a rejected write resolves normally - announcing it here
+     * would describe a move that never landed, and moving the keyboard would put it on a row that is
+     * not where the learner is looking. Comparing the stored order is also the only check that covers
+     * the write landing while its response was lost.
+     */
+    if (!this.sessionHasOrder(next)) return;
     this.moved.set(
       this.t('focus.plan.moved', {
         title: task.title,
@@ -659,7 +695,18 @@ export class FocusPage implements OnDestroy {
         total: String(next.length),
       }),
     );
-    await this.focusGrip(task.id);
+    this.focusGripSeq += 1;
+    this.focusGripRequest.set({ taskId: task.id, seq: this.focusGripSeq });
+  }
+
+  /** Whether the session is now in the order that was asked for, read back from the store. */
+  private sessionHasOrder(order: readonly string[]): boolean {
+    const stored = this.snapshot()?.session.taskOrder;
+    return (
+      stored !== undefined &&
+      stored.length === order.length &&
+      stored.every((id, index) => id === order[index])
+    );
   }
 
   /**
@@ -671,15 +718,24 @@ export class FocusPage implements OnDestroy {
    * "inactive" until this existed. Without it a keyboard user loses their place on every move, and the
    * second move needs the mouse they were avoiding.
    *
-   * The wait is one turn of the event loop, which is when the rows have been rendered in their new
-   * order. The lookup is by task id rather than by position, because the position is the thing that
-   * just changed.
+   * An `effect`, like `manageStuckFocus` above, rather than a `setTimeout(0)`: it re-runs after the
+   * view has been updated, which is the only moment the grip exists in its new place. A timeout worked,
+   * but only because the zoneless scheduler happens to queue its callback first - an argument about
+   * scheduler internals rather than a guarantee, and one that would break silently, in the keyboard
+   * path only, if that changed. The lookup is by task id rather than by position, because the position
+   * is the thing that just changed.
    */
-  private async focusGrip(taskId: string): Promise<void> {
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const grip = this.gripRefs().find((ref) => ref.nativeElement.dataset['taskId'] === taskId);
-    grip?.nativeElement.focus();
-  }
+  private readonly restoreGripFocus = effect(() => {
+    const request = this.focusGripRequest();
+    if (request === null || request.seq <= this.handledFocusGripSeq) return;
+    this.handledFocusGripSeq = request.seq;
+    untracked(() => {
+      const grip = this.gripRefs().find(
+        (ref) => ref.nativeElement.dataset['taskId'] === request.taskId,
+      );
+      grip?.nativeElement.focus();
+    });
+  });
 
   /**
    * Escape, which belongs to whatever is open. The chooser first: it is the more recent thing the
@@ -821,6 +877,7 @@ export class FocusPage implements OnDestroy {
     this.followRescueTimer.destroy();
     this.syncTimer.destroy();
     this.manageStuckFocus.destroy();
+    this.restoreGripFocus.destroy();
   }
 
   protected openTasks(): readonly MicroTask[] {

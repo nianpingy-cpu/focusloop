@@ -179,7 +179,8 @@ const en = {
    * context in a list: "Reorder Binary search trees" is what the row is for.
    */
   'focus.plan.reorder': 'Reorder {title}',
-  'focus.plan.gripHelp': 'Move it with the up and down arrow keys, or drag it.',
+  'focus.plan.gripHelp':
+    'Enter or Space moves it down, with Shift up, or use the up and down arrow keys, or drag it.',
   'focus.plan.moved': 'Moved {title} to position {position} of {total}',
   'focus.none.title': 'No session running',
   'focus.none.body': 'Start a session from a course to enter the focus workspace.',

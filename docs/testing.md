@@ -184,11 +184,12 @@ has to prove that the pieces are wired together — it does not re-prove the rul
 - The session plan geometry: block heights are proportional to the estimates, the floor keeps a
   two-minute task readable, the blocks tile the column with no gap or overlap, a negative estimate
   counts as nothing, and every kind has its own glyph.
-- Reordering the plan: a named order wins over the course order, an unnamed task keeps its course
-  place, an id that names no task is skipped rather than given a position, a repeated id means one
-  thing, nothing is ever lost or duplicated, a move to the index it is already at changes nothing, an
-  out-of-range source or target is ignored rather than clamped, and the drop target clamps past either
-  end of the track because a drag that has left it still has a target.
+- Reordering the plan: a named order wins over the course order, an unnamed task follows the named
+  ones rather than holding its course index, an id that names no task is skipped rather than given a
+  position, a repeated id means one thing, nothing is ever lost or duplicated, a move to the index it
+  is already at changes nothing, an out-of-range source or target is ignored rather than clamped, and
+  the drop target clamps past either end of the track because a drag that has left it still has a
+  target.
 - The focus timer state machine: the three-minute default, a late tick reporting `expired` and
   never negative time, a paused timer ignoring every further tick, resume continuing from the new
   timestamp with the same remaining time, `+1 minute` preserving elapsed progress, an expired timer
@@ -222,9 +223,10 @@ single `×3` row, the remaining work renders as contiguous blocks whose heights 
 estimates, the resume card takes focus and keeps it inside itself until Escape closes it, ending a
 session leaves the app with nothing current, the interface can be switched to Chinese with the
 choice surviving a real restart of the app, and the remaining tasks can be reordered by dragging a
-row by its grip and by pressing the arrow keys on it — the order surviving a real restart, the drop
-marker appearing before the release, the keyboard staying on the row it moved, the step in progress
-untouched by either path, and the whole thing put back the way it was found.
+row by its grip, by pressing the arrow keys on it, and by activating it (Enter or Space moves the row
+down, with Shift up) — the order surviving a real restart, the drop marker appearing before the
+release, the keyboard staying on the row it moved, the step in progress untouched by every path, and
+the whole thing put back the way it was found.
 
 There is no `test` target for this project on purpose. When there was one it ran Playwright under
 `pnpm test`, which meant the unit run tried to launch Electron without a build — CI could never go

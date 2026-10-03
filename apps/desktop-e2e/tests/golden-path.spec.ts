@@ -301,8 +301,8 @@ async function dragPlanRow(fromRow: number, toRow: number): Promise<void> {
   await window.mouse.up();
 }
 
-/** The keyboard path: put the keyboard on a row's grip and press an arrow key. */
-async function pressMove(fromRow: number, key: 'ArrowUp' | 'ArrowDown', times = 1): Promise<void> {
+/** The keyboard path: put the keyboard on a row's grip and press a key (or an `A+B` combination). */
+async function pressOnGrip(fromRow: number, key: string, times = 1): Promise<void> {
   await window.getByTestId('plan-grip').nth(fromRow).focus();
   for (let press = 0; press < times; press += 1) await window.keyboard.press(key);
 }
@@ -802,8 +802,8 @@ test('the remaining tasks can be reordered by pointer and by keyboard, and the o
   const original = await planTitles();
   expect(
     original.length,
-    'fewer than two rows in the plan, so there is nothing to reorder: run the whole file rather than this test alone',
-  ).toBeGreaterThan(1);
+    'the drag and the restart below need three rows to move between, so run the whole file rather than this test alone',
+  ).toBeGreaterThan(2);
 
   const moved = original[0]!;
 
@@ -827,7 +827,7 @@ test('the remaining tasks can be reordered by pointer and by keyboard, and the o
   await expect(window.getByTestId('end-session')).toBeVisible();
 
   // 2. The keyboard: the same row, one place up, from its own grip.
-  await pressMove(2, 'ArrowUp');
+  await pressOnGrip(2, 'ArrowUp');
   await expect.poll(planTitles).toEqual([original[1], moved, original[2], ...original.slice(3)]);
 
   // Still the same step, still the same session, still running.
@@ -840,7 +840,18 @@ test('the remaining tasks can be reordered by pointer and by keyboard, and the o
   // The keyboard is left on the row it just moved, not on whatever the re-render put in that slot.
   await expect(window.getByTestId('plan-grip').nth(1)).toBeFocused();
 
-  // 3. A restart keeps it. The order belongs to the session, and the session is a row in a database
+  /*
+   * 3. The activation a button advertises, which is the only path for an interface that is Tab and
+   *    press. Both directions are asserted, because one of them alone would leave the other as the
+   *    direction such a learner cannot reach at all - and this leaves the order where step 2 left it.
+   */
+  await pressOnGrip(1, 'Enter');
+  await expect.poll(planTitles).toEqual([original[1], original[2], moved, ...original.slice(3)]);
+  await pressOnGrip(2, 'Shift+Enter');
+  await expect.poll(planTitles).toEqual([original[1], moved, original[2], ...original.slice(3)]);
+  await expect(window.getByTestId('plan-grip').nth(1)).toBeFocused();
+
+  // 4. A restart keeps it. The order belongs to the session, and the session is a row in a database
   //    rather than anything the renderer is holding.
   const afterMoves = await planTitles();
   await restartApp();
@@ -848,8 +859,8 @@ test('the remaining tasks can be reordered by pointer and by keyboard, and the o
   await openPlan();
   await expect.poll(planTitles).toEqual(afterMoves);
 
-  // 4. Back to the order it started in, so the run continues from the state it found.
-  await pressMove(1, 'ArrowUp');
+  // 5. Back to the order it started in, so the run continues from the state it found.
+  await pressOnGrip(1, 'ArrowUp');
   await expect.poll(planTitles).toEqual(original);
 
   await expect(window.locator('.banner--error')).toHaveCount(0);

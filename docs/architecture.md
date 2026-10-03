@@ -160,8 +160,12 @@ the course: "move `t3` to position 1" would have to be replayed against a task l
 So the reducer validates the shape — a list of non-empty strings, duplicates folded to their first
 mention — and the meaning is settled where the list it is about exists, by `applyTaskOrder` in the
 renderer's `core/task-order.ts`. That is why an order naming a task that no longer exists, or naming
-only some of them, cannot lose anyone's work: everything unnamed is "not moved" and keeps its course
-position.
+only some of them, cannot lose anyone's work: the tasks the order names come first in the order it
+names them, and everything else follows in course order. An unnamed task therefore sinks below the
+named ones rather than holding its course index, which happens in practice — the running task is not in
+the plan, so the order never names it, and starting another step puts it back at the bottom. Pinning
+the unnamed ones to their indices instead would break the property the drop marker promises, that the
+row a task is dropped on is the row it ends up in.
 
 It is stored on the session and cleared by `SESSION_STARTED`, because the order belongs to the session
 rather than to the course. Starting another session is a clean slate, not a standing preference the

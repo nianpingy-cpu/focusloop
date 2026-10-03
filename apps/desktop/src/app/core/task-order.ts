@@ -16,19 +16,28 @@ interface Identified {
 }
 
 /**
- * The tasks, in the learner's order, with anything they have not ordered left where they found it.
+ * The tasks the order names, first and in the order it names them, then the rest in the order they
+ * arrived.
  *
- * Three things follow from that sentence, and all three are load-bearing:
+ * "First, then the rest" rather than "left where they found it" is the honest description, and the
+ * difference is visible: an unnamed task sinks below every named one, so a task that was at the top of
+ * the course can appear second. That happens in practice, not just on paper - the running task is
+ * excluded from the plan, so the stored order never names it, and starting another step puts it back
+ * as an unnamed task at the bottom. It is the right trade: the alternative is a merge that pins the
+ * unnamed ones to their course indices, and then the row a drag was dropped on is not the row the task
+ * ends up in, which is exactly what the drop marker promises.
+ *
+ * Three things follow from the sentence above, and all three are load-bearing:
  *
  * - It never drops a task. A task the order says nothing about is not a task to hide; it is one the
- *   learner has not moved, so it keeps its course position. This is what makes the stored order safe
- *   to be partial - and it will be, because the order only ever names the tasks that were visible when
- *   it was recorded.
+ *   learner has not moved, so it stays in the list. This is what makes the stored order safe to be
+ *   partial - and it will be, because the order only ever names the tasks that were visible when it was
+ *   recorded.
  * - It never invents a position. An id in `order` that matches no task is skipped silently, which is
  *   the only reading available: the task is gone (completed, or no longer in the course), and there is
  *   nowhere to put it.
- * - It is stable. Tasks the order does not mention keep their relative course order, and the sort that
- *   places the mentioned ones is stable, so two tasks cannot swap places because of a comparison that
+ * - Among themselves, the unnamed tasks keep their course order, and so do the named ones when two of
+ *   them are compared. The sort is stable, so two tasks cannot swap places because of a comparison that
  *   was never asked for.
  *
  * The rank is taken from the *first* mention of an id, so a stored order that names one task twice

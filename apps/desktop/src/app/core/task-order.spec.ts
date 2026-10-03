@@ -22,10 +22,12 @@ describe('applyTaskOrder', () => {
     expect(ids(applyTaskOrder(tasks, ['c', 'a']))).toEqual(['c', 'a', 'b', 'd']);
   });
 
-  it('leaves a task the order says nothing about where the course put it', () => {
+  it('puts a task the order says nothing about after the ones it does name', () => {
     // The stored order only ever names the tasks that were on screen when it was recorded, so this is
-    // the ordinary case rather than an edge one: `d` was not there, and it is not hidden for it.
+    // the ordinary case rather than an edge one: `d` was not there, and it is not hidden for it - but
+    // it does sink below the named ones, which is why the doc says "then the rest" and not "unmoved".
     expect(ids(applyTaskOrder(tasks, ['b']))).toEqual(['b', 'a', 'c', 'd']);
+    expect(ids(applyTaskOrder(tasks, ['c']))).toEqual(['c', 'a', 'b', 'd']);
   });
 
   it('skips an id that names no task, rather than inventing a place for it', () => {

@@ -167,7 +167,7 @@ export const zh: Record<MessageKey, string> = {
   // 把总量直接说出来，省得学习者自己去把块加起来。
   'focus.plan.remaining': '还剩约 {time}',
   'focus.plan.reorder': '重新排序 {title}',
-  'focus.plan.gripHelp': '用上下方向键移动它，或者直接拖动。',
+  'focus.plan.gripHelp': '回车或空格键向下移，加 Shift 向上移；也可以用上下方向键，或者直接拖动。',
   'focus.plan.moved': '已把 {title} 移到第 {position} 位，共 {total} 项',
   'focus.none.title': '当前没有进行中的会话',
   'focus.none.body': '从一门课程开始会话，即可进入专注工作区。',
