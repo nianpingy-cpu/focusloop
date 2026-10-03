@@ -1,4 +1,13 @@
-import { Component, computed, effect, inject, signal, untracked, viewChild } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+  viewChild,
+  viewChildren,
+} from '@angular/core';
 import type { ElementRef, OnDestroy } from '@angular/core';
 import { Router } from '@angular/router';
 import type { MicroTask, MicroTaskKind, StuckReason } from '@focusloop/shared-types';
@@ -317,7 +326,9 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                           type="button"
                           class="plan__grip"
                           data-testid="plan-grip"
+                          #planGrip
                           aria-describedby="plan-grip-help"
+                          [attr.data-task-id]="block.id"
                           [attr.aria-label]="gripLabel(block.title)"
                           (keydown)="gripKey($event, index)"
                           (pointerdown)="gripDown($event, index, block.id)"
@@ -386,6 +397,8 @@ export class FocusPage implements OnDestroy {
   /** The track the blocks are laid out in, measured rather than reasoned about while dragging. */
   private readonly planTrack = viewChild<ElementRef<HTMLElement>>('planTrack');
   private readonly planTrigger = viewChild<ElementRef<HTMLButtonElement>>('planTrigger');
+  /** Every row's grip, so the one that was moved can be found again by its task rather than by index. */
+  private readonly gripRefs = viewChildren<ElementRef<HTMLButtonElement>>('planGrip');
   private readonly stuckTrigger = viewChild<ElementRef<HTMLButtonElement>>('stuckTrigger');
   private readonly stuckGroup = viewChild<ElementRef<HTMLElement>>('stuckGroup');
 
@@ -636,16 +649,36 @@ export class FocusPage implements OnDestroy {
     const next = reorder(order, from, to);
     if (next === order) return;
 
-    const moved = tasks[from];
+    const task = tasks[from];
     await this.state.dispatch('TASKS_REORDERED', { order: next });
-    if (moved === undefined || this.snapshot() === null) return;
+    if (task === undefined || this.snapshot() === null) return;
     this.moved.set(
       this.t('focus.plan.moved', {
-        title: moved.title,
+        title: task.title,
         position: String(to + 1),
         total: String(next.length),
       }),
     );
+    await this.focusGrip(task.id);
+  }
+
+  /**
+   * Puts the keyboard back on the row that was just moved.
+   *
+   * It does not stay there by itself, and the difference matters: `@for` re-inserts the moved row
+   * rather than recreating it, and Chromium drops focus when a focused node is re-inserted. This was
+   * measured rather than assumed - the e2e assertion that the grip was still focused failed with
+   * "inactive" until this existed. Without it a keyboard user loses their place on every move, and the
+   * second move needs the mouse they were avoiding.
+   *
+   * The wait is one turn of the event loop, which is when the rows have been rendered in their new
+   * order. The lookup is by task id rather than by position, because the position is the thing that
+   * just changed.
+   */
+  private async focusGrip(taskId: string): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const grip = this.gripRefs().find((ref) => ref.nativeElement.dataset['taskId'] === taskId);
+    grip?.nativeElement.focus();
   }
 
   /**
