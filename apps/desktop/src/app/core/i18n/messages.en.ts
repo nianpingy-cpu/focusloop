@@ -239,6 +239,9 @@ const en = {
   // 100% success rate.
   'dashboard.outcomes.share': '{percent} accepted',
   'dashboard.outcomes.shareAria': 'Accepted share for {action}',
+  // What the bar reads out. `aria-valuetext` replaces `aria-valuenow` in the announcement, so it carries
+  // the share and the sample size rather than the counts line, which is the paragraph below it.
+  'dashboard.outcomes.valueText': '{percent} accepted · N = {total}',
   'dashboard.outcomes.counts':
     '{accepted} accepted · {dismissed} dismissed · {completed} completed the task afterwards · N = {total}',
   'dashboard.bridge': 'Browser bridge',

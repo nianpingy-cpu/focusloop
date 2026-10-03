@@ -230,6 +230,7 @@ export const zh: Record<MessageKey, string> = {
   // 样本的行否则会读成“每次都成功”。
   'dashboard.outcomes.share': '{percent} 被接受',
   'dashboard.outcomes.shareAria': '{action} 的接受比例',
+  'dashboard.outcomes.valueText': '{percent} 被接受 · N = {total}',
   'dashboard.outcomes.counts':
     '接受 {accepted} · 忽略 {dismissed} · {completed} 随后完成了任务 · N = {total}',
   'dashboard.bridge': '浏览器桥接',

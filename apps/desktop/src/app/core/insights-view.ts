@@ -172,6 +172,7 @@ export function weekdayIndex(date: string): number {
   const parsed = new Date(`${date}T12:00:00`);
   return Number.isNaN(parsed.getTime()) ? 0 : parsed.getDay();
 }
+
 /**
  * How often an intervention was accepted, as a share of the times it was resolved.
  *

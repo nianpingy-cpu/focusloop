@@ -653,9 +653,9 @@ test('a run of identical events is folded into one row', async () => {
  * #22: the intervention outcomes are rows with a share bar, not a five-column table.
  *
  * Its own test rather than a block inside the folding one, which would report a broken share bar under a
- * test named for the event log. It is placed here because it depends on outcomes the earlier tests in
- * this shared instance resolved - the one after it starts a new session, and starting one deliberately is
- * expensive in the intervention budget this file has to ration.
+ * test named for the event log. It is placed here because outcomes are session-scoped and the session is
+ * ended a few tests further on - starting one here would spend intervention budget this file rations, and
+ * after the session ends there is nothing left to show.
  *
  * Nothing is hard-coded about *how many* rows there are: that depends on what those earlier tests
  * resolved. The assertions are the properties the markup promises.
@@ -688,14 +688,22 @@ test('the intervention outcomes read as rows with a share and a sample size', as
     await expect(bar).toHaveAttribute('aria-valuenow', /^\d+$/);
 
     /*
-     * The bar, its accessible value and the visible percentage are all one number. Reading the
-     * attribute as a number rather than matching text is what makes the comparison meaningful - and
-     * `Number(null)` being `0` is why the attribute's presence is asserted above rather than assumed.
+     * The bar, its accessible value and the visible percentage are all one number. Reading the attribute
+     * as a number rather than matching text is what makes the comparison meaningful - and `Number(null)`
+     * being `0` is why the attribute's presence is asserted above rather than assumed.
+     *
+     * The width is read twice on purpose: `toHaveAttribute` proves the binding wrote something (a missing
+     * style attribute and a `0%` both used to satisfy the arithmetic), and `style.width` proves what
+     * Chromium actually resolved, which is what paints. Neither one alone covers both.
      */
     const shown = Number(await bar.getAttribute('aria-valuenow'));
-    await expect(bar.locator('.bar__fill')).toHaveAttribute('style', `width: ${shown}%;`);
+    await expect(bar.locator('.bar__fill')).toHaveAttribute('style', /width: \d+%/);
+    const width = await bar.locator('.bar__fill').evaluate((fill) => fill.style.width);
+    expect(width).toBe(`${shown}%`);
     await expect(outcome.locator('[data-testid="outcome-share"]')).toHaveText(`${shown}% accepted`);
-    // The sample size reaches the accessible value too, not only the sighted reader.
+    // The sample size reaches the accessible value too, not only the sighted reader - and so does the
+    // share, which `aria-valuetext` would otherwise replace in the announcement.
+    await expect(bar).toHaveAttribute('aria-valuetext', /%/);
     await expect(bar).toHaveAttribute('aria-valuetext', /N = \d+/);
   }
 

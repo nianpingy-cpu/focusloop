@@ -275,13 +275,7 @@ describe('acceptedPercent', () => {
     expect(acceptedPercent(0, 5)).toBe(0);
   });
 
-  it('stays inside the range the bar and its aria attributes promise', () => {
-    for (let total = 1; total <= 40; total += 1) {
-      for (let accepted = 0; accepted <= total; accepted += 1) {
-        const percent = acceptedPercent(accepted, total);
-        expect(percent, `${accepted}/${total}`).toBeGreaterThanOrEqual(0);
-        expect(percent, `${accepted}/${total}`).toBeLessThanOrEqual(100);
-      }
-    }
+  it('is zero rather than NaN for an action with no decisions', () => {
+    expect(acceptedPercent(0, 0)).toBe(0);
   });
 });

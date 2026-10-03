@@ -13,9 +13,8 @@ import { ACTION_KEYS, EVENT_SOURCE_KEYS, EVENT_TYPE_KEYS, STATE_KEYS } from '../
 import { groupEvents, type EventGroup } from '../core/events-view';
 import {
   STATE_COLORS,
-  busiestDay,
   acceptedPercent,
-  acceptedShare,
+  busiestDay,
   donutSegments,
   focusRatio,
   formatSpan,
@@ -314,7 +313,7 @@ const DONUT_RADIUS = 42;
                       t('dashboard.outcomes.shareAria', { action: actionLabel(row.action) })
                     "
                     [attr.aria-valuenow]="acceptedPercent(row)"
-                    [attr.aria-valuetext]="outcomeCounts(row)"
+                    [attr.aria-valuetext]="outcomeValueText(row)"
                     aria-valuemin="0"
                     aria-valuemax="100"
                   >
@@ -512,17 +511,11 @@ export class DashboardPage {
   }
 
   /**
-   * How often this action was accepted, as a share of the times it was resolved.
+   * How often this action was accepted, as a whole percent from the one function that rounds it.
    *
-   * `outcomeRows` has already dropped every row with no samples, so the denominator is never zero in
-   * practice; the guard in `acceptedShare` is what makes it total on its own terms rather than by that
-   * promise.
+   * The row states this number three times - here, as the bar's width, and as `aria-valuenow` - which is
+   * why they all come from `acceptedPercent` rather than each formatting the share itself.
    */
-  protected acceptedShare(row: InterventionOutcomeSummary): number {
-    return acceptedShare(row.accepted, row.total);
-  }
-
-  /** The same share as a whole number, for `aria-valuenow` - which is a value, not a label. */
   protected acceptedPercent(row: InterventionOutcomeSummary): number {
     return acceptedPercent(row.accepted, row.total);
   }
@@ -550,6 +543,20 @@ export class DashboardPage {
       accepted: String(row.accepted),
       dismissed: String(row.dismissed),
       completed: String(row.tasksCompleted),
+      total: String(row.total),
+    });
+  }
+
+  /**
+   * What the bar reads out as its value: the share, and the sample size it is a share *of*.
+   *
+   * `aria-valuetext` replaces `aria-valuenow` in the announcement, so stating only the counts there would
+   * drop the very number the bar is about; stating the whole counts line would repeat the paragraph below
+   * and still lose the share.
+   */
+  protected outcomeValueText(row: InterventionOutcomeSummary): string {
+    return this.t('dashboard.outcomes.valueText', {
+      percent: `${this.acceptedPercent(row)}%`,
       total: String(row.total),
     });
   }
