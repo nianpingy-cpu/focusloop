@@ -46,9 +46,9 @@ describe('MockAIProvider', () => {
 
   it('never puts a missing sentence into the text', async () => {
     /*
-     * The symptom #6 names, in the shape a learner would meet it: a sentence missing from the text, or the
-     * word "undefined" standing where one belongs. Asserted as a shape rather than against copies of the
-     * two sentence lists, so editing a sentence cannot break this test for the wrong reason.
+     * The symptom #6 names, in the shape a learner would meet it: the word "undefined" standing where a
+     * sentence belongs. Asserted as a shape rather than against copies of the two sentence lists, so
+     * editing a sentence cannot break this test for the wrong reason.
      *
      * It is a **symptom check, not the regression guard** — a first version of this comment claimed
      * otherwise and a review was right to reject it: widening `pick`'s parameter back leaves every runtime
