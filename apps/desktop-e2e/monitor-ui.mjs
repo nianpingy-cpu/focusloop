@@ -215,11 +215,17 @@ try {
      * (the component's fallback), and this would fail on it: that cannot happen in this walk, which runs
      * against a fresh profile, but it would be the first thing to check if this step ever fires oddly.
      */
-    const rows = await window.locator('.timeline li').count();
+    const rows = await window.locator('[data-testid="timeline-row"]').count();
     if (rows === 0) {
-      // A missing element and an empty history both land here, which is why the count is checked first:
-      // reading `innerText` of nothing would instead throw a generic timeout that names no screen at all.
-      throw new Error('the dashboard has no history rows, so this guard would prove nothing');
+      /*
+       * The empty history renders its own `li` inside the same `ul` (the `@empty` branch at
+       * `dashboard.page.ts:391`), so counting `.timeline li` would be 1 and this guard would never fire -
+       * which is how it was written first, and how it passed vacuously for the case it exists to catch. The
+       * event rows carry a test id of their own for exactly this reason.
+       */
+      throw new Error(
+        `the dashboard has no history rows (${rows} of them), so this guard would prove nothing`,
+      );
     }
     const timeline = await window.locator('.timeline').innerText();
     const rawVocabulary = [...new Set(timeline.match(/[A-Z]{2,}(_[A-Z]+)+/g) ?? [])];

@@ -364,7 +364,7 @@ const DONUT_RADIUS = 42;
       <h2 class="section-title">{{ t('dashboard.events') }}</h2>
       <ul class="timeline">
         @for (group of eventGroups(); track group.id) {
-          <li>
+          <li data-testid="timeline-row">
             <span class="muted small timeline__at">{{ timeLabel(group) }}</span>
             <!--
               #8: the row reads as history, not as the event log. EVENT_TYPE_KEYS and EVENT_SOURCE_KEYS

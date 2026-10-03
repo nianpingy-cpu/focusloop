@@ -4,7 +4,7 @@ import {
   type LearningEventSource,
   type LearningEventType,
 } from '@focusloop/shared-types';
-import en from './messages.en';
+import en, { type MessageKey } from './messages.en';
 import { zh } from './messages.zh';
 import { EVENT_SOURCE_KEYS, EVENT_TYPE_KEYS } from './labels';
 
@@ -25,6 +25,24 @@ const SOURCES: readonly LearningEventSource[] = [
 
 function wordingIn(dictionary: Record<string, string>, key: string): string {
   return dictionary[key] ?? '';
+}
+
+/** Every member of the closed vocabulary, with the key it reads through. */
+const MEMBERS: readonly (readonly [string, MessageKey])[] = [
+  ...LEARNING_EVENT_TYPES.map((type) => [type, EVENT_TYPE_KEYS[type]] as const),
+  ...SOURCES.map((source) => [source, EVENT_SOURCE_KEYS[source]] as const),
+];
+
+/** The members whose key is not the first one seen, named as the collision they are. */
+function sharedKeys(entries: readonly (readonly [string, MessageKey])[]): string[] {
+  const first = new Map<string, string>();
+  const collisions: string[] = [];
+  for (const [member, key] of entries) {
+    const owner = first.get(key);
+    if (owner === undefined) first.set(key, member);
+    else collisions.push(`${member} and ${owner} both read through ${key}`);
+  }
+  return collisions;
 }
 
 describe('the event history vocabulary', () => {
@@ -53,14 +71,41 @@ describe('the event history vocabulary', () => {
     expect(wordingIn(zh, key).trim()).not.toBe('');
   });
 
-  it('gives every event type and source wording of its own', () => {
-    // Two vocabulary members sharing a key would make the history ambiguous - and it is a mistake the
-    // type checker cannot see, because both keys are valid `MessageKey`s.
-    const typeKeys = LEARNING_EVENT_TYPES.map((type) => EVENT_TYPE_KEYS[type]);
-    expect(new Set(typeKeys).size).toBe(typeKeys.length);
+  it('gives every event type and source a key of its own', () => {
+    /*
+     * Two vocabulary members sharing a key would make the history ambiguous - and it is a mistake the
+     * type checker cannot see, because both keys are valid `MessageKey`s.
+     *
+     * Across both maps and not only within each: a *source* borrowing an event type's key (or the other way
+     * round) is just as ambiguous, and comparing the two lists separately let it through.
+     *
+     * The collisions are named rather than counted. `expect(new Set(keys).size).toBe(keys.length)` reports
+     * `expected 18 to be 19` and leaves the reader to diff a nineteen-element list - which is exactly the
+     * "a guard that cannot say what it found" this file has already been corrected for once.
+     */
+    expect(sharedKeys(MEMBERS)).toEqual([]);
+  });
 
-    const sourceKeys = SOURCES.map((source) => EVENT_SOURCE_KEYS[source]);
-    expect(new Set(sourceKeys).size).toBe(sourceKeys.length);
+  it('gives every member wording no other member already says', () => {
+    /*
+     * Distinct keys are not enough: two members can hold keys of their own and still render the same
+     * sentence, which in a column whose whole job is telling them apart is the same ambiguity one step
+     * further along. A cross-map copy is the easy mistake - `'event.source.agent': 'You were back'`.
+     */
+    for (const [language, dictionary] of [
+      ['en', en],
+      ['zh', zh],
+    ] as const) {
+      const seen = new Map<string, string>();
+      const repeated: string[] = [];
+      for (const [member, key] of MEMBERS) {
+        const wording = dictionary[key] ?? '';
+        const owner = seen.get(wording);
+        if (owner === undefined) seen.set(wording, member);
+        else repeated.push(`${member} and ${owner} both read as ${JSON.stringify(wording)}`);
+      }
+      expect(repeated, language).toEqual([]);
+    }
   });
 
   it('reads as history rather than as the log', () => {
@@ -77,11 +122,7 @@ describe('the event history vocabulary', () => {
      * itself, which could not fail; a tautology is worse than an acknowledged gap.
      */
     const memberNames: readonly string[] = [...LEARNING_EVENT_TYPES, ...SOURCES];
-    for (const entry of [
-      ...LEARNING_EVENT_TYPES.map((type) => [type, EVENT_TYPE_KEYS[type]] as const),
-      ...SOURCES.map((source) => [source, EVENT_SOURCE_KEYS[source]] as const),
-    ]) {
-      const [member, key] = entry;
+    for (const [member, key] of MEMBERS) {
       for (const wording of [en[key], zh[key]]) {
         expect(wording, `${member} reads as ${JSON.stringify(wording)}`).not.toBe(member);
         expect(wording, `${member} reads as another member's name`).not.toMatch(/^[A-Z][A-Z_]*$/);

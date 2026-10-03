@@ -269,7 +269,7 @@ const en = {
   'event.type.TAB_RETURNED': 'You came back to this tab',
   'event.type.IDLE_STARTED': 'You went quiet',
   'event.type.IDLE_ENDED': 'You were back',
-  'event.type.RESUME_REQUESTED': 'You picked the resume back up',
+  'event.type.RESUME_REQUESTED': 'You carried on',
   'event.type.RESUME_DISMISSED': 'You turned the resume down',
   'event.type.SESSION_ENDED': 'Session ended',
   'event.type.AGENT_PROPOSAL_EXECUTED': 'A suggested change was applied',
