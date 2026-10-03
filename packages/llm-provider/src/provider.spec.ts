@@ -85,7 +85,7 @@ describe('DeepSeekProvider configuration', () => {
   });
 
   it('normalizes a configured base URL by trimming trailing slashes', async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
       jsonResponse({ model: 'deepseek-chat', choices: [{ message: { content: 'hello' } }] }),
     );
     const provider = new DeepSeekProvider({
@@ -114,7 +114,7 @@ describe('DeepSeekProvider requests', () => {
   });
 
   it('sends the key in the authorization header and never in the body', async () => {
-    const fetchImpl = vi.fn(async () =>
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
       jsonResponse({ choices: [{ message: { content: 'ok' } }] }),
     );
     const provider = new DeepSeekProvider({
