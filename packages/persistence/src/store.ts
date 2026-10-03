@@ -964,10 +964,10 @@ export class FocusLoopStore {
 
   close(): void {
     /*
-     * Idempotent, so "the store has no live connection" is a state this object can be in and stay in. The one
-     * caller that needs it is the delete-everything path (#10): it closes the connection to unlink the file,
-     * and a reopen can fail — after which the store must still survive its own shutdown (`dispose`) and a
-     * second deletion attempt without throwing from the teardown.
+     * Idempotent, so "the store has no live connection" is a state this object can be in and stay in. The caller
+     * that needs it most is the delete-everything path (#10): it closes the connection to unlink the file, and a
+     * reopen can fail — after which the store must still survive its own shutdown (`dispose`) and a second
+     * deletion attempt without throwing from the teardown.
      */
     if (!this.connected) return;
     this.connected = false;
