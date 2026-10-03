@@ -615,7 +615,14 @@ test('a run of identical events is folded into one row', async () => {
   // Break any run that is still open, so the row arithmetic below does not depend on what
   // the previous test happened to leave behind.
   await window.getByTestId('sim-success').click();
-  await expect(window.locator('.timeline li').first()).toContainText('QUIZ_CORRECT');
+  /*
+   * #8: the row's text is the learner's wording; the enum member is the row's `title`, the way the state
+   * chip's raw value is a data attribute. `toContainText` never consults attributes, so it cannot see it.
+   */
+  await expect(window.locator('.timeline li').first().locator('strong')).toHaveAttribute(
+    'title',
+    'QUIZ_CORRECT',
+  );
   const rowsBefore = await window.locator('.timeline li').count();
 
   // A single "overload" fires three HELP_REQUESTED events back to back. That is how one
@@ -625,7 +632,7 @@ test('a run of identical events is folded into one row', async () => {
   await expect(window.locator('.timeline li')).toHaveCount(rowsBefore + 1);
 
   const newest = window.locator('.timeline li').first();
-  await expect(newest).toContainText('HELP_REQUESTED');
+  await expect(newest.locator('strong')).toHaveAttribute('title', 'HELP_REQUESTED');
   await expect(newest.locator('.timeline__count')).toHaveText('×3');
   // The shorthand is not the accessible name.
   await expect(newest.locator('.timeline__count')).toHaveAttribute('aria-label', '3 times');

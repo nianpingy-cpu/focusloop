@@ -63,35 +63,27 @@ describe('the event history vocabulary', () => {
     expect(new Set(sourceKeys).size).toBe(sourceKeys.length);
   });
 
-  it('never renders the raw vocabulary for a member of the closed set', () => {
-    /*
-     * The bug this change exists to fix. The component falls back to the raw value for anything it does
-     * not recognise (a record from a build that knew a name this one does not), so a member of the
-     * closed set reaching that fallback would put `TAB_RETURNED` on screen - in either language.
-     */
-    const unknown = (key: string): string => `translated:${key}`;
-    for (const type of LEARNING_EVENT_TYPES) {
-      const key = EVENT_TYPE_KEYS[type];
-      expect(unknown(key)).not.toBe(type);
-      expect(unknown(key)).toContain('translated:');
-    }
-    for (const source of SOURCES) {
-      const key = EVENT_SOURCE_KEYS[source];
-      expect(unknown(key)).not.toBe(source);
-      expect(unknown(key)).toContain('translated:');
-    }
-  });
-
   it('reads as history rather than as the log', () => {
-    // The wording is for the learner, so no entry is the enum member or a bare identifier. This is what
-    // stops the map being "fixed" by pointing every key at its own name.
-    for (const type of LEARNING_EVENT_TYPES) {
-      expect(en[EVENT_TYPE_KEYS[type]]).not.toBe(type);
-      expect(zh[EVENT_TYPE_KEYS[type]]).not.toBe(type);
-    }
-    for (const source of SOURCES) {
-      expect(en[EVENT_SOURCE_KEYS[source]]).not.toBe(source);
-      expect(zh[EVENT_SOURCE_KEYS[source]]).not.toBe(source);
+    /*
+     * The wording is for the learner, so no entry is the enum member, a bare identifier, or an ALL_CAPS
+     * token - which is what stops the map being "fixed" by pointing a key at its own name or at another
+     * member's.
+     *
+     * The component's *fallback* is deliberately not covered here: `eventTypeLabel` returns the raw value
+     * for a record naming something this build does not know, and that path lives in `DashboardPage`, which
+     * has no component spec. An earlier version of this file "tested" it by building the expected string
+     * itself, which could not fail; a tautology is worse than an acknowledged gap.
+     */
+    for (const entry of [
+      ...LEARNING_EVENT_TYPES.map((type) => [type, EVENT_TYPE_KEYS[type]] as const),
+      ...SOURCES.map((source) => [source, EVENT_SOURCE_KEYS[source]] as const),
+    ]) {
+      const [member, key] = entry;
+      for (const wording of [en[key], zh[key]]) {
+        expect(wording, `${member} reads as ${JSON.stringify(wording)}`).not.toBe(member);
+        expect(wording).not.toMatch(/^[A-Z][A-Z_]*$/);
+        expect(wording.trim()).toBe(wording);
+      }
     }
   });
 });

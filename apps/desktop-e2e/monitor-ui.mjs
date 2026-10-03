@@ -195,15 +195,25 @@ try {
     if (leaks.length > 0) {
       throw new Error(`the dashboard renders ${leaks.join(', ')}`);
     }
+  });
+
+  await when('the dashboard history reads as history', async () => {
     /*
-     * #8: enforced now, where #135 deliberately left it a note. The history reads as history - every
-     * event type and source has wording in both languages, and `labels.spec.ts` is what keeps that true
-     * as the vocabulary grows - so an enum member on this screen means a key was left pointing at its own
-     * name, which the compiler cannot see and a learner reads as untranslated machinery.
+     * #8, enforced where #135 deliberately left it a note. Every event type has wording in both
+     * languages - `labels.spec.ts` is what keeps that true as the vocabulary grows - so an enum member in
+     * the timeline means a key was left pointing at its own name, which the compiler cannot see and a
+     * learner reads as untranslated machinery.
+     *
+     * Scoped to the timeline rather than the whole body: the page also renders the course title, which can
+     * come from the first heading of a markdown file, so `# DATA_STRUCTURES_NOTES` is a learner's text and
+     * not this bug. The sources are one word lower-case (`simulator`, `system`) and cannot be told from
+     * ordinary wording here; the unit spec covers those, and so do the `title` attributes this cannot see -
+     * which is the point of putting the raw vocabulary there.
      */
-    const rawVocabulary = [...new Set(bridgeText.match(/[A-Z]{2,}(_[A-Z]+)+/g) ?? [])];
+    const timeline = await window.locator('.timeline').innerText();
+    const rawVocabulary = [...new Set(timeline.match(/[A-Z]{2,}(_[A-Z]+)+/g) ?? [])];
     if (rawVocabulary.length > 0) {
-      throw new Error(`the dashboard shows raw event vocabulary: ${rawVocabulary.join(', ')}`);
+      throw new Error(`the timeline shows raw event vocabulary: ${rawVocabulary.join(', ')}`);
     }
   });
 
