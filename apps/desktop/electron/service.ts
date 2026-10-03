@@ -65,6 +65,48 @@ export function createService(options: CreateServiceOptions = {}): FocusLoopServ
   });
   engine.seedBuiltInCourses();
 
+  /*
+   * The deletion runs once, however many times it is asked for.
+   *
+   * The first thing it does is close the store, so a second call that overlapped it would be driving a
+   * connection the first had already closed — `close()` on a closed handle throws, which turns a double
+   * press into an error banner instead of a second deletion. A second caller is given the answer the first
+   * one is waiting for.
+   */
+  let deletion: Promise<DeleteDataResponse> | null = null;
+
+  const performDeletion = async (): Promise<DeleteDataResponse> => {
+    /*
+     * Close first. On Windows an open handle cannot be unlinked at all, and everywhere else a delete
+     * underneath a live connection leaves the connection writing to a file with no name left.
+     */
+    store.close();
+    const outcome = deleteFiles(databaseFiles(databasePath));
+
+    /*
+     * Whether the deletion happened is a question about the disk, not about this function having run: the
+     * file being absent is exactly a first-run state, and the file being present is exactly the case where
+     * claiming success would be a lie. A database that was never there counts as gone.
+     */
+    if (existsSync(databasePath)) {
+      // The learner's data is still there, so the app has to keep working: reopen the file that survived
+      // rather than leave a closed store behind a failure message.
+      store.replaceDatabase(openDatabase(databasePath));
+      return { ok: false, reason: outcome.reason ?? 'failed', removed: outcome.removed };
+    }
+
+    /*
+     * A fresh database: schema, then the built-in course the catalogue is supposed to have on a first run.
+     * The store keeps its identity — the engine and every IPC handler hold this object — so the connection
+     * is what is replaced, which is the only way the app keeps running without a restart.
+     */
+    store.replaceDatabase(openDatabase(databasePath));
+    engine.discardTransientData();
+    engine.seedBuiltInCourses();
+
+    return { ok: true, reason: null, removed: outcome.removed };
+  };
+
   const service: FocusLoopService = {
     engine,
     store,
@@ -74,37 +116,10 @@ export function createService(options: CreateServiceOptions = {}): FocusLoopServ
     // An OS that refuses to open the file manager is a reportable outcome, not a crash: `openPath`
     // answers with the reason as a string rather than throwing.
     openDataFolder: async () => ({ opened: (await shell.openPath(userDataPath)) === '' }),
-    deleteAllData: async () => {
-      /*
-       * Close first. On Windows an open handle cannot be unlinked at all, and everywhere else a delete
-       * underneath a live connection leaves the connection writing to a file with no name left.
-       */
-      store.close();
-      const outcome = deleteFiles(databaseFiles(databasePath));
-
-      /*
-       * Whether the deletion happened is a question about the disk, not about this function having run:
-       * the file being absent is exactly a first-run state, and the file being present is exactly the
-       * case where claiming success would be a lie. A database that was never there counts as gone.
-       */
-      if (existsSync(databasePath)) {
-        // The learner's data is still there, so the app has to keep working: reopen the file that
-        // survived rather than leave a closed store behind a failure message.
-        store.replaceDatabase(openDatabase(databasePath));
-        return { ok: false, reason: outcome.reason ?? 'failed', removed: outcome.removed };
-      }
-
-      /*
-       * A fresh database: schema, then the built-in course the catalogue is supposed to have on a first
-       * run. The store keeps its identity — the engine and every IPC handler hold this object — so the
-       * connection is what is replaced, which is the only way the app keeps running without a restart.
-       */
-      store.replaceDatabase(openDatabase(databasePath));
-      engine.discardTransientData();
-      engine.seedBuiltInCourses();
-
-      return { ok: true, reason: null, removed: outcome.removed };
-    },
+    deleteAllData: () =>
+      (deletion ??= performDeletion().finally(() => {
+        deletion = null;
+      })),
     dispose: () => {
       void service.bridge?.close();
       store.close();

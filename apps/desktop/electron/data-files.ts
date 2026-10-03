@@ -3,10 +3,10 @@ import { existsSync, unlinkSync } from 'node:fs';
 /**
  * The files a FocusLoop database consists of on disk.
  *
- * SQLite writes a `-wal` and a `-shm` beside the database when it is in WAL mode, so "delete my data"
- * is three files rather than one: removing only the database leaves the write-ahead log behind, and a
- * future open that finds it has rows to replay. The order matters too — the database file is first,
- * because the caller reads the first failure as the answer about the database itself.
+ * SQLite writes a `-wal` and a `-shm` beside the database when it is in WAL mode, so "delete my data" is
+ * three files rather than one: removing only the database leaves the write-ahead log behind, and a future
+ * open that finds it has rows to replay. The database file is first so that a failure to remove it is the
+ * first thing `deleteFiles` sees.
  */
 export function databaseFiles(databasePath: string): readonly string[] {
   return [databasePath, `${databasePath}-wal`, `${databasePath}-shm`];
@@ -18,28 +18,22 @@ export type DeleteFailureReason = 'locked' | 'failed';
 export interface DeleteFilesOutcome {
   readonly removed: readonly string[];
   readonly remaining: readonly string[];
-  /** Null when every file that was there is gone. Otherwise the reason for the first failure. */
+  /** Null when every file that was there is gone. Otherwise the reason for the failure. */
   readonly reason: DeleteFailureReason | null;
 }
 
 /**
  * Which reason a failed unlink is reported with.
  *
- * `EBUSY` is a lock everywhere. Windows, though, answers an unlink of a file another process has open
- * with `EPERM` or `EACCES` instead, which is why the platform is part of the rule rather than an
- * implementation detail: on POSIX those two codes mean a permission problem, and telling that learner to
- * close another program would be advice that cannot work.
- *
- * `platform` is a parameter for the same reason it is not read from the environment here — one machine
- * cannot otherwise test the answer the other platform's users get.
+ * `EBUSY` alone, and that is a correction rather than a simplification. Windows can answer an unlink of a
+ * file another process has open with `EPERM` or `EACCES`, which is why an earlier version of this mapped
+ * those to `locked` on `win32` — but `EPERM`/`EACCES` is also what Windows returns for a read-only file
+ * attribute, where "close that program" is advice that cannot work. Measured here on 2026-10-03: a second
+ * SQLite connection holding a database open fails the unlink with `EBUSY`, so the open-file case is already
+ * named unambiguously and the speculative branch only bought a wrong diagnosis.
  */
-export function deleteFailureReason(
-  code: string | undefined,
-  platform: string,
-): DeleteFailureReason {
-  if (code === 'EBUSY') return 'locked';
-  if (platform === 'win32' && (code === 'EPERM' || code === 'EACCES')) return 'locked';
-  return 'failed';
+export function deleteFailureReason(code: string | undefined): DeleteFailureReason {
+  return code === 'EBUSY' ? 'locked' : 'failed';
 }
 
 function errorCode(error: unknown): string | undefined {
@@ -53,6 +47,11 @@ function errorCode(error: unknown): string | undefined {
  * Nothing is thrown: a file the OS will not let go of is a normal outcome of this operation, not an
  * exception — the caller has to be able to say "it is still there" to the learner, and it cannot do that
  * from a stack trace. A file that is already absent is not a failure: the job was to have it not exist.
+ *
+ * The first failure ends the deletion. Continuing would unlink the sidecars of a database that is still
+ * there, which is not "removing what could be removed": in WAL mode those files are the durability record
+ * of the other holder's connection, and a report that named them while the database survived would be an
+ * account of work that was never worth doing.
  */
 export function deleteFiles(paths: readonly string[]): DeleteFilesOutcome {
   const removed: string[] = [];
@@ -66,7 +65,8 @@ export function deleteFiles(paths: readonly string[]): DeleteFilesOutcome {
       removed.push(path);
     } catch (error) {
       remaining.push(path);
-      reason ??= deleteFailureReason(errorCode(error), process.platform);
+      reason = deleteFailureReason(errorCode(error));
+      break;
     }
   }
 

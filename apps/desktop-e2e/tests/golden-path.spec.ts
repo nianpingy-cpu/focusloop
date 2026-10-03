@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import {
   _electron as electron,
   expect,
@@ -1614,10 +1615,13 @@ test('an active focus commitment survives leaving and returning to the route', a
 });
 
 /*
- * Last, and it has to be: this is the one test that deletes everything the tests above spent the run
- * storing, so anything after it would be asserting against a first-run app.
+ * Last in this file, and it has to be: this is the one test that deletes everything the tests above spent
+ * the run storing, so anything after it *in this file* would be asserting against a first-run app. The
+ * files that run later alphabetically launch their own profiles (`window-bounds.spec.ts` and
+ * `hermetic-env.spec.ts` each create a temp `--user-data-dir`), so no other suite shares this one's state —
+ * which is also why nothing but this comment enforces the order.
  *
- * It ends on a session, which is also what makes the last assertion here the interesting one: "back to a
+ * It ends on a session, which is also what makes its last assertions the interesting ones: "back to a
  * first-run state without a restart" is only shown by the app still working afterwards, not by the screen
  * it redrew.
  */
@@ -1651,7 +1655,37 @@ test('the learner can find their data and delete all of it, without a restart', 
    */
   await expect(window.getByTestId('data-open-folder')).toBeEnabled();
 
-  // 1. The first press is a question, not a decision.
+  /*
+   * 1. A deletion that cannot happen is reported rather than performed.
+   *
+   * Windows-only, because that is the only platform where deleting a file another program has open fails:
+   * POSIX unlinks it without complaint. The lock is a second connection from this process, which is what
+   * another program with the database open looks like from the app's side — and it is a real SQLite
+   * connection rather than `fs.open`, because Node opens files with `FILE_SHARE_DELETE` and a read handle
+   * can be unlinked underneath itself.
+   */
+  if (process.platform === 'win32') {
+    const other = new DatabaseSync(join(userDataDir, 'focusloop.sqlite'));
+    try {
+      await window.getByTestId('data-delete').click();
+      await window.getByTestId('data-confirm').click();
+      await expect(window.getByTestId('data-notice')).toContainText('open in another program');
+      await expect(window.getByTestId('data-notice')).not.toContainText('has been deleted');
+    } finally {
+      other.close();
+    }
+
+    /*
+     * And the data is still there, read back rather than assumed. Leaving and re-entering the dashboard is
+     * what makes this a read of the database rather than of a screen the failed delete never touched: the
+     * page asks for its window again when it is created.
+     */
+    await clickSidebarLink('Home');
+    await clickSidebarLink('Dashboard');
+    await expect(stored).toHaveText(before);
+  }
+
+  // 2. The first press is a question, not a decision.
   await window.getByTestId('data-delete').click();
   const dialog = window.getByTestId('data-confirm-dialog');
   await expect(dialog).toBeVisible();
@@ -1662,12 +1696,12 @@ test('the learner can find their data and delete all of it, without a restart', 
   await expect(dialog).toContainText('cannot be undone');
   await expect(window.getByTestId('data-confirm-path')).toContainText('focusloop.sqlite');
 
-  // 2. Cancelling leaves the data exactly where it was.
+  // 3. Cancelling leaves the data exactly where it was.
   await window.getByTestId('data-cancel').click();
   await expect(dialog).toBeHidden();
   await expect(stored).toHaveText(before);
 
-  // 3. Confirming deletes it, and the app says so rather than showing a success it did not have.
+  // 4. Confirming deletes it, and the app says so rather than showing a success it did not have.
   await window.getByTestId('data-delete').click();
   await window.getByTestId('data-confirm').click();
 
@@ -1683,13 +1717,13 @@ test('the learner can find their data and delete all of it, without a restart', 
   await expect(window.getByText('Nothing recorded today.')).toBeVisible();
   await expect(window.locator('.banner--error')).toHaveCount(0);
 
-  // 4. Home is in its first-run state: nothing running, and the block that explains the app is back.
+  // 5. Home is in its first-run state: nothing running, and the block that explains the app is back.
   await clickSidebarLink('Home');
   await expect(window.getByTestId('getting-started')).toBeVisible();
   await expect(window.getByText('No session running. Pick a course below to begin.')).toBeVisible();
 
   /*
-   * 5. And the app still works, which is what "without a restart" means. The built-in course is still
+   * 6. And the app still works, which is what "without a restart" means. The built-in course is still
    * there because it is the product's own content rather than the learner's, and a new session runs
    * against the database the delete left behind.
    */

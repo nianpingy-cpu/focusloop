@@ -101,32 +101,57 @@ describe('deleteFiles', () => {
     expect(deleteFiles([path]).removed).toEqual([path]);
     expect(existsSync(path)).toBe(false);
   });
+
+  /**
+   * A failed deletion removes nothing at all.
+   *
+   * The sidecars are written here rather than left to SQLite, so the case is about the loop's behaviour
+   * and not about whether a given connection happens to be in WAL mode: the database is locked and the two
+   * files beside it are deletable, which is the combination that used to strip a live database's write-ahead
+   * log and then report it as removed.
+   */
+  it.skipIf(process.platform !== 'win32')(
+    'stops at the database, leaving its sidecars in place',
+    () => {
+      const path = join(temporaryDirectory(), 'focusloop.sqlite');
+      const other = openDatabase(path);
+      try {
+        writeFileSync(`${path}-wal`, 'wal');
+        writeFileSync(`${path}-shm`, 'shm');
+
+        expect(deleteFiles(databaseFiles(path))).toEqual({
+          removed: [],
+          remaining: [path],
+          reason: 'locked',
+        });
+        expect(existsSync(`${path}-wal`)).toBe(true);
+        expect(existsSync(`${path}-shm`)).toBe(true);
+      } finally {
+        other.close();
+      }
+    },
+  );
 });
 
 describe('deleteFailureReason', () => {
-  it('reads EBUSY as a lock on any platform', () => {
-    expect(deleteFailureReason('EBUSY', 'win32')).toBe('locked');
-    expect(deleteFailureReason('EBUSY', 'linux')).toBe('locked');
-    expect(deleteFailureReason('EBUSY', 'darwin')).toBe('locked');
+  it('reads EBUSY as a lock, which is what an open file gives on both platforms', () => {
+    expect(deleteFailureReason('EBUSY')).toBe('locked');
   });
 
   /*
-   * Windows answers an unlink of a file another process has open with EPERM or EACCES rather than
-   * EBUSY, which is why the platform is part of the rule.
+   * `EPERM`/`EACCES` is a permission problem, and on Windows it is also what a read-only file attribute
+   * gives — where "close the other program" would be advice that cannot work. The open-file case is
+   * `EBUSY` (measured: a second SQLite connection holding the database open), so nothing is lost by not
+   * guessing here.
    */
-  it('reads a Windows permission error as a lock, because that is what an open file looks like there', () => {
-    expect(deleteFailureReason('EPERM', 'win32')).toBe('locked');
-    expect(deleteFailureReason('EACCES', 'win32')).toBe('locked');
-  });
-
-  it('does not give a POSIX permission error the lock advice', () => {
-    expect(deleteFailureReason('EPERM', 'linux')).toBe('failed');
-    expect(deleteFailureReason('EACCES', 'darwin')).toBe('failed');
+  it('does not read a permission error as a lock', () => {
+    expect(deleteFailureReason('EPERM')).toBe('failed');
+    expect(deleteFailureReason('EACCES')).toBe('failed');
   });
 
   it('calls anything else a plain failure', () => {
-    expect(deleteFailureReason('EISDIR', 'linux')).toBe('failed');
-    expect(deleteFailureReason('ENOENT', 'win32')).toBe('failed');
-    expect(deleteFailureReason(undefined, 'win32')).toBe('failed');
+    expect(deleteFailureReason('EISDIR')).toBe('failed');
+    expect(deleteFailureReason('ENOENT')).toBe('failed');
+    expect(deleteFailureReason(undefined)).toBe('failed');
   });
 });

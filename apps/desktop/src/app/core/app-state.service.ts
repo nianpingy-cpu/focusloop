@@ -279,8 +279,15 @@ export class AppStateService {
    * reason and the learner has to read it. `null` means the request itself failed, which the error banner
    * already reports.
    *
-   * The settings are re-read on the way out because they lived in the database that was just deleted: the
-   * shell would otherwise keep showing a language and a theme that no longer exist anywhere.
+   * The stored state is dropped **before** it is reloaded, and that order is the point. `refresh` reads
+   * the database through six calls inside `run`, whose `catch` turns a failure into `lastError` — so a
+   * refresh that failed *after* a successful deletion would leave the session the learner was just in on
+   * screen, underneath a message saying that everything had been deleted. Clearing first makes a failed
+   * refresh end in a first-run screen with an error banner, which is the worst case, instead of a stale
+   * one, which would be a lie.
+   *
+   * The settings are re-read for the same kind of reason: they lived in the database that was just
+   * deleted, so the shell would otherwise keep showing a language and a theme that no longer exist.
    */
   async deleteAllData(): Promise<DeleteDataResponse | null> {
     let outcome: DeleteDataResponse | null = null;
@@ -289,12 +296,13 @@ export class AppStateService {
       outcome = await this.api.deleteAllData({ confirmed: true });
       if (!outcome.ok) return;
 
+      this.forgetStoredState();
+
       const settings = await this.loadSettings();
       this.locale.set(settings.locale);
       this.theme.set(settings.theme);
       this.showMaterialText.set(settings.showMaterialText);
 
-      this.forgetSessionState();
       await this.refresh();
       await this.reloadInsightsQuietly();
     });
@@ -303,18 +311,30 @@ export class AppStateService {
   }
 
   /**
-   * Drops every copy the renderer holds of a session that no longer exists.
+   * Drops everything the renderer holds that came out of the database.
    *
-   * `refresh` re-reads what the store can still answer, which is most of it. These are the renderer's own
-   * copies — the tutor's last answer, the pending decision, the developer's outbound request — and a
-   * deletion that left them on screen would be displaying data the app claims to have removed.
+   * `refresh` reloads every one of these, so in the ordinary case this is a moment of blank rather than a
+   * lasting change. It exists for the case where the reload does not happen at all: a failed read leaves a
+   * screen full of the learner's data with a message on it claiming the data is gone.
+   *
+   * `focusNoticeFold` and the rescue requests are presentation state rather than stored data, but they are
+   * keyed to a session that no longer exists, so they go with it.
    */
-  private forgetSessionState(): void {
+  private forgetStoredState(): void {
+    this.snapshot.set(null);
+    this.recentEvents.set([]);
+    this.resumeCard.set(null);
+    this.rescue.set(null);
+    this.dashboard.set(null);
+    this.agentContext.set(null);
+    this.courses.set([]);
+    this.materials.set([]);
     this.tutorAnswer.set(null);
     this.outboundRequest.set(null);
     this.decision.set(null);
     this.interventionId.set(null);
     this.insights.set(null);
+    this.todayInsights.set(null);
     this.focusNoticeFold.set({ sessionId: null, folded: false });
   }
 
