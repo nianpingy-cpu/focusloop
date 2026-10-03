@@ -27,17 +27,45 @@ test('the dashboard keeps the bridge behind an explicit request', async () => {
     });
     await expect(page.getByTestId('insights-total')).toBeVisible();
 
-    // Nothing from the machinery reaches a learner who has not asked for it.
+    /*
+     * Nothing from the machinery reaches a learner who has not asked for it - in either language,
+     * because the guarantee is the template's, not the translation's. A translator adding the address
+     * to a translated string would otherwise slip past a suite that only ever ran in English.
+     */
     const body = page.locator('body');
-    await expect(page.getByTestId('bridge-token')).toHaveCount(0);
-    await expect(body).not.toContainText('ws://');
-    await expect(body).not.toContainText('protocol v');
-    await expect(body).not.toContainText('127.0.0.1:');
+    for (const locale of ['en', 'zh'] as const) {
+      await page.getByTestId(`locale-${locale}`).click();
+      await expect(page.getByTestId(`locale-${locale}`)).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByTestId('bridge-token')).toHaveCount(0);
+      await expect(body).not.toContainText('ws://');
+      await expect(body).not.toContainText('protocol v');
+      await expect(body).not.toContainText('127.0.0.1:');
+    }
+    await page.getByTestId('locale-en').click();
 
-    // And it stays reachable: the bridge finds its port asynchronously, so wait for the control
-    // rather than assuming the first frame already has it.
+    // And it stays reachable.
     const reveal = page.getByTestId('bridge-reveal');
-    await expect(reveal).toBeVisible({ timeout: 15_000 });
+    /*
+     * The bridge's state is settled before the first frame - main.ts awaits startBridge before it
+     * creates the window - so a missing control is not "the port is not known yet", it is the bridge
+     * not running (its default port was already taken). Name that, instead of letting it surface as a
+     * visibility timeout that is indistinguishable from the regression this spec exists to catch.
+     */
+    await expect
+      .poll(
+        async () => {
+          if ((await reveal.count()) > 0) return 'running';
+          if ((await page.getByTestId('bridge-stopped').count()) > 0) return 'stopped';
+          if ((await page.getByTestId('bridge-unavailable').count()) > 0) return 'unavailable';
+          return 'unrendered';
+        },
+        {
+          timeout: 15_000,
+          message:
+            'the dashboard never offered the bridge reveal control: the bridge is not running',
+        },
+      )
+      .toBe('running');
     await expect(reveal).toHaveAttribute('aria-expanded', 'false');
     await reveal.click();
 
@@ -45,6 +73,21 @@ test('the dashboard keeps the bridge behind an explicit request', async () => {
     await expect(body).toContainText('ws://');
     await expect(body).toContainText('protocol v');
     await expect(reveal).toHaveAttribute('aria-expanded', 'true');
+    /*
+     * The revealed region is announced by, and sits after, the control that reveals it (APG disclosure
+     * pattern). Both halves matter: the id is what a screen reader follows, and the order is what keeps
+     * the button from jumping out from under the pointer that just clicked it.
+     */
+    await expect(reveal).toHaveAttribute('aria-controls', 'bridge-details');
+    expect(
+      await page.evaluate(() => {
+        const button = document.querySelector('[data-testid="bridge-reveal"]');
+        const region = document.getElementById('bridge-details');
+        if (button === null || region === null) return 'missing';
+        const position = button.compareDocumentPosition(region);
+        return (position & Node.DOCUMENT_POSITION_FOLLOWING) !== 0 ? 'after' : 'before';
+      }),
+    ).toBe('after');
 
     // Asking is a choice, and it can be taken back.
     await reveal.click();

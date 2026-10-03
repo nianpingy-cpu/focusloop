@@ -326,26 +326,36 @@ const DONUT_RADIUS = 42;
               behind a deliberate request. A learner opens this screen for their continuity numbers,
               so nothing from the machinery is rendered until they ask for it - and asking has to be
               possible, because connecting the extension needs both the address and the token.
+              The region sits *after* its trigger, with aria-controls pointing back at it: a screen
+              reader is told the content appeared and where, and the button does not move out from
+              under the pointer that just clicked it.
             -->
-            @if (bridgeRevealed()) {
-              <p class="muted small">{{ bridgeListening(info) }}</p>
-              <p class="muted small">{{ t('dashboard.bridge.hint') }}</p>
-              <pre class="token" data-testid="bridge-token">{{ info.token }}</pre>
-            }
             <button
               type="button"
               class="btn btn--small"
               data-testid="bridge-reveal"
+              aria-controls="bridge-details"
               [attr.aria-expanded]="bridgeRevealed()"
               (click)="toggleBridge()"
             >
               {{ t(bridgeRevealed() ? 'dashboard.bridge.hide' : 'dashboard.bridge.reveal') }}
             </button>
+            @if (bridgeRevealed()) {
+              <div id="bridge-details">
+                <p class="muted small">{{ bridgeListening(info) }}</p>
+                <p class="muted small">{{ t('dashboard.bridge.hint') }}</p>
+                <pre class="token" data-testid="bridge-token">{{ info.token }}</pre>
+              </div>
+            }
           } @else {
-            <p class="muted small">{{ t('dashboard.bridge.stopped') }}</p>
+            <p class="muted small" data-testid="bridge-stopped">
+              {{ t('dashboard.bridge.stopped') }}
+            </p>
           }
         } @else {
-          <p class="muted small">{{ t('dashboard.bridge.unavailable') }}</p>
+          <p class="muted small" data-testid="bridge-unavailable">
+            {{ t('dashboard.bridge.unavailable') }}
+          </p>
         }
       </div>
     </section>
