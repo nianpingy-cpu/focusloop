@@ -55,32 +55,29 @@ interface DataNotice {
       </div>
 
       <!--
-        The status line is in the DOM from the start and empty until there is something to say. A live region
-        has to exist before its content changes to be announced at all, and one born with its message already
-        in it is announced unreliably (the error banner in the shell has the same shape).
+        One live region for everything a deletion has to say, in the DOM from the start and empty until there
+        is something in it. A region has to exist before its content changes to be announced at all, and one
+        born with its message already in it is announced unreliably — which is why the files that could not be
+        removed and the restart notice are lines inside this region rather than paragraphs of their own.
       -->
       <p
         class="small data__notice"
-        [attr.data-kind]="notice()?.kind"
+        [attr.data-kind]="noticeKind()"
         role="status"
         data-testid="data-notice"
       >
         @if (notice(); as message) {
-          {{ t(message.key) }}
+          <span class="data__line">{{ t(message.key) }}</span>
+        }
+        @if (leftBehind().length > 0) {
+          <span class="data__line">{{
+            t('app.data.leftBehind', { files: leftBehind().join(', ') })
+          }}</span>
+        }
+        @if (needsRestart()) {
+          <span class="data__line">{{ t('app.data.unavailable') }}</span>
         }
       </p>
-
-      @if (leftBehind().length > 0) {
-        <p class="small data__notice" data-kind="warning" data-testid="data-left-behind">
-          {{ t('app.data.leftBehind', { files: leftBehind().join(', ') }) }}
-        </p>
-      }
-
-      @if (needsRestart()) {
-        <p class="small data__notice" data-kind="error" role="status" data-testid="data-restart">
-          {{ t('app.data.unavailable') }}
-        </p>
-      }
     </div>
 
     @if (confirming()) {
@@ -187,6 +184,16 @@ export class DataControlsComponent implements OnDestroy {
 
   protected databasePath(): string {
     return this.info()?.databasePath ?? '';
+  }
+
+  /**
+   * How the status line should read, which is the most serious of what it is carrying: a failure, or a
+   * deletion that left files behind and may need a restart, outrank one that worked.
+   */
+  protected noticeKind(): 'ok' | 'warning' | 'error' | null {
+    if (this.needsRestart() || this.notice()?.kind === 'error') return 'error';
+    if (this.leftBehind().length > 0) return 'warning';
+    return this.notice()?.kind ?? null;
   }
 
   protected async openFolder(): Promise<void> {

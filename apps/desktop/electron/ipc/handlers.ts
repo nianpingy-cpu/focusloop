@@ -319,13 +319,13 @@ export function broadcastTick(service: FocusLoopService, windows: readonly Brows
   /*
    * Guarded, and not defensively.
    *
-   * The tick is the one caller with no learner behind it, so it is the only one that cannot be fixed by the
-   * UI refusing to act: it fires every five seconds from a `setInterval` in the main process. The store is
-   * closed while a deletion replaces the database, and it stays closed if the reopen fails (#10) — a state
-   * the learner is told about and that ends with a restart. An uncaught throw from a timer callback is not a
-   * no-op there: Electron puts up an error dialog, every five seconds, over the message telling them to
-   * restart. Reported once rather than per tick, and a later success clears the flag so a transient failure
-   * still says so again.
+   * The tick is one of the callers with no learner behind it, so it is one the UI cannot protect by refusing
+   * to act: it fires every five seconds from a `setInterval` in the main process. The bridge's socket handler
+   * is the other one, and it is guarded the same way for the same reason. The store is closed while a deletion
+   * replaces the database, and it stays closed if the reopen fails (#10) — a state the learner is told about
+   * and that ends with a restart. An uncaught throw from a timer callback is not a no-op there: Electron puts
+   * up an error dialog, every five seconds, over the message telling them to restart. Reported once rather than
+   * per tick, and a later success clears the flag so a transient failure still says so again.
    */
   let response: DispatchEventResponse | null;
   try {

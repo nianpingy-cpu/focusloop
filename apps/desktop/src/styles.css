@@ -1376,6 +1376,16 @@ body:has(.simulator) .agent-context {
   color: var(--text-muted);
 }
 
+/* One line per message inside the single live region, so a deletion that has three things to say reads as
+   three lines rather than one run-on sentence. */
+.data__line {
+  display: block;
+}
+
+.data__notice[data-kind='warning'] {
+  color: var(--warn);
+}
+
 .data__notice[data-kind='error'] {
   color: var(--danger);
 }

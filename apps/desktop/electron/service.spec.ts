@@ -9,7 +9,7 @@ import { openDatabase } from '@focusloop/persistence';
  *
  * `createService` reads `app.getPath('userData')` and `app.isPackaged`, and `openDataFolder` shells out — three things
  * a test cannot have. Mocking the module is the alternative to not testing the orchestration at all, and the
- * orchestration is where \"did the data actually go\" is decided.
+ * orchestration is where "did the data actually go" is decided.
  */
 const getPath = vi.hoisted(() => vi.fn<() => string>());
 const openPath = vi.hoisted(() => vi.fn<(path: string) => Promise<string>>());
@@ -284,9 +284,10 @@ describe('createService', () => {
       expect(() => service.engine.listCourses()).toThrow();
 
       /*
-       * And the timer keeps its five seconds without taking the app down with it. This is the one caller with no
-       * learner behind it, so it cannot be protected by refusing to act in the UI: an uncaught throw from a
-       * `setInterval` callback puts an Electron error dialog over the message telling them to restart.
+       * And the timer keeps its five seconds without taking the app down with it. This is one of the callers with
+       * no learner behind it (the bridge's socket handler is the other), so it cannot be protected by refusing to
+       * act in the UI: an uncaught throw from a `setInterval` callback puts an Electron error dialog over the
+       * message telling them to restart.
        */
       expect(() => broadcastTick(service, [])).not.toThrow();
     } finally {
