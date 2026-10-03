@@ -331,9 +331,11 @@ test('the app explains itself while nothing is running', async () => {
   const gettingStarted = window.getByTestId('getting-started');
   await expect(gettingStarted).toBeVisible();
 
-  // The path, in the order it happens. Read as a list rather than as loose text, because the order is
-  // the one thing the block is saying - and a list that stopped being a list would still pass a text
-  // assertion.
+  // The path, in the order it happens. It is asserted as a list *of* items, not just as text: `li`
+  // keeps its `listitem` role inside anything, so counting items alone would still pass if the list
+  // itself had been replaced by a `div` - which is exactly the change that would drop the numbering
+  // and the "list of three" a screen reader announces.
+  await expect(gettingStarted.getByRole('list')).toHaveCount(1);
   await expect(gettingStarted.getByRole('listitem')).toHaveCount(3);
   await expect(gettingStarted.getByRole('listitem').first()).toContainText('Pick a course');
   await expect(gettingStarted.getByRole('listitem').nth(1)).toContainText('micro task');
