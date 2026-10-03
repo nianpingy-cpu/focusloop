@@ -452,6 +452,14 @@ test('the app keeps working when the agent has nothing to say', async () => {
     window.getByRole('heading', { name: 'Keep your learning continuous' }),
   ).toBeVisible();
 
+  /*
+   * A session is running, so the getting-started block is gone - with nothing dismissed and nothing
+   * stored, which is what makes it contextual rather than a nag (#21). The course cards are asserted in
+   * the same breath so that "not there" cannot be "the page is somewhere else".
+   */
+  await expect(window.getByTestId('course-card').first()).toBeVisible();
+  await expect(window.getByTestId('getting-started')).toHaveCount(0);
+
   // Overload: the policy must offer a break, and the learner can decline it.
   await clickSidebarLink('Focus Session');
   await window.getByTestId('sim-overload').click();
