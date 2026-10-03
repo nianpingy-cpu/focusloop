@@ -195,11 +195,16 @@ try {
     if (leaks.length > 0) {
       throw new Error(`the dashboard renders ${leaks.join(', ')}`);
     }
-    const rawEvents = (bridgeText.match(/[A-Z]{2,}(_[A-Z]+)+/g) ?? []).slice(0, 6);
-    record(
-      'note',
-      `dashboard raw event names (deliberately left): ${rawEvents.join(', ') || 'none'}`,
-    );
+    /*
+     * #8: enforced now, where #135 deliberately left it a note. The history reads as history - every
+     * event type and source has wording in both languages, and `labels.spec.ts` is what keeps that true
+     * as the vocabulary grows - so an enum member on this screen means a key was left pointing at its own
+     * name, which the compiler cannot see and a learner reads as untranslated machinery.
+     */
+    const rawVocabulary = [...new Set(bridgeText.match(/[A-Z]{2,}(_[A-Z]+)+/g) ?? [])];
+    if (rawVocabulary.length > 0) {
+      throw new Error(`the dashboard shows raw event vocabulary: ${rawVocabulary.join(', ')}`);
+    }
   });
 
   await when('the technical tail renders', async () => {
