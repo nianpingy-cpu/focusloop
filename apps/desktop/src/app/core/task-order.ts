@@ -1,0 +1,110 @@
+/**
+ * The learner's ordering of the remaining tasks (#23).
+ *
+ * The order is a decision rather than a derivation, so it is recorded as an event and stored on the
+ * session (`LearningSession.taskOrder`). This module is where that stored hint becomes an order over
+ * the tasks that actually exist, and where "move this row" becomes the list the event carries.
+ *
+ * Pure and Angular-free, like `session-plan.ts` next door: the plan's geometry and this file's
+ * ordering are the two things a reorder can get wrong without anything looking broken, so both are
+ * unit-tested rather than discovered by dragging things around.
+ */
+
+/** The least a task needs for the ordering to be about it. */
+interface Identified {
+  readonly id: string;
+}
+
+/**
+ * The tasks, in the learner's order, with anything they have not ordered left where they found it.
+ *
+ * Three things follow from that sentence, and all three are load-bearing:
+ *
+ * - It never drops a task. A task the order says nothing about is not a task to hide; it is one the
+ *   learner has not moved, so it keeps its course position. This is what makes the stored order safe
+ *   to be partial - and it will be, because the order only ever names the tasks that were visible when
+ *   it was recorded.
+ * - It never invents a position. An id in `order` that matches no task is skipped silently, which is
+ *   the only reading available: the task is gone (completed, or no longer in the course), and there is
+ *   nowhere to put it.
+ * - It is stable. Tasks the order does not mention keep their relative course order, and the sort that
+ *   places the mentioned ones is stable, so two tasks cannot swap places because of a comparison that
+ *   was never asked for.
+ *
+ * The rank is taken from the *first* mention of an id, so a stored order that names one task twice
+ * still means exactly one thing rather than depending on which duplicate the search found first.
+ */
+export function applyTaskOrder<T extends Identified>(
+  tasks: readonly T[],
+  order: readonly string[],
+): readonly T[] {
+  if (order.length === 0 || tasks.length === 0) return tasks;
+
+  const rank = new Map<string, number>();
+  order.forEach((id, index) => {
+    if (!rank.has(id)) rank.set(id, index);
+  });
+
+  const placed: { task: T; rank: number }[] = [];
+  const untouched: T[] = [];
+  for (const task of tasks) {
+    const at = rank.get(task.id);
+    if (at === undefined) untouched.push(task);
+    else placed.push({ task, rank: at });
+  }
+
+  if (placed.length === 0) return tasks;
+  // Stable, so two tasks that share a rank cannot swap - the `placed` order decides, and that order is
+  // the course's.
+  placed.sort((left, right) => left.rank - right.rank);
+  return [...placed.map((entry) => entry.task), ...untouched];
+}
+
+/**
+ * The same list with the item at `from` moved to index `to` in the result.
+ *
+ * "Index `to` in the result" is the whole contract, and it is what makes the drop indicator honest:
+ * the row the pointer is over is the row the dragged task ends up occupying.
+ *
+ * Out-of-range input returns the list unchanged rather than a clamped guess. The caller is a drag that
+ * may be cancelled, or a keypress at either end, and both are "nothing happened" - a near-miss quietly
+ * becoming an off-by-one move is how a list jumps while the learner is still holding the row.
+ */
+export function reorder(ids: readonly string[], from: number, to: number): readonly string[] {
+  if (from < 0 || from >= ids.length) return ids;
+  if (to < 0 || to >= ids.length || to === from) return ids;
+
+  const next = [...ids];
+  const moved = next.splice(from, 1)[0];
+  if (moved === undefined) return ids;
+  next.splice(to, 0, moved);
+  return next;
+}
+
+/** One row of the plan, as much of it as the drop target needs. */
+interface Band {
+  readonly offset: number;
+  readonly height: number;
+}
+
+/**
+ * Which row a pointer at `y` (measured from the top of the track) is over.
+ *
+ * The plan's blocks tile the track, so exactly one row contains any point inside it. Outside it the
+ * answer is the first or the last row, not "none": a pointer that has left the track while still
+ * holding a row is a drag in progress, and a target that vanishes at the edges is how a drag ends up
+ * silently doing nothing.
+ *
+ * `null` only for a plan with no rows, where there is nothing to be over.
+ */
+export function dropIndexFor(bands: readonly Band[], y: number): number | null {
+  if (bands.length === 0) return null;
+
+  for (let index = 0; index < bands.length; index += 1) {
+    const band = bands[index];
+    if (band === undefined) continue;
+    if (y < band.offset + band.height) return index;
+  }
+
+  return bands.length - 1;
+}
