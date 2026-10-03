@@ -64,7 +64,7 @@ export const zh: Record<MessageKey, string> = {
   'home.start.title': '一次会话，分三步',
   'home.start.step.course': '在下面选一门课程。',
   'home.start.step.session': '在它的卡片上点「开始会话」。',
-  'home.start.step.task': '到了专注页，从它给出的「下一小步」开始。',
+  'home.start.step.task': '到了专注页，开始它给出的下一小步就行。',
   'home.start.back': '随时可以停下。过一会儿再回来才是重点，不是失败：你停下的位置会留着。',
   'home.courses.title': '课程',
   'home.courses.meta': '{concepts} 个概念 · {tasks} 个微任务',

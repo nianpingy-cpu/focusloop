@@ -72,8 +72,8 @@ const en = {
    * own button, then the "Next small step" card on the focus screen. The first version said "start one
    * micro task from the plan", which sent them to a panel that starts closed and is not on the path at
    * all, and it ended by claiming one finished step was a finished session, which the app does not
-   * implement. The e2e checks the second step against the button's own label, so the copy cannot drift
-   * away from the control it is describing.
+   * implement. The e2e checks the second step against the button's own label, so that wording and that
+   * control cannot drift apart; the first and third steps are prose, and nothing ties them to a label.
    */
   'home.start.eyebrow': 'Getting started',
   'home.start.title': 'One session, in three steps',

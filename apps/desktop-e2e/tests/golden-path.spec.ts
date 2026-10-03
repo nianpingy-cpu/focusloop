@@ -351,7 +351,8 @@ test('the app explains itself while nothing is running', async () => {
    * caught the first version of this copy, which said "start one micro task from the plan" - the plan is
    * a panel that starts closed and is not on the path at all, so a learner following the block in order
    * would have arrived on the focus screen and found nothing called the plan. Reading the label off the
-   * button rather than writing it here is what makes the two unable to drift apart.
+   * button rather than writing it here is what keeps this step's wording and that control together - and
+   * it is this step only: the other two are prose, and no assertion ties them to a label.
    */
   const startLabel = await window.getByTestId('start-session').first().innerText();
   await expect(steps.nth(1)).toContainText(startLabel);
