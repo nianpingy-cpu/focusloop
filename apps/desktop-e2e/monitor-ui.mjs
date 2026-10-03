@@ -170,8 +170,18 @@ try {
     // Probing before it settles would report "nothing leaked" for the wrong reason.
     await window.waitForTimeout(1_500);
     const bridgeText = await window.locator('body').innerText();
-    const leaked = [/ws:\/\//.test(bridgeText), /127\.0\.0\.1:\d{4,5}/.test(bridgeText)];
-    record('note', `dashboard shows a socket address: ${leaked[0]}; a host:port: ${leaked[1]}`);
+    const leaks = [
+      ['a socket address', /ws:\/\//],
+      ['a host:port', /127\.0\.0\.1:\d{4,5}/],
+      ['a 32-character token', /\b[0-9a-f]{32}\b/],
+    ].filter(([, pattern]) => pattern.test(bridgeText));
+    /*
+     * #135: enforced, not merely recorded. The bridge's address and token belong behind a deliberate
+     * request, on a surface meant for them - not in the body text a learner reads the numbers from.
+     */
+    if (leaks.length > 0) {
+      throw new Error(`the dashboard renders ${leaks.map(([label]) => label).join(', ')}`);
+    }
     const rawEvents = (bridgeText.match(/[A-Z]{2,}(_[A-Z]+)+/g) ?? []).slice(0, 6);
     record('note', `dashboard raw event names: ${rawEvents.join(', ') || 'none'}`);
   });
