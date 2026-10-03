@@ -1,5 +1,6 @@
 import {
   Component,
+  afterRenderEffect,
   computed,
   effect,
   inject,
@@ -708,14 +709,16 @@ export class FocusPage implements OnDestroy {
    * "inactive" until this existed. Without it a keyboard user loses their place on every move, and the
    * second move needs the mouse they were avoiding.
    *
-   * An `effect`, like `manageStuckFocus` above, rather than a `setTimeout(0)`: it re-runs after the
-   * view has been updated, which is the only moment the grip exists in its new place. A timeout worked,
-   * but only because the zoneless scheduler happens to queue its callback first - an argument about
-   * scheduler internals rather than a guarantee, and one that would break silently, in the keyboard
-   * path only, if that changed. The lookup is by task id rather than by position, because the position
-   * is the thing that just changed.
+   * An `afterRenderEffect`, not an `effect`, and the difference is the whole reason this works: it is
+   * invoked when the application finishes rendering, so the rows are in their new order by the time the
+   * grip is looked up. An `effect` runs during change detection, which is before the render - it worked
+   * on this machine and lost the focus on the macOS runner, where the focused row was re-inserted
+   * *after* the focus had been given. That is the kind of timing argument this does not have to win:
+   * the phase is the framework's contract rather than something inferred from a measurement. The
+   * lookup is by task id rather than by position, because the position is the thing that just changed,
+   * and the sequence number is what makes a second move of the same row a second request.
    */
-  private readonly restoreGripFocus = effect(() => {
+  private readonly restoreGripFocus = afterRenderEffect(() => {
     const request = this.focusGripRequest();
     if (request === null || request.seq <= this.handledFocusGripSeq) return;
     this.handledFocusGripSeq = request.seq;
