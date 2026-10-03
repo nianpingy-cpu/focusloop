@@ -692,9 +692,10 @@ test('the intervention outcomes read as rows with a share and a sample size', as
      * as a number rather than matching text is what makes the comparison meaningful - and `Number(null)`
      * being `0` is why the attribute's presence is asserted above rather than assumed.
      *
-     * The width is read twice on purpose: `toHaveAttribute` proves the binding wrote something (a missing
-     * style attribute and a `0%` both used to satisfy the arithmetic), and `style.width` proves what
-     * Chromium actually resolved, which is what paints. Neither one alone covers both.
+     * The width is read twice on purpose: `toHaveAttribute` proves the binding wrote a style attribute at
+     * all (a missing one and a `0%` both used to satisfy the arithmetic, and neither is a width), and
+     * `style.width` reads that same inline value back to tie it to `aria-valuenow` exactly. The second
+     * read is what the first one gave up when it stopped matching the digits.
      */
     const shown = Number(await bar.getAttribute('aria-valuenow'));
     await expect(bar.locator('.bar__fill')).toHaveAttribute('style', /width: \d+%/);
