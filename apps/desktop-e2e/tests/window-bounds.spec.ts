@@ -5,7 +5,6 @@ import { _electron as electron, expect, test, type ElectronApplication } from '@
 import { hermeticEnv } from '../hermetic-env.mjs';
 
 const MAIN = resolve(__dirname, '..', '..', 'desktop', 'dist', 'main', 'main.cjs');
-const DEFAULT = { width: 1280, height: 840 };
 /** Mirrors `WINDOW_MINIMUM` in `apps/desktop/electron/window-bounds.ts`, which this package cannot import. */
 const WINDOW_MINIMUM = { width: 960, height: 640 };
 
@@ -141,6 +140,24 @@ test.afterAll(() => {
   }
 });
 
+/**
+ * The window a profile with no stored state opens with.
+ *
+ * The reference for "a record that cannot be trusted behaves like no record at all", instead of the
+ * literal 1280x840 - a CI runner's display can be smaller than the default and the platform then clamps
+ * it (measured on `windows-latest`: a 1024-wide screen turns the default into 1024, a 256px difference),
+ * which would make that assertion a test of the runner rather than of the app. The default itself is
+ * pinned where it lives, in `window-bounds.spec.ts`.
+ */
+async function defaultWindowGeometry(): Promise<Geometry> {
+  const app = await launch(newProfile());
+  try {
+    return await windowBounds(app);
+  } finally {
+    await app.close();
+  }
+}
+
 test('the window reopens where it was closed, and maximised stays maximised', async () => {
   const profile = newProfile();
   /*
@@ -164,12 +181,21 @@ test('the window reopens where it was closed, and maximised stays maximised', as
   try {
     const first = await start();
     const initial = await windowBounds(first);
-    // A fresh profile has nothing stored, so the window is the default one.
-    expect(Math.abs(initial.width - DEFAULT.width)).toBeLessThanOrEqual(2);
-    expect(Math.abs(initial.height - DEFAULT.height)).toBeLessThanOrEqual(2);
+    /*
+     * Deliberately not the literal default: the platform clamps a window that does not fit the display, and
+     * a CI runner's screen is smaller than 1280x840, so asserting the absolute size would be testing the
+     * runner. What this file is for is the round trip below and the recovery rules; the default is pinned
+     * in the unit spec.
+     */
+    expect(initial.width).toBeGreaterThanOrEqual(WINDOW_MINIMUM.width);
+    expect(initial.height).toBeGreaterThanOrEqual(WINDOW_MINIMUM.height);
 
+    /*
+     * The window's own minimum, in the corner: a size that fits any display the app can run on, where a
+     * larger one would be clamped on a small runner and could then equal the initial geometry.
+     */
     await first.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]!.setBounds({ x: 120, y: 90, width: 1100, height: 700 });
+      BrowserWindow.getAllWindows()[0]!.setBounds({ x: 30, y: 30, width: 960, height: 640 });
     });
     /*
      * The resize is applied by the window manager, and this suite runs on macOS as well as Windows: read
@@ -235,7 +261,7 @@ test('a position on a display that is gone is dropped, and the size is kept', as
   }
 });
 
-test('a record that cannot be trusted opens at the default size', async () => {
+test('a record that cannot be trusted opens like no record at all', async () => {
   /*
    * Both ways a record can be unusable: JSON that does not parse at all, and JSON that parses into
    * something the validator has to reject. The second is the one the all-or-nothing rule is about, and it
@@ -250,6 +276,8 @@ test('a record that cannot be trusted opens at the default size', async () => {
     ['a record with no position', JSON.stringify({ width: 1100, height: 700, maximized: false })],
   ];
 
+  const expected = await defaultWindowGeometry();
+
   for (const [label, record] of corrupt) {
     const profile = newProfile(record);
     const app = await launch(profile);
@@ -257,10 +285,10 @@ test('a record that cannot be trusted opens at the default size', async () => {
       const bounds = await windowBounds(app);
       expectWhollyOnSomeWorkArea(bounds, await workAreas(app));
       expect(
-        Math.abs(bounds.width - DEFAULT.width),
-        `${label}: expected the default width, got ${bounds.width}`,
+        Math.abs(bounds.width - expected.width),
+        `${label}: expected the no-record width ${expected.width}, got ${bounds.width}`,
       ).toBeLessThanOrEqual(2);
-      expect(Math.abs(bounds.height - DEFAULT.height), label).toBeLessThanOrEqual(2);
+      expect(Math.abs(bounds.height - expected.height), label).toBeLessThanOrEqual(2);
     } finally {
       await app.close();
     }
