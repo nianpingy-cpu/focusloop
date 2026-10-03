@@ -240,7 +240,7 @@ const en = {
   'dashboard.outcomes.share': '{percent} accepted',
   'dashboard.outcomes.shareAria': 'Accepted share for {action}',
   'dashboard.outcomes.counts':
-    '{accepted} accepted · {dismissed} dismissed · {completed} completed · N = {total}',
+    '{accepted} accepted · {dismissed} dismissed · {completed} completed the task afterwards · N = {total}',
   'dashboard.bridge': 'Browser bridge',
   'dashboard.bridge.listening':
     'Listening on {url} · protocol v{version} · {connections} connected',

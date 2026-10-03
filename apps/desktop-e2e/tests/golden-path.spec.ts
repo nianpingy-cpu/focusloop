@@ -646,31 +646,58 @@ test('a run of identical events is folded into one row', async () => {
   // The shorthand is not the accessible name.
   await expect(newest.locator('.timeline__count')).toHaveAttribute('aria-label', '3 times');
 
-  /*
-   * #22: the intervention outcomes are rows with a share bar now, not a five-column table.
-   *
-   * Asserted here because this test is already on the dashboard after interventions have been shown;
-   * adding a test that starts a session would spend the budget the note above this one is about. Nothing
-   * is hard-coded about *how many* rows there are, because that depends on what the earlier tests
-   * resolved - the assertions are the properties the markup promises: a bar with a real value, the share
-   * as a percentage, and a sample size written out rather than implied.
-   */
+  await expect(window.locator('.banner--error')).toHaveCount(0);
+});
+
+/*
+ * #22: the intervention outcomes are rows with a share bar, not a five-column table.
+ *
+ * Its own test rather than a block inside the folding one, which would report a broken share bar under a
+ * test named for the event log. It is placed here because it depends on outcomes the earlier tests in
+ * this shared instance resolved - the one after it starts a new session, and starting one deliberately is
+ * expensive in the intervention budget this file has to ration.
+ *
+ * Nothing is hard-coded about *how many* rows there are: that depends on what those earlier tests
+ * resolved. The assertions are the properties the markup promises.
+ */
+test('the intervention outcomes read as rows with a share and a sample size', async () => {
+  await clickSidebarLink('Dashboard');
+
   const outcomes = window.locator('[data-testid="outcome-row"]');
-  await expect(outcomes).not.toHaveCount(0);
+  /*
+   * Named rather than counted, because this is the one failure here that is not about the markup: with no
+   * outcomes resolved by the earlier tests there is nothing to walk, and `not.toHaveCount(0)` would say
+   * that in the least useful way possible.
+   */
+  await expect(
+    outcomes,
+    'no outcome rows: this test reads the interventions the earlier tests in this file resolved, so run the file rather than this test alone',
+  ).not.toHaveCount(0);
 
-  const firstOutcome = outcomes.first();
-  await expect(firstOutcome.locator('[data-testid="outcome-share"]')).toContainText('%');
-  await expect(firstOutcome.locator('[data-testid="outcome-counts"]')).toContainText('N = ');
+  /*
+   * Walked rather than sampled: a row whose bar was missing its value would pass every assertion here if
+   * only the first row were checked, and "the first row happens to be fine" is not the claim.
+   */
+  for (const outcome of await outcomes.all()) {
+    await expect(outcome.locator('[data-testid="outcome-share"]')).toContainText('%');
+    await expect(outcome.locator('[data-testid="outcome-counts"]')).toContainText('N = ');
 
-  const bar = firstOutcome.getByRole('progressbar');
-  await expect(bar).toHaveAttribute('aria-valuemin', '0');
-  await expect(bar).toHaveAttribute('aria-valuemax', '100');
-  const shown = Number(await bar.getAttribute('aria-valuenow'));
-  expect(shown).toBeGreaterThanOrEqual(0);
-  expect(shown).toBeLessThanOrEqual(100);
-  // The bar's width is the same number, so the two cannot disagree about the same share.
-  const width = await bar.locator('.bar__fill').evaluate((fill) => fill.style.width);
-  expect(width).toBe(`${shown}%`);
+    const bar = outcome.getByRole('progressbar');
+    await expect(bar).toHaveAttribute('aria-valuemin', '0');
+    await expect(bar).toHaveAttribute('aria-valuemax', '100');
+    await expect(bar).toHaveAttribute('aria-valuenow', /^\d+$/);
+
+    /*
+     * The bar, its accessible value and the visible percentage are all one number. Reading the
+     * attribute as a number rather than matching text is what makes the comparison meaningful - and
+     * `Number(null)` being `0` is why the attribute's presence is asserted above rather than assumed.
+     */
+    const shown = Number(await bar.getAttribute('aria-valuenow'));
+    await expect(bar.locator('.bar__fill')).toHaveAttribute('style', `width: ${shown}%;`);
+    await expect(outcome.locator('[data-testid="outcome-share"]')).toHaveText(`${shown}% accepted`);
+    // The sample size reaches the accessible value too, not only the sighted reader.
+    await expect(bar).toHaveAttribute('aria-valuetext', /N = \d+/);
+  }
 
   await expect(window.locator('.banner--error')).toHaveCount(0);
 });

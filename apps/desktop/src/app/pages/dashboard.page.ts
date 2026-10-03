@@ -14,6 +14,8 @@ import { groupEvents, type EventGroup } from '../core/events-view';
 import {
   STATE_COLORS,
   busiestDay,
+  acceptedPercent,
+  acceptedShare,
   donutSegments,
   focusRatio,
   formatSpan,
@@ -302,7 +304,7 @@ const DONUT_RADIUS = 42;
                   <div class="bar__head">
                     <span class="bar__name">{{ actionLabel(row.action) }}</span>
                     <span class="muted small" data-testid="outcome-share">
-                      {{ t('dashboard.outcomes.share', { percent: percent(acceptedShare(row)) }) }}
+                      {{ outcomeShare(row) }}
                     </span>
                   </div>
                   <div
@@ -312,6 +314,7 @@ const DONUT_RADIUS = 42;
                       t('dashboard.outcomes.shareAria', { action: actionLabel(row.action) })
                     "
                     [attr.aria-valuenow]="acceptedPercent(row)"
+                    [attr.aria-valuetext]="outcomeCounts(row)"
                     aria-valuemin="0"
                     aria-valuemax="100"
                   >
@@ -509,18 +512,30 @@ export class DashboardPage {
   }
 
   /**
-   * How often this action was accepted, as a share of the times it was shown.
+   * How often this action was accepted, as a share of the times it was resolved.
    *
    * `outcomeRows` has already dropped every row with no samples, so the denominator is never zero in
-   * practice; the guard is what makes this function total on its own terms rather than by that promise.
+   * practice; the guard in `acceptedShare` is what makes it total on its own terms rather than by that
+   * promise.
    */
   protected acceptedShare(row: InterventionOutcomeSummary): number {
-    return row.total === 0 ? 0 : row.accepted / row.total;
+    return acceptedShare(row.accepted, row.total);
   }
 
   /** The same share as a whole number, for `aria-valuenow` - which is a value, not a label. */
   protected acceptedPercent(row: InterventionOutcomeSummary): number {
-    return Math.round(this.acceptedShare(row) * 100);
+    return acceptedPercent(row.accepted, row.total);
+  }
+
+  /**
+   * The share as the row states it: one number, the same one the bar draws.
+   *
+   * Built here rather than in the template because `t` takes strings and this component's markup is a
+   * template literal: a nested backtick would end it, and the compiler reports the failure on a line that
+   * has nothing to do with the cause.
+   */
+  protected outcomeShare(row: InterventionOutcomeSummary): string {
+    return this.t('dashboard.outcomes.share', { percent: `${this.acceptedPercent(row)}%` });
   }
 
   /**

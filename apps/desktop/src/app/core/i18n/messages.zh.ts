@@ -231,7 +231,7 @@ export const zh: Record<MessageKey, string> = {
   'dashboard.outcomes.share': '{percent} 被接受',
   'dashboard.outcomes.shareAria': '{action} 的接受比例',
   'dashboard.outcomes.counts':
-    '接受 {accepted} · 忽略 {dismissed} · 随后完成 {completed} · N = {total}',
+    '接受 {accepted} · 忽略 {dismissed} · {completed} 随后完成了任务 · N = {total}',
   'dashboard.bridge': '浏览器桥接',
   'dashboard.bridge.listening': '正在监听 {url} · 协议 v{version} · 已连接 {connections} 个',
   'dashboard.bridge.hint':
