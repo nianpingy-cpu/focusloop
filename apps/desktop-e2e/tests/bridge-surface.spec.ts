@@ -46,10 +46,10 @@ test('the dashboard keeps the bridge behind an explicit request', async () => {
     // And it stays reachable.
     const reveal = page.getByTestId('bridge-reveal');
     /*
-     * The bridge's state is settled before the first frame - main.ts awaits startBridge before it
-     * creates the window - so a missing control is not "the port is not known yet", it is the bridge
-     * not running (its default port was already taken). Name that, instead of letting it surface as a
-     * visibility timeout that is indistinguishable from the regression this spec exists to catch.
+     * Wait for the running branch, and name what was found instead if it never appears. The renderer
+     * starts with no bridge information and paints `bridge-unavailable` until the IPC answer arrives, so
+     * `unavailable` has to keep polling; `stopped` is terminal - the bridge resolved and said so - and is
+     * worth failing on immediately rather than after the whole timeout.
      */
     await expect
       .poll(

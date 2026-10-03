@@ -167,14 +167,14 @@ try {
 
   await when('the dashboard keeps its internals to itself', async () => {
     /*
-     * The running-bridge branch has to exist for this guard to mean anything. main.ts awaits
-     * startBridge *before* it creates the window, so the bridge state is settled by the first frame:
-     * a missing reveal control is not "still starting", it is the bridge having failed to start (its
-     * default port was already taken) or reported itself stopped. In that state nothing could leak,
-     * and a green line here would be vacuous - so fail, naming which state it is.
+     * The running-bridge branch has to exist for this guard to mean anything, and the *renderer* decides
+     * that, not the main process: `DashboardPage` starts with no bridge information and paints
+     * `bridge-unavailable` until the IPC answer arrives, so missing on an early frame means nothing either
+     * way. Wait for the control the running branch renders, and only if it never turns up name the state.
      */
-    await window.waitForTimeout(400);
-    if ((await window.getByTestId('bridge-reveal').count()) === 0) {
+    try {
+      await window.getByTestId('bridge-reveal').waitFor({ timeout: 15_000 });
+    } catch {
       const state =
         (await window.getByTestId('bridge-stopped').count()) > 0 ? 'stopped' : 'unavailable';
       throw new Error(`the bridge is ${state}, so this guard would prove nothing`);
