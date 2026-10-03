@@ -316,10 +316,35 @@ export function registerIpcHandlers(service: FocusLoopService): () => void {
 
 /** Called by a timer in the main process; broadcasts state changes to windows. */
 export function broadcastTick(service: FocusLoopService, windows: readonly BrowserWindow[]): void {
-  const response = service.engine.tick();
+  /*
+   * Guarded, and not defensively.
+   *
+   * The tick is the one caller with no learner behind it, so it is the only one that cannot be fixed by the
+   * UI refusing to act: it fires every five seconds from a `setInterval` in the main process. The store is
+   * closed while a deletion replaces the database, and it stays closed if the reopen fails (#10) — a state
+   * the learner is told about and that ends with a restart. An uncaught throw from a timer callback is not a
+   * no-op there: Electron puts up an error dialog, every five seconds, over the message telling them to
+   * restart. Reported once rather than per tick, and a later success clears the flag so a transient failure
+   * still says so again.
+   */
+  let response: DispatchEventResponse | null;
+  try {
+    response = service.engine.tick();
+    tickFailed = false;
+  } catch (error) {
+    if (!tickFailed) {
+      tickFailed = true;
+      console.error('FocusLoop could not run a tick; the store is not available:', error);
+    }
+    return;
+  }
+
   if (response === null) return;
   for (const window of windows) {
     if (window.isDestroyed()) continue;
     pushEventToRenderer(window.webContents, response);
   }
 }
+
+/** Whether a tick has already failed, so a closed store is reported once instead of every five seconds. */
+let tickFailed = false;

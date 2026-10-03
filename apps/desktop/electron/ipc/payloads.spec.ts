@@ -48,7 +48,7 @@ describe('the preload and the main process agree on every payload', () => {
       IPC_CHANNELS.getSimulatorAvailability,
       IPC_CHANNELS.getBridgeInfo,
       IPC_CHANNELS.getSettings,
-      // Added with AG1 and initially left off this list -- which made the one channel that was new the
+      // Added with AG1 and initially left off this list — which made the one channel that was new the
       // one channel the test did not drive, in the file whose stated premise is *every* payload.
       IPC_CHANNELS.getAgentContext,
       IPC_CHANNELS.getDataInfo,

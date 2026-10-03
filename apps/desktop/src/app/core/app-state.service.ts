@@ -279,15 +279,24 @@ export class AppStateService {
    * reason and the learner has to read it. `null` means the request itself failed, which the error banner
    * already reports.
    *
-   * The stored state is dropped **before** it is reloaded, and that order is the point. `refresh` reads
-   * the database through six calls inside `run`, whose `catch` turns a failure into `lastError` — so a
-   * refresh that failed *after* a successful deletion would leave the session the learner was just in on
-   * screen, underneath a message saying that everything had been deleted. Clearing first makes a failed
-   * refresh end in a first-run screen with an error banner, which is the worst case, instead of a stale
-   * one, which would be a lie.
+   * The stored state is dropped **before** it is reloaded, and that order is the point. `refresh` reads the
+   * database through six calls inside `run`, whose `catch` turns a failure into `lastError` — so a refresh
+   * that failed *after* a successful deletion would leave the session the learner was just in on screen,
+   * underneath a message saying that everything had been deleted. Clearing first makes a failed reload end in
+   * a first-run screen rather than a stale one, which would be a lie.
    *
-   * The settings are re-read for the same kind of reason: they lived in the database that was just
-   * deleted, so the shell would otherwise keep showing a language and a theme that no longer exist.
+   * There are two ways that can end, and `usable` is what separates them.
+   *
+   * - The database was replaced: the settings and the summary are re-read and the screen is repopulated. This
+   *   is the ordinary path.
+   * - The database could not be opened again: nothing below the guard can be read, so the reload is skipped
+   *   and the screen stays on the first-run state the clearing produced. No internal "database is not open" in
+   *   the banner over a deletion that worked, and the data panel reports the restart. One thing is knowingly
+   *   left stale there, and it is the one that cannot be fixed from here: the locale and theme were stored in
+   *   the database that was just deleted, and re-reading them needs the database. They follow the restart.
+   *
+   * The settings are re-read for the same kind of reason: they lived in the database that was just deleted, so
+   * the shell would otherwise keep showing a language and a theme that no longer exist.
    */
   async deleteAllData(): Promise<DeleteDataResponse | null> {
     let outcome: DeleteDataResponse | null = null;

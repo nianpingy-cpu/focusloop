@@ -55,6 +55,11 @@ directory the running app is using rather than a path copied into this document.
 returns the app to a first-run state without a restart. If another program has the database open, the
 app says so instead of reporting a success it did not have.
 
+One corner is worth stating rather than implying: if the database file is deleted but FocusLoop cannot open
+the database again afterwards (something holding the path, a transient permission error), the data is gone
+and the app says that a restart is needed before it can be used. That is the only case in which a deletion
+involves a restart, and it is reported rather than passed over.
+
 Uninstalling leaves the file in place on purpose, so a reinstall does not lose your progress.
 
 ## What FocusLoop never collects

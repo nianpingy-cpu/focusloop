@@ -119,12 +119,19 @@ export function createService(options: CreateServiceOptions = {}): FocusLoopServ
      */
     if (databaseGone) {
       /*
+       * The in-memory copies of the learner's words go first and unconditionally: the transcript and the last
+       * outbound request touch no database, and the whole point of them is that they hold text the deletion
+       * claims to have removed. Seeding the built-in course is the part that needs the store, so that is what
+       * `reopened` gates.
+       */
+      engine.discardTransientData();
+
+      /*
        * A fresh database: schema, then the built-in course the catalogue is supposed to have on a first run.
        * The store keeps its identity — the engine and every IPC handler hold this object — so the connection
        * is what is replaced, which is the only way the app keeps running without a restart.
        */
       if (reopened) {
-        engine.discardTransientData();
         engine.seedBuiltInCourses();
       }
       return {

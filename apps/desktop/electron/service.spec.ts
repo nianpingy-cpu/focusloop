@@ -18,6 +18,8 @@ const openFailure = vi.hoisted(() => ({ next: false }));
 vi.mock('electron', () => ({
   app: { getPath, isPackaged: true },
   shell: { openPath },
+  // `handlers.ts` imports these at module load; only `broadcastTick` is exercised through them.
+  ipcMain: { handle: vi.fn(), removeHandler: vi.fn(), on: vi.fn() },
 }));
 
 /*
@@ -44,6 +46,7 @@ vi.mock('@focusloop/persistence', async (importOriginal) => {
 });
 
 const { createService } = await import('./service');
+const { broadcastTick } = await import('./ipc/handlers');
 
 const temporaryDirectories: string[] = [];
 
@@ -278,6 +281,13 @@ describe('createService', () => {
       // The store is closed underneath the engine, which is exactly what `usable: false` is telling the
       // learner. Blunt evidence rather than a claim: the next read is what fails.
       expect(() => service.engine.listCourses()).toThrow();
+
+      /*
+       * And the timer keeps its five seconds without taking the app down with it. This is the one caller with no
+       * learner behind it, so it cannot be protected by refusing to act in the UI: an uncaught throw from a
+       * `setInterval` callback puts an Electron error dialog over the message telling them to restart.
+       */
+      expect(() => broadcastTick(service, [])).not.toThrow();
     } finally {
       // And the store survives its own teardown in that state, which is why `close` is idempotent.
       expect(() => service.dispose()).not.toThrow();

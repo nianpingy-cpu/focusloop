@@ -218,12 +218,17 @@ describe('agent memory clear (ADR 0001)', () => {
    * hold is the learner's own words, which is why a deletion that stopped at the file would be a
    * deletion that says less than it does.
    */
-  it('Working: discarding transient data forgets every session at once', async () => {
+  it('Working: discarding transient data forgets the session, with no session named', async () => {
     const prompts: string[] = [];
     const scripted = createTestEngine({
       providers: createProviderSelection(capturingProvider(prompts)),
     });
     try {
+      /*
+       * One session, because the engine allows one: starting a second ends the first, and ending it clears the
+       * outbound entry anyway, so "every session" is not a state this engine can be put in to be asserted. What
+       * the difference from `clearAgentMemory` rests on is that nothing is named here — the call takes no id.
+       */
       const { session } = scripted.engine.startSession(DEMO_COURSE_ID);
       await scripted.engine.askTutor({
         sessionId: session.id,
@@ -242,8 +247,9 @@ describe('agent memory clear (ADR 0001)', () => {
         mode: 'HINT',
         question: 'QUESTION_AFTER_DELETE',
       });
-      expect(prompts[1]).toContain('QUESTION_AFTER_DELETE');
-      expect(prompts[1]).not.toContain('QUESTION_BEFORE_DELETE');
+      const after = prompts.at(-1) ?? '';
+      expect(after).toContain('QUESTION_AFTER_DELETE');
+      expect(after).not.toContain('QUESTION_BEFORE_DELETE');
     } finally {
       scripted.close();
     }
