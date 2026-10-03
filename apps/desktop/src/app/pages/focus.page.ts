@@ -32,7 +32,7 @@ import { KIND_GLYPHS, buildPlan } from '../core/session-plan';
 import { keepsRail, type FocusPhase } from '../core/focus-phase';
 import { FocusTimerService } from '../core/focus-timer.service';
 import { PLAN_INITIAL_OPEN, nextPlanOpen, type PlanEvent } from '../core/plan-visibility';
-import { applyTaskOrder, dropIndexFor, reorder } from '../core/task-order';
+import { applyTaskOrder, dropIndexFor, reorder, sameOrder } from '../core/task-order';
 import { helpRequestPayload } from '../core/stuck-picker';
 import { TutorPanelComponent } from '../components/tutor-panel.component';
 import { FocusNoticeComponent } from '../components/focus-notice.component';
@@ -684,10 +684,10 @@ export class FocusPage implements OnDestroy {
      * Asked of the session, not of the call's resolution. `AppStateService.run` catches a failed IPC
      * call and reports it in the banner, so a rejected write resolves normally - announcing it here
      * would describe a move that never landed, and moving the keyboard would put it on a row that is
-     * not where the learner is looking. Comparing the stored order is also the only check that covers
-     * the write landing while its response was lost.
+     * not where the learner is looking. Reading the order back is also the only check that covers the
+     * write landing while its response was lost.
      */
-    if (!this.sessionHasOrder(next)) return;
+    if (!sameOrder(next, this.snapshot()?.session.taskOrder)) return;
     this.moved.set(
       this.t('focus.plan.moved', {
         title: task.title,
@@ -697,16 +697,6 @@ export class FocusPage implements OnDestroy {
     );
     this.focusGripSeq += 1;
     this.focusGripRequest.set({ taskId: task.id, seq: this.focusGripSeq });
-  }
-
-  /** Whether the session is now in the order that was asked for, read back from the store. */
-  private sessionHasOrder(order: readonly string[]): boolean {
-    const stored = this.snapshot()?.session.taskOrder;
-    return (
-      stored !== undefined &&
-      stored.length === order.length &&
-      stored.every((id, index) => id === order[index])
-    );
   }
 
   /**

@@ -70,6 +70,28 @@ export function applyTaskOrder<T extends Identified>(
 }
 
 /**
+ * Whether the stored order is the one that was asked for.
+ *
+ * A reorder is only worth announcing if the session ended up in that order. The renderer cannot tell a
+ * failed write from a successful one by the call's resolution - `AppStateService.run` catches a failed
+ * IPC call and reports it in the banner, so the promise resolves either way - which leaves reading the
+ * order back as the only way to know.
+ *
+ * Length is compared before the elements, because an order that kept its length and lost its sequence
+ * is exactly the case this exists for, and it is the one a length-only check would wave through.
+ */
+export function sameOrder(
+  asked: readonly string[],
+  stored: readonly string[] | undefined,
+): boolean {
+  return (
+    stored !== undefined &&
+    stored.length === asked.length &&
+    stored.every((id, index) => id === asked[index])
+  );
+}
+
+/**
  * The same list with the item at `from` moved to index `to` in the result.
  *
  * "Index `to` in the result" is the whole contract, and it is what makes the drop indicator honest:

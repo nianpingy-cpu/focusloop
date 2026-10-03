@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyTaskOrder, dropIndexFor, reorder } from './task-order';
+import { applyTaskOrder, dropIndexFor, reorder, sameOrder } from './task-order';
 
 interface Task {
   readonly id: string;
@@ -133,5 +133,30 @@ describe('dropIndexFor', () => {
 
   it('has no row to be over when the plan is empty', () => {
     expect(dropIndexFor([], 10)).toBeNull();
+  });
+});
+
+describe('sameOrder', () => {
+  it('is true for the order that was asked for', () => {
+    expect(sameOrder(['b', 'a'], ['b', 'a'])).toBe(true);
+    expect(sameOrder([], [])).toBe(true);
+  });
+
+  it('is false when the same tasks came back in a different sequence', () => {
+    // The case the whole check exists for: a write that kept its length and lost its order. A check
+    // that compared lengths alone would call this equal and announce a move that did not happen.
+    expect(sameOrder(['b', 'a'], ['a', 'b'])).toBe(false);
+  });
+
+  it('is false for a different set or a different length', () => {
+    expect(sameOrder(['b', 'a'], ['b'])).toBe(false);
+    expect(sameOrder(['b'], ['b', 'a'])).toBe(false);
+    expect(sameOrder(['c', 'b'], ['b', 'a'])).toBe(false);
+  });
+
+  it('is false when there is no stored order at all', () => {
+    // Undefined is "this session has never been reordered", which is not the order that was asked for.
+    expect(sameOrder(['b', 'a'], undefined)).toBe(false);
+    expect(sameOrder([], undefined)).toBe(false);
   });
 });
