@@ -263,6 +263,9 @@ export interface DeleteDataResponse {
   /**
    * The files that are still there, which is not the same as "nothing was removed": the database can be
    * gone while a sidecar that holds its page images is not. Empty in the ordinary case.
+   *
+   * A leftover file is not by itself a reason the app cannot be used again, but it is the state in which
+   * that can happen: the reopen has to get past whatever kept the file there. `usable` is what reports it.
    */
   readonly leftBehind: readonly string[];
   /**

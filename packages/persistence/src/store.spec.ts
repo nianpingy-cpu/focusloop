@@ -570,6 +570,25 @@ describe('FocusLoopStore', () => {
       }
     });
 
+    /*
+     * The other half of the same call, and the reason `connected` is not set until the schema is up on the new
+     * handle: a replacement that cannot be brought up has to leave the store saying it has no working
+     * connection, rather than claiming one it does not have. A closed handle is the readable way to produce
+     * that — the migrations are the first thing to touch it, and they throw.
+     */
+    it('stays closed when the replacement cannot be brought up', () => {
+      const unusable = openDatabase(':memory:');
+      unusable.close();
+
+      expect(() => store.replaceDatabase(unusable)).toThrow();
+
+      // No working connection, and the store knows it: closing is a no-op rather than a second close on a
+      // handle nobody owns, and a good replacement still lands.
+      expect(() => store.close()).not.toThrow();
+      store.replaceDatabase(openDatabase(':memory:'));
+      expect(store.getMeta('locale')).toBe('en');
+    });
+
     it('keeps sessions isolated from one another', () => {
       const engineState = createInitialState(T0);
       for (const id of ['session-1', 'session-2']) {

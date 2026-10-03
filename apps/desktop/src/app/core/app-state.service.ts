@@ -298,6 +298,14 @@ export class AppStateService {
 
       this.forgetStoredState();
 
+      /*
+       * And stop here when the database could not be opened again. Every read below goes through the closed
+       * store, so the reload would fail into `lastError` — an internal message in the banner, over a deletion
+       * that succeeded, next to the restart notice that says the same thing properly. The screen is already
+       * the first-run state the learner should see.
+       */
+      if (!outcome.usable) return;
+
       const settings = await this.loadSettings();
       this.locale.set(settings.locale);
       this.theme.set(settings.theme);

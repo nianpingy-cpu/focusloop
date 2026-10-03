@@ -7,7 +7,7 @@ import { openDatabase } from '@focusloop/persistence';
 /*
  * The only spec in this package that stands in for Electron.
  *
- * `createService` reads `app.getPath('userData')` and `app.isPackaged`, and `openDataFolder` shells out �?three things
+ * `createService` reads `app.getPath('userData')` and `app.isPackaged`, and `openDataFolder` shells out — three things
  * a test cannot have. Mocking the module is the alternative to not testing the orchestration
  */
 const getPath = vi.hoisted(() => vi.fn<() => string>());
@@ -104,7 +104,7 @@ describe('createService', () => {
    * The acceptance criterion, at the only level where it can be pinned: the directory the UI shows is the one
    * Electron resolved. The e2e makes the same comparison against `--user-data-dir`, which is the same claim
    * through a real profile; this one cannot be satisfied by a hand-written string, because the value exists
-   * only in this mock. `getPath` has no default, so a service built without `userDataPath` reads it �?which
+   * only in this mock. `getPath` has no default, so a service built without `userDataPath` reads it — which
    * is the path the app itself takes.
    */
   it('takes the data directory from Electron rather than deciding it', () => {
@@ -191,7 +191,7 @@ describe('createService', () => {
 
       /*
        * Windows-only in practice, so the maintainer's machine runs the first branch and CI's other
-       * platforms run the second. Both are the same claim �?the report and the data have to agree �?read
+       * platforms run the second. Both are the same claim — the report and the data have to agree — read
        * through the only answer the platform can give.
        */
       if (process.platform === 'win32') {
@@ -211,7 +211,7 @@ describe('createService', () => {
      * And the app is still usable, which is what the failure branch promises and what the store's identity
      * buys: the reopen happens underneath the object the engine is holding, so the engine answers instead of
      * throwing against a closed connection. A read rather than a second deletion, because what is under test
-     * is that a live connection is back �?not Windows' timing around a fresh unlink.
+     * is that a live connection is back — not Windows' timing around a fresh unlink.
      */
     expect(service.engine.listCourses().length).toBeGreaterThan(0);
     service.dispose();
@@ -220,7 +220,7 @@ describe('createService', () => {
   /*
    * The one state where a success report and a leftover file are both true: the database went, and something
    * beside it did not. A `-shm` that is a directory cannot be unlinked anywhere, so the file cannot be made
-   * to survive any other way from inside one process �?and it is the shape a crashed holder leaves.
+   * to survive any other way from inside one process — and it is the shape a crashed holder leaves.
    */
   it('names the files it could not remove while still reporting the deletion', async () => {
     const directory = temporaryDirectory();
@@ -236,13 +236,20 @@ describe('createService', () => {
 
       /*
        * Both halves of the truth at once: the deletion happened, and a file it could not remove is named.
-       * Nothing is asserted about the path afterwards �?the guarded reopen creates a database file before it
+       * Nothing is asserted about the path afterwards — the guarded reopen creates a database file before it
        * can fail, and in this synthetic corner (a directory where the sidecar belongs) it fails doing so, so
        * the path exists again while `removed` is the honest account of what this call deleted.
        */
       expect(outcome.ok).toBe(true);
       expect(outcome.removed).toEqual([databasePath]);
       expect(outcome.leftBehind).toEqual([`${databasePath}-shm`]);
+      /*
+       * And the two facts come apart here, which is the case `usable` exists for: the deletion worked, and the
+       * app cannot be used until it is restarted, because the reopen has to get past the file that would not
+       * go. Pinned rather than left implicit, because a leftover file being the thing that costs a restart is
+       * not obvious from either name on its own.
+       */
+      expect(outcome.usable).toBe(false);
     } finally {
       service.dispose();
     }
@@ -252,7 +259,7 @@ describe('createService', () => {
    * The worst corner: the deletion happened and no connection could be put back under the store.
    *
    * Throwing out of the deletion would leave every later call failing against a closed handle with the learner
-   * told one internal error, so it is reported instead �?and reported as its own fact, because `ok` is about
+   * told one internal error, so it is reported instead — and reported as its own fact, because `ok` is about
    * the data and this is about the app. No second connection is needed to produce it: the mock fails the
    * reopen, which is the whole of the state.
    */
@@ -281,7 +288,7 @@ describe('createService', () => {
    * Identity, not equality, and that is the whole assertion.
    *
    * With the guard, both calls are handed the one promise, so both resolve to the same object. Without it,
-   * each call runs a full deletion of its own and the two answers are equal but distinct objects �?a
+   * each call runs a full deletion of its own and the two answers are equal but distinct objects — a
    * `toEqual` would pass in both worlds, which is the shape of a check that cannot fail. `toBe` is also the
    * honest statement of the claim: one deletion, one answer, handed to however many callers asked.
    *

@@ -241,10 +241,24 @@ export class FocusLoopStore {
    * object everybody already has. That is why `db` is not `readonly`. The caller owns the path — this
    * only ever owns the handle — so the replacement is opened by the caller and passed in here.
    */
-  replaceDatabase(db: SqlDatabase): readonly string[] {
-    this.db = db;
-    this.connected = true;
-    return this.initialize();
+  replaceDatabase(database: SqlDatabase): readonly string[] {
+    this.db = database;
+    /*
+     * Closed until the schema is up on it. `connected` is a claim about whether this store can be used, and a
+     * handle whose migrations failed is not one — reporting it as connected would be the same kind of lie as
+     * reporting a deletion that did not happen.
+     */
+    this.connected = false;
+    try {
+      const applied = this.initialize();
+      this.connected = true;
+      return applied;
+    } catch (error) {
+      // The replacement cannot be used, so it is closed here rather than left open behind a flag that says
+      // otherwise, and the caller is left to report the failure.
+      database.close();
+      throw error;
+    }
   }
 
   // ---------------------------------------------------------------- courses
