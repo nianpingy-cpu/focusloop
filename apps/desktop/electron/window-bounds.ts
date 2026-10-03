@@ -33,7 +33,9 @@ export const WINDOW_MINIMUM = { width: 960, height: 640 } as const;
 
 /**
  * A ceiling for a *stored* value, not a policy on what a user may resize to: anything larger is a
- * hand-edited record, and Electron's own limits are around 2^15.
+ * hand-edited record. What actually bounds it is Windows' ±32767 virtual-screen range, and that applies
+ * to a stored *position* as much as to a size. No legitimate record comes close - the largest display a
+ * machine reports today is an 8K panel at roughly 7680 DIP - so this rejects only nonsense.
  */
 const MAXIMUM_PLAUSIBLE = 32_000;
 

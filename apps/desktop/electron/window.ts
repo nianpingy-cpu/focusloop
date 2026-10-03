@@ -62,21 +62,26 @@ export async function createMainWindow(options: CreateWindowOptions): Promise<Br
     },
   });
 
-  window.once('ready-to-show', () => window.show());
-
   /*
-   * A maximised window's `getBounds` is the maximised rectangle, so remembering it would make the
-   * window spring to full screen the first time the learner un-maximises it. The normal bounds and the
-   * flag are stored separately, which is why `restoreWindowBounds` keeps them apart too.
+   * Maximising happens here, not straight after construction: `maximize()` *shows* the window if it is
+   * not already displayed (Electron's own documentation), which would defeat `show: false` and put a
+   * contentless window on screen for the whole renderer load - the flash that `backgroundColor` and
+   * this handler exist to prevent.
    */
-  window.once('close', () => {
-    if (window.isDestroyed()) return;
-    const maximized = window.isMaximized();
-    const bounds = maximized ? window.getNormalBounds() : window.getBounds();
-    writeWindowState(statePath, { ...bounds, maximized });
+  window.once('ready-to-show', () => {
+    window.show();
+    if (restored.maximized) window.maximize();
   });
 
-  if (restored.maximized) window.maximize();
+  /*
+   * `getNormalBounds` returns the normal-state rectangle whatever the window's current state - maximised,
+   * minimised or fullscreen - and equals `getBounds` in normal state. Recording that unconditionally
+   * keeps the stored size independent of what the platform reports for a minimised window, which the
+   * `getBounds` documentation does not describe.
+   */
+  window.once('close', () => {
+    writeWindowState(statePath, { ...window.getNormalBounds(), maximized: window.isMaximized() });
+  });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) void shell.openExternal(url);
