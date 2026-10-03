@@ -234,11 +234,13 @@ const en = {
   'dashboard.progressRate': 'Progress after resume',
   'dashboard.progressRate.sample': '{progressed} of {evaluated} progressed · {pending} pending',
   'dashboard.outcomes': 'Intervention outcomes',
-  'dashboard.col.action': 'Action',
-  'dashboard.col.shown': 'Shown',
-  'dashboard.col.accepted': 'Accepted',
-  'dashboard.col.dismissed': 'Dismissed',
-  'dashboard.col.completed': 'Task then completed',
+  // The bar's own label, and the two things beside it: how often it was accepted, and the counts the
+  // table used to carry. `N =` is written out because a row with one sample otherwise reads as a
+  // 100% success rate.
+  'dashboard.outcomes.share': '{percent} accepted',
+  'dashboard.outcomes.shareAria': 'Accepted share for {action}',
+  'dashboard.outcomes.counts':
+    '{accepted} accepted · {dismissed} dismissed · {completed} completed · N = {total}',
   'dashboard.bridge': 'Browser bridge',
   'dashboard.bridge.listening':
     'Listening on {url} · protocol v{version} · {connections} connected',

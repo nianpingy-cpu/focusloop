@@ -4,6 +4,7 @@ import {
   type BridgeInfo,
   type DailyActivity,
   type InsightRange,
+  type InterventionOutcomeSummary,
   type LearningState,
 } from '@focusloop/shared-types';
 import { AppStateService } from '../core/app-state.service';
@@ -289,28 +290,44 @@ const DONUT_RADIUS = 42;
           @if (outcomeRows().length === 0) {
             <p class="muted small">{{ t('dashboard.outcomes.none') }}</p>
           } @else {
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>{{ t('dashboard.col.action') }}</th>
-                  <th>{{ t('dashboard.col.shown') }}</th>
-                  <th>{{ t('dashboard.col.accepted') }}</th>
-                  <th>{{ t('dashboard.col.dismissed') }}</th>
-                  <th>{{ t('dashboard.col.completed') }}</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (row of outcomeRows(); track row.action) {
-                  <tr>
-                    <td>{{ actionLabel(row.action) }}</td>
-                    <td>{{ row.total }}</td>
-                    <td>{{ row.accepted }}</td>
-                    <td>{{ row.dismissed }}</td>
-                    <td>{{ row.tasksCompleted }}</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+            <!--
+              #22: this was a five-column table for at most eight rows of small integers, which made the
+              reader do the comparison in their head. One row per action, as a bar: the question is "which
+              of these helped", and a bar answers it at a glance. The counts stay as text beside it, so
+              nothing the table carried is lost.
+            -->
+            <div class="bars" data-testid="outcome-rows">
+              @for (row of outcomeRows(); track row.action) {
+                <div class="bar" data-testid="outcome-row">
+                  <div class="bar__head">
+                    <span class="bar__name">{{ actionLabel(row.action) }}</span>
+                    <span class="muted small" data-testid="outcome-share">
+                      {{ t('dashboard.outcomes.share', { percent: percent(acceptedShare(row)) }) }}
+                    </span>
+                  </div>
+                  <div
+                    class="bar__track"
+                    role="progressbar"
+                    [attr.aria-label]="
+                      t('dashboard.outcomes.shareAria', { action: actionLabel(row.action) })
+                    "
+                    [attr.aria-valuenow]="acceptedPercent(row)"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                  >
+                    <span class="bar__fill" [style.width.%]="acceptedPercent(row)"></span>
+                  </div>
+                  <!--
+                    The sample size is written out, not implied. A row with one card otherwise reads as a
+                    100% success rate, and the difference between "always" and "once" is the whole point of
+                    these numbers.
+                  -->
+                  <p class="muted small bar__counts" data-testid="outcome-counts">
+                    {{ outcomeCounts(row) }}
+                  </p>
+                </div>
+              }
+            </div>
           }
         </div>
       </section>
@@ -489,6 +506,37 @@ export class DashboardPage {
 
   protected percent(share: number): string {
     return percentLabel(share);
+  }
+
+  /**
+   * How often this action was accepted, as a share of the times it was shown.
+   *
+   * `outcomeRows` has already dropped every row with no samples, so the denominator is never zero in
+   * practice; the guard is what makes this function total on its own terms rather than by that promise.
+   */
+  protected acceptedShare(row: InterventionOutcomeSummary): number {
+    return row.total === 0 ? 0 : row.accepted / row.total;
+  }
+
+  /** The same share as a whole number, for `aria-valuenow` - which is a value, not a label. */
+  protected acceptedPercent(row: InterventionOutcomeSummary): number {
+    return Math.round(this.acceptedShare(row) * 100);
+  }
+
+  /**
+   * The counts the table used to carry, as one line.
+   *
+   * Built here rather than in the template because `t` takes strings and this component's markup is a
+   * template literal: a nested backtick would end it, and the compiler reports the failure on a line
+   * that has nothing to do with the cause.
+   */
+  protected outcomeCounts(row: InterventionOutcomeSummary): string {
+    return this.t('dashboard.outcomes.counts', {
+      accepted: String(row.accepted),
+      dismissed: String(row.dismissed),
+      completed: String(row.tasksCompleted),
+      total: String(row.total),
+    });
   }
 
   protected level(durationMs: number): number {

@@ -646,6 +646,32 @@ test('a run of identical events is folded into one row', async () => {
   // The shorthand is not the accessible name.
   await expect(newest.locator('.timeline__count')).toHaveAttribute('aria-label', '3 times');
 
+  /*
+   * #22: the intervention outcomes are rows with a share bar now, not a five-column table.
+   *
+   * Asserted here because this test is already on the dashboard after interventions have been shown;
+   * adding a test that starts a session would spend the budget the note above this one is about. Nothing
+   * is hard-coded about *how many* rows there are, because that depends on what the earlier tests
+   * resolved - the assertions are the properties the markup promises: a bar with a real value, the share
+   * as a percentage, and a sample size written out rather than implied.
+   */
+  const outcomes = window.locator('[data-testid="outcome-row"]');
+  await expect(outcomes).not.toHaveCount(0);
+
+  const firstOutcome = outcomes.first();
+  await expect(firstOutcome.locator('[data-testid="outcome-share"]')).toContainText('%');
+  await expect(firstOutcome.locator('[data-testid="outcome-counts"]')).toContainText('N = ');
+
+  const bar = firstOutcome.getByRole('progressbar');
+  await expect(bar).toHaveAttribute('aria-valuemin', '0');
+  await expect(bar).toHaveAttribute('aria-valuemax', '100');
+  const shown = Number(await bar.getAttribute('aria-valuenow'));
+  expect(shown).toBeGreaterThanOrEqual(0);
+  expect(shown).toBeLessThanOrEqual(100);
+  // The bar's width is the same number, so the two cannot disagree about the same share.
+  const width = await bar.locator('.bar__fill').evaluate((fill) => fill.style.width);
+  expect(width).toBe(`${shown}%`);
+
   await expect(window.locator('.banner--error')).toHaveCount(0);
 });
 
