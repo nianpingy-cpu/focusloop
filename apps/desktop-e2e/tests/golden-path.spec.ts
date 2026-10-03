@@ -331,17 +331,33 @@ test('the app explains itself while nothing is running', async () => {
   const gettingStarted = window.getByTestId('getting-started');
   await expect(gettingStarted).toBeVisible();
 
-  // The path, in the order it happens. It is asserted as a list *of* items, not just as text: `li`
-  // keeps its `listitem` role inside anything, so counting items alone would still pass if the list
-  // itself had been replaced by a `div` - which is exactly the change that would drop the numbering
-  // and the "list of three" a screen reader announces.
+  /*
+   * The path, in the order it happens. It is asserted as a list *of* items, not just as text: `li` keeps
+   * its `listitem` role inside anything, so counting items alone would still pass if the container had
+   * been changed to a `div` - which is what the `list` assertion below is for. (It pins the element,
+   * which is the markup the markers come from; it does not claim anything about a browser's own
+   * accessibility tree, which no test here can see.)
+   */
   await expect(gettingStarted.getByRole('list')).toHaveCount(1);
   await expect(gettingStarted.getByRole('listitem')).toHaveCount(3);
-  await expect(gettingStarted.getByRole('listitem').first()).toContainText('Pick a course');
-  await expect(gettingStarted.getByRole('listitem').nth(1)).toContainText('micro task');
-  await expect(gettingStarted.getByRole('listitem').last()).toContainText('one step');
+
+  const steps = gettingStarted.getByRole('listitem');
+  await expect(steps.first()).toContainText('Pick a course');
+  await expect(steps.last()).toContainText('focus screen');
+  await expect(steps.last()).toContainText('small step');
+
+  /*
+   * And the second step names the control it sends the learner to. This is the assertion that would have
+   * caught the first version of this copy, which said "start one micro task from the plan" - the plan is
+   * a panel that starts closed and is not on the path at all, so a learner following the block in order
+   * would have arrived on the focus screen and found nothing called the plan. Reading the label off the
+   * button rather than writing it here is what makes the two unable to drift apart.
+   */
+  const startLabel = await window.getByTestId('start-session').first().innerText();
+  await expect(steps.nth(1)).toContainText(startLabel);
 
   // And it ends on the product's premise rather than on the learner's homework.
+  await expect(gettingStarted).toContainText('Stop whenever you like');
   await expect(gettingStarted).toContainText('Coming back later is the point');
 
   // The status line it sits above is still there and still says the other thing: one line reports what

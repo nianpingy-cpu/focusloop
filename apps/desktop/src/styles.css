@@ -1045,10 +1045,13 @@ textarea:focus {
 /*
  * The getting-started path (#21).
  *
- * The list keeps its own `display`, which is the whole reason there is so little here: `display: grid`
- * on an `<ol>` drops the markers *and* takes the list out of the accessibility tree in Chromium, so the
- * three steps stop being announced as a list of three — and the order is the one thing the block is
- * saying. Spacing is done on the items instead.
+ * The list keeps its own `display`, which is why there is so little here: `display: grid` would replace
+ * the `list-item` display the markers are drawn from, and tighter spacing is not worth losing the
+ * numbers the block is about. The spacing is done on the items instead.
+ *
+ * The e2e asserts the container still has a `list` role, which Playwright maps from the tag - so what
+ * that guards is the element, not what a screen reader makes of it. That is the weaker claim and it is
+ * the honest one: the markers come from the markup, and the markup is what a test can hold.
  */
 .steps {
   margin: 10px 0;
