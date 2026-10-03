@@ -35,7 +35,10 @@ const en = {
     'The database is open in another program, so nothing was deleted. Close that program, then try again.',
   'app.data.failed':
     'Nothing was deleted. FocusLoop could not remove the file, so your data is still there.',
-  'app.data.deleted': 'Everything FocusLoop had stored has been deleted.',
+  'app.data.deleted': 'The database has been deleted.',
+  'app.data.leftBehind': 'These files could not be removed and may still hold your data: {files}',
+  'app.data.unavailable':
+    'FocusLoop could not open its database again. Restart the app to keep using it.',
   'app.data.confirm.title': 'Delete everything FocusLoop has stored?',
   'app.data.confirm.course': 'Your courses, and the material they were generated from.',
   'app.data.confirm.sessions': 'Every session, event, checkpoint and progress record.',

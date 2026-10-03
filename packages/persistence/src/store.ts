@@ -222,6 +222,9 @@ function parseJson<T>(value: string, fallback: T): T {
  * these repositories.
  */
 export class FocusLoopStore {
+  /** Whether `db` is a live connection. False only after a `close`, which is what makes `close` idempotent. */
+  private connected = true;
+
   constructor(private db: SqlDatabase) {}
 
   /** Idempotent. Safe to call on every boot. */
@@ -240,6 +243,7 @@ export class FocusLoopStore {
    */
   replaceDatabase(db: SqlDatabase): readonly string[] {
     this.db = db;
+    this.connected = true;
     return this.initialize();
   }
 
@@ -939,6 +943,14 @@ export class FocusLoopStore {
   }
 
   close(): void {
+    /*
+     * Idempotent, so "the store has no live connection" is a state this object can be in and stay in. The one
+     * caller that needs it is the delete-everything path (#10): it closes the connection to unlink the file,
+     * and a reopen can fail — after which the store must still survive its own shutdown (`dispose`) and a
+     * second deletion attempt without throwing from the teardown.
+     */
+    if (!this.connected) return;
+    this.connected = false;
     this.db.close();
   }
 }

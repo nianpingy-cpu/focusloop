@@ -86,6 +86,28 @@ export function createService(options: CreateServiceOptions = {}): FocusLoopServ
     const outcome = deleteFiles(databaseFiles(databasePath));
 
     /*
+     * Asked here, before anything is opened again, and that order is load-bearing rather than tidy: the
+     * reopen below creates a fresh database at this path, so asking afterwards would answer "is there a
+     * database file" with yes every time and report every deletion as a failure.
+     */
+    const databaseGone = !existsSync(databasePath);
+
+    /*
+     * Everything below depends on a live connection under the store, because the engine and every IPC
+     * handler hold this object by reference and a closed one makes every later call throw — the learner
+     * would be told one error and then find the app dead until it was restarted, which is the outcome this
+     * feature exists to avoid. So the reopen is guarded, and failing it is reported rather than thrown: the
+     * process cannot repair itself, but it can say so.
+     */
+    let reopened = false;
+    try {
+      store.replaceDatabase(openDatabase(databasePath));
+      reopened = true;
+    } catch (error) {
+      console.error('FocusLoop could not reopen its database after a deletion:', error);
+    }
+
+    /*
      * Whether the deletion happened is a question about the disk, not about this function having run: the
      * file being absent is exactly a first-run state, and the file being present is exactly the case where
      * claiming success would be a lie. A database that was never there counts as gone.
@@ -93,25 +115,39 @@ export function createService(options: CreateServiceOptions = {}): FocusLoopServ
      * The file rather than `outcome.reason`, which is the other available answer and the wrong one: a
      * sidecar that will not unlink *after* the database has gone leaves `reason` set, but the learner's rows
      * went with the database, so reporting "nothing was deleted, your data is still there" would be false.
-     * The stray `-wal` is harmless (a fresh database at the same path ignores a log that is not its own).
+     * `leftBehind` is where those files are reported instead.
      */
-    if (existsSync(databasePath)) {
-      // The learner's data is still there, so the app has to keep working: reopen the file that survived
-      // rather than leave a closed store behind a failure message.
-      store.replaceDatabase(openDatabase(databasePath));
-      return { ok: false, reason: outcome.reason ?? 'failed', removed: outcome.removed };
+    if (databaseGone) {
+      /*
+       * A fresh database: schema, then the built-in course the catalogue is supposed to have on a first run.
+       * The store keeps its identity — the engine and every IPC handler hold this object — so the connection
+       * is what is replaced, which is the only way the app keeps running without a restart.
+       */
+      if (reopened) {
+        engine.discardTransientData();
+        engine.seedBuiltInCourses();
+      }
+      return {
+        ok: true,
+        reason: null,
+        removed: outcome.removed,
+        leftBehind: outcome.remaining,
+        usable: reopened,
+      };
     }
 
     /*
-     * A fresh database: schema, then the built-in course the catalogue is supposed to have on a first run.
-     * The store keeps its identity — the engine and every IPC handler hold this object — so the connection
-     * is what is replaced, which is the only way the app keeps running without a restart.
+     * The learner's data is still there, so the app has to keep working: the file that survived was reopened
+     * above rather than left closed behind a failure message. `usable` carries the other half of the truth
+     * for the case where that reopen failed — the data is intact, but nothing works until a restart.
      */
-    store.replaceDatabase(openDatabase(databasePath));
-    engine.discardTransientData();
-    engine.seedBuiltInCourses();
-
-    return { ok: true, reason: null, removed: outcome.removed };
+    return {
+      ok: false,
+      reason: outcome.reason ?? 'failed',
+      removed: outcome.removed,
+      leftBehind: outcome.remaining,
+      usable: reopened,
+    };
   };
 
   const service: FocusLoopService = {

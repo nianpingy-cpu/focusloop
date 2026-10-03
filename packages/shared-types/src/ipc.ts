@@ -252,14 +252,25 @@ export type DeleteDataFailureReason = 'locked' | 'failed';
  * What the deletion did, in the process's own words.
  *
  * `ok` is what the learner is told, so it is derived from the file being gone rather than from the code
- * path having run: a delete that reports success while the database is still on disk is the one
- * outcome this feature must not have.
+ * path having run: a delete that reports success while the database is still on disk is the one outcome
+ * this feature must not have.
  */
 export interface DeleteDataResponse {
   readonly ok: boolean;
   readonly reason: DeleteDataFailureReason | null;
   /** The files this call removed, so a report can be checked against the disk rather than trusted. */
   readonly removed: readonly string[];
+  /**
+   * The files that are still there, which is not the same as "nothing was removed": the database can be
+   * gone while a sidecar that holds its page images is not. Empty in the ordinary case.
+   */
+  readonly leftBehind: readonly string[];
+  /**
+   * False when the database could not be opened again after the delete, which is not the same question as
+   * `ok`: the learner's data can be gone while nothing in the app works until it is restarted. The two are
+   * reported separately because either one can be true on its own.
+   */
+  readonly usable: boolean;
 }
 
 /** Typed, promise-based API exposed as `window.focusloop`. */

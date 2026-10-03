@@ -69,6 +69,18 @@ interface DataNotice {
           {{ t(message.key) }}
         }
       </p>
+
+      @if (leftBehind().length > 0) {
+        <p class="small data__notice" data-kind="warning" data-testid="data-left-behind">
+          {{ t('app.data.leftBehind', { files: leftBehind().join(', ') }) }}
+        </p>
+      }
+
+      @if (needsRestart()) {
+        <p class="small data__notice" data-kind="error" role="status" data-testid="data-restart">
+          {{ t('app.data.unavailable') }}
+        </p>
+      }
     </div>
 
     @if (confirming()) {
@@ -132,6 +144,10 @@ export class DataControlsComponent implements OnDestroy {
   protected readonly t = this.i18n.t;
   protected readonly info = this.state.dataInfo;
   protected readonly notice = signal<DataNotice | null>(null);
+  /** The files a deletion could not remove, named rather than summarised away. */
+  protected readonly leftBehind = signal<readonly string[]>([]);
+  /** True when the database could not be opened again, so nothing in the app works until a restart. */
+  protected readonly needsRestart = signal(false);
   protected readonly confirming = signal(false);
   protected readonly working = signal(false);
 
@@ -181,6 +197,8 @@ export class DataControlsComponent implements OnDestroy {
   protected ask(): void {
     // A stale outcome from the last attempt would read as the answer to this one.
     this.notice.set(null);
+    this.leftBehind.set([]);
+    this.needsRestart.set(false);
     this.confirming.set(true);
   }
 
@@ -197,13 +215,14 @@ export class DataControlsComponent implements OnDestroy {
     /*
      * Only a deletion that happened is reported as one.
      *
-     * `ok` comes from the file being gone rather than from the call having returned, so the failure
-     * branch is the honest one: the data is still there, and the reason says which of the two things
-     * went wrong — another program holding the file, or the OS refusing for a reason the learner cannot
-     * act on. A `null` outcome means the request never reached the main process, which the error banner
-     * has already reported.
+     * `ok` comes from the file being gone rather than from the call having returned, so the failure branch
+     * is the honest one, and the reason says which of the three things went wrong: another program holding
+     * the file, the OS refusing for a reason the learner cannot act on, or a deletion that happened while the
+     * app could not open its database again — which has to be said, because nothing works until a restart. A
+     * `null` outcome means the request never reached the main process, which the error banner has reported.
      */
     if (outcome === null) return;
+
     this.notice.set(
       outcome.ok
         ? { key: 'app.data.deleted', kind: 'ok' }
@@ -212,6 +231,18 @@ export class DataControlsComponent implements OnDestroy {
             kind: 'error',
           },
     );
+
+    /*
+     * And the files that survived are named, when there are any. They are not "nothing": a `-wal` holds page
+     * images, so a learner who is told the database is gone deserves to know which file was left and where.
+     */
+    this.leftBehind.set(outcome.leftBehind);
+
+    /*
+     * Whether the app can still be used is a separate fact from whether the data went, and it is reported
+     * separately for that reason: the deletion can have succeeded and left nothing working until a restart.
+     */
+    this.needsRestart.set(!outcome.usable);
   }
 
   /** Escape cancels and Tab stays inside, exactly as the resume dialog does. */
