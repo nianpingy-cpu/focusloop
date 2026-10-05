@@ -3,7 +3,7 @@
 Scope: [#143](https://github.com/nianpingy-cpu/focusloop/issues/143), second slice of
 [#94](https://github.com/nianpingy-cpu/focusloop/issues/94), following cancellation/deadline #142.
 This budget boundary is distinct from [#144 incremental streaming](runtime-streaming.md) and the
-future #145 retry policy.
+[#145 retry policy](runtime-retry-policy.md).
 
 ## One input boundary
 

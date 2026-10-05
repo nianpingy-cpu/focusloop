@@ -17,6 +17,13 @@ import {
 import type { CompletionResult } from '@focusloop/shared-types';
 import type { CompleteWithFallbackResult, ProviderSelection } from './registry';
 import { completeWithFallback, toProviderFailure } from './registry';
+import { ProviderError } from './errors';
+import {
+  isRetryableReason,
+  pauseBeforeRetry,
+  resolveRetryPolicy,
+  type RetryOptions,
+} from './retry-policy';
 import {
   assertExecutionActive,
   ExecutionAbortError,
@@ -45,7 +52,7 @@ export type RuntimeStreamEvent =
     })
   | { readonly type: 'complete'; readonly result: CompleteWithFallbackResult };
 
-export interface StructuredExecuteOptions extends RuntimeExecutionOptions {
+export interface StructuredExecuteOptions extends RuntimeExecutionOptions, RetryOptions {
   /** Invoked once only after validation and a final cancellation/deadline check. */
   readonly commit?: (value: unknown) => void;
 }
@@ -70,7 +77,7 @@ export class AgentRuntime {
   /** Cancelled text calls reject with AbortError; expired calls reject with timeout. */
   async completeText(
     request: CompletionRequest,
-    options?: BudgetExecutionOptions,
+    options?: BudgetExecutionOptions & RetryOptions,
   ): Promise<CompleteWithFallbackResult> {
     this.lastDegraded = false;
     const result = await completeWithFallback(this.selection, request, options);
@@ -98,7 +105,14 @@ export class AgentRuntime {
     const bounded = prepared.request;
     let failureReason: string | undefined;
     let committing = false;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    const retry = resolveRetryPolicy(options);
+    /*
+     * One attempt budget is shared by the schema retry and the transport retry, so the two cannot
+     * multiply calls: at most `maxAttempts` primary calls, then the single fallback below.
+     */
+    let attempts = 0;
+    for (;;) {
+      attempts += 1;
       try {
         const raw = await withExecution(
           (signal) => this.selection.primary.complete(bounded, { signal }),
@@ -122,14 +136,24 @@ export class AgentRuntime {
           };
         }
         failureReason = parsed.problems.join('; ');
+        if (attempts < retry.maxAttempts) continue; // the one schema retry
       } catch (error) {
         // A caller's failed commit is not a provider failure: never retry/fallback and commit twice.
         if (committing) throw error;
         const stopped = this.stoppedResult(controls, prepared.report);
         if (stopped !== null) return stopped;
         failureReason = toProviderFailure(error, this.selection.primary.id).reason;
-        break; // transport failures do not gain another retry in this slice
+        // Only a transient reason buys the second call, and the pause is guarded on both sides.
+        if (
+          error instanceof ProviderError &&
+          isRetryableReason(error.reason) &&
+          attempts < retry.maxAttempts
+        ) {
+          await pauseBeforeRetry(attempts, retry, controls, this.selection.primary.id);
+          continue;
+        }
       }
+      break;
     }
     return this.degradeStructured<T>(
       bounded,
@@ -263,8 +287,11 @@ export class AgentRuntime {
     const limit = outputLimit(options?.maxOutputCharacters);
     this.lastDegraded = false;
     let failureReason: string | undefined;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const provider = attempt === 2 ? this.selection.fallback : this.selection.primary;
+    // The stream path shares the policy's attempt bound: `maxAttempts` primary tries, then one
+    // fallback, so total model calls stay equal to the non-streaming path.
+    const maxAttempts = resolveRetryPolicy(options).maxAttempts;
+    for (let attempt = 0; attempt <= maxAttempts; attempt += 1) {
+      const provider = attempt === maxAttempts ? this.selection.fallback : this.selection.primary;
       let origin = { id: provider.id, model: provider.model };
       let seen = false;
       let committing = false;
@@ -289,30 +316,30 @@ export class AgentRuntime {
         const budget = completionBudget(prepared.report, raw);
         const parsed = parseSchema(raw.text, schema);
         assertExecutionActive(controls, provider.id);
-        this.lastDegraded = attempt === 2;
+        this.lastDegraded = attempt === maxAttempts;
         if (parsed.ok) {
           committing = true;
           options?.commit?.(parsed.value);
           return {
-            status: attempt === 2 ? 'degraded' : 'ok',
+            status: attempt === maxAttempts ? 'degraded' : 'ok',
             value: parsed.value as T,
             providerId: raw.providerId,
             model: raw.model,
-            degraded: attempt === 2,
+            degraded: attempt === maxAttempts,
             budget,
             ...(failureReason === undefined ? {} : { failureReason }),
           };
         }
         failureReason = parsed.problems.join('; ');
-        if (attempt < 2) continue;
+        if (attempt < maxAttempts) continue;
       } catch (error) {
         if (committing) throw error;
         const stopped = this.stoppedResult(controls, prepared.report, origin);
         if (stopped !== null) return stopped;
         failureReason = toProviderFailure(error, provider.id).reason;
         // Retrying hidden complete-but-invalid JSON is safe. An interrupted stream is not complete.
-        if (!seen && !(error instanceof StreamInterruptedError) && attempt < 2) {
-          attempt = 1;
+        if (!seen && !(error instanceof StreamInterruptedError) && attempt < maxAttempts) {
+          attempt = maxAttempts - 1;
           continue;
         }
       }

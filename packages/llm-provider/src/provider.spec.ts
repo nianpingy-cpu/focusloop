@@ -1,8 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { CompletionResult } from '@focusloop/shared-types';
 import { MockAIProvider } from './mock-provider';
 import { DeepSeekProvider } from './deepseek-provider';
 import { ProviderError } from './errors';
 import { completeWithFallback, createProviderSelection } from './registry';
+import { ExecutionAbortError } from './execution';
+import { RETRY_POLICY } from './retry-policy';
+
+const completion = (): CompletionResult => ({
+  text: '{"answer":"ok"}',
+  providerId: 'mock',
+  model: 'mock',
+  latencyMs: 0,
+});
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -233,5 +243,106 @@ describe('degraded mode', () => {
     const result = await completeWithFallback(createProviderSelection(failing), { prompt: 'x' });
     expect(result.degraded).toBe(true);
     expect(result.failure?.reason).toBe('bad-response');
+  });
+});
+
+describe('bounded transport retry', () => {
+  it('retries a transient primary failure once, then falls back', async () => {
+    const complete = vi.fn(async () => {
+      throw new ProviderError('offline', 'deepseek', 'no network');
+    });
+    const fallback = vi.fn(async () => completion());
+    const sleep = vi.fn(async () => {});
+    const result = await completeWithFallback(
+      {
+        primary: { id: 'deepseek', model: 'deepseek-chat', offline: false, complete },
+        fallback: { id: 'mock', model: 'mock', offline: true, complete: fallback },
+      },
+      { prompt: 'x' },
+      { sleep },
+    );
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(RETRY_POLICY.baseDelayMs);
+    expect(fallback).toHaveBeenCalledTimes(1);
+    expect(result.degraded).toBe(true);
+    expect(result.failure?.reason).toBe('offline');
+  });
+
+  it('does not retry a terminal reason and starts no pause', async () => {
+    const complete = vi.fn(async () => {
+      throw new ProviderError('unauthorized', 'deepseek', 'no key');
+    });
+    const fallback = vi.fn(async () => completion());
+    const sleep = vi.fn(async () => {});
+    const result = await completeWithFallback(
+      {
+        primary: { id: 'deepseek', model: 'deepseek-chat', offline: false, complete },
+        fallback: { id: 'mock', model: 'mock', offline: true, complete: fallback },
+      },
+      { prompt: 'x' },
+      { sleep },
+    );
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result.failure?.reason).toBe('unauthorized');
+  });
+
+  it('reports the last primary failure once the retries are exhausted', async () => {
+    let calls = 0;
+    const complete = vi.fn(async () => {
+      calls += 1;
+      throw new ProviderError(calls === 1 ? 'timeout' : 'offline', 'deepseek', 'flaky link');
+    });
+    const result = await completeWithFallback(
+      {
+        primary: { id: 'deepseek', model: 'deepseek-chat', offline: false, complete },
+        fallback: { id: 'mock', model: 'mock', offline: true, complete: async () => completion() },
+      },
+      { prompt: 'x' },
+      { sleep: async () => {} },
+    );
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(result.failure).toMatchObject({ reason: 'offline', providerId: 'deepseek' });
+  });
+
+  it('a transitively exhausted retry still never loops the fallback', async () => {
+    const complete = vi.fn(async () => {
+      throw new ProviderError('rate-limited', 'deepseek', '429');
+    });
+    const fallback = vi.fn(async () => completion());
+    await completeWithFallback(
+      {
+        primary: { id: 'deepseek', model: 'deepseek-chat', offline: false, complete },
+        fallback: { id: 'mock', model: 'mock', offline: true, complete: fallback },
+      },
+      { prompt: 'x' },
+      { sleep: async () => {} },
+    );
+    expect(fallback).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops retrying when the caller cancels during the pause', async () => {
+    const controller = new AbortController();
+    const complete = vi.fn(async () => {
+      throw new ProviderError('offline', 'deepseek', 'no network');
+    });
+    const fallback = vi.fn(async () => completion());
+    await expect(
+      completeWithFallback(
+        {
+          primary: { id: 'deepseek', model: 'deepseek-chat', offline: false, complete },
+          fallback: { id: 'mock', model: 'mock', offline: true, complete: fallback },
+        },
+        { prompt: 'x' },
+        {
+          signal: controller.signal,
+          sleep: async () => {
+            controller.abort();
+          },
+        },
+      ),
+    ).rejects.toBeInstanceOf(ExecutionAbortError);
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(fallback).not.toHaveBeenCalled();
   });
 });

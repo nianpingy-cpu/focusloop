@@ -105,4 +105,5 @@ pnpm e2e
 ```
 
 No prompt telemetry, scratch output, model credentials, new dependencies or intervention-policy
-changes. #145 policy configuration and #146 skill-specific fallback/final conformance remain separate.
+changes. The [#145 retry/fallback policy](runtime-retry-policy.md) now bounds the attempts these
+paths share; #146 skill-specific fallback/final conformance remains separate.

@@ -10,6 +10,7 @@ import { DeepSeekProvider } from './deepseek-provider';
 import { ProviderError } from './errors';
 import { ExecutionAbortError, isExecutionAbort, RuntimeDeadlineError } from './execution';
 import { completeWithFallback } from './registry';
+import { RETRY_POLICY } from './retry-policy';
 
 const valid = {
   text: '{"answer":"local step"}',
@@ -149,8 +150,14 @@ describe('runtime cancellation and total deadline', () => {
         }),
         fallback: provider(fallback),
       });
-      const result = runtime[method]({ ...data, deadlineMs: Date.now() + 10 }, request, { commit });
-      await vi.advanceTimersByTimeAsync(0);
+      // A transient primary failure pauses before its retry, so the fallback is entered only after
+      // that pause. The deadline is placed so it passes during the fallback itself.
+      const result = runtime[method](
+        { ...data, deadlineMs: Date.now() + RETRY_POLICY.baseDelayMs + 10 },
+        request,
+        { commit },
+      );
+      await vi.advanceTimersByTimeAsync(RETRY_POLICY.baseDelayMs);
       expect(fallback).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(10);
       pending.release(valid);
@@ -330,9 +337,9 @@ describe('expiration on the text paths', () => {
       }),
     });
     const result = runtime
-      .completeText(request, { deadlineMs: Date.now() + 10 })
+      .completeText(request, { deadlineMs: Date.now() + RETRY_POLICY.baseDelayMs + 10 })
       .catch((error: unknown) => error);
-    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(RETRY_POLICY.baseDelayMs);
     expect(seen).toBeDefined();
     await vi.advanceTimersByTimeAsync(10);
     expect(await result).toBeInstanceOf(RuntimeDeadlineError);
@@ -342,6 +349,23 @@ describe('expiration on the text paths', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('a transient retry never starts after the deadline passes during the pause', async () => {
+    vi.useFakeTimers();
+    const primary = vi.fn(async () => {
+      throw new ProviderError('offline', 'test', 'offline');
+    });
+    const fallback = vi.fn(async () => valid);
+    const runtime = new AgentRuntime({ primary: provider(primary), fallback: provider(fallback) });
+    const result = runtime
+      .completeText(request, { deadlineMs: Date.now() + 1 })
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(1); // the deadline passes while the primary is paused
+    await vi.advanceTimersByTimeAsync(RETRY_POLICY.baseDelayMs); // the pause ends without a retry
+    expect(await result).toBeInstanceOf(RuntimeDeadlineError);
+    expect(primary).toHaveBeenCalledTimes(1);
+    expect(fallback).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it('rejects between fragments instead of truncating the story quietly', async () => {
     vi.useFakeTimers();
     const long = { ...valid, text: 'x'.repeat(150) };

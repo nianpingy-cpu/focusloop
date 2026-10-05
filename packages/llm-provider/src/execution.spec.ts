@@ -8,6 +8,7 @@ import { AgentRuntime } from './runtime';
 import { ProviderError } from './errors';
 import { DeepSeekProvider } from './deepseek-provider';
 import { RuntimeDeadlineError, withExecution, type ExecutableAIProvider } from './execution';
+import { RETRY_POLICY } from './retry-policy';
 
 const result: CompletionResult = {
   text: '{"answer":"next step"}',
@@ -155,7 +156,7 @@ describe('final acceptance boundary', () => {
     });
   }
 
-  it('a provider-local DeepSeek timeout degrades while runtime time remains', async () => {
+  it('a provider-local DeepSeek timeout is retried once, then degrades while runtime time remains', async () => {
     vi.useFakeTimers();
     let transport: AbortSignal | undefined;
     const fetchImpl: typeof fetch = (_url, init) => {
@@ -165,10 +166,14 @@ describe('final acceptance boundary', () => {
     const primary = new DeepSeekProvider({ apiKey: 'synthetic', fetchImpl, timeoutMs: 5 });
     const fallback = vi.fn(async () => result);
     const runtime = new AgentRuntime({ primary, fallback: provider(fallback) });
-    const pending = runtime.completeText(request, { deadlineMs: Date.now() + 20 });
+    const pending = runtime.completeText(request, {
+      deadlineMs: Date.now() + RETRY_POLICY.baseDelayMs + 100,
+    });
     await vi.advanceTimersByTimeAsync(5);
+    expect(transport?.aborted).toBe(true); // the first local timeout, a transient reason
+    await vi.advanceTimersByTimeAsync(RETRY_POLICY.baseDelayMs); // the bounded pause
+    await vi.advanceTimersByTimeAsync(5); // the retried call times out as well
     expect(await pending).toMatchObject({ degraded: true, failure: { reason: 'timeout' } });
-    expect(transport?.aborted).toBe(true);
     expect(fallback).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
   });

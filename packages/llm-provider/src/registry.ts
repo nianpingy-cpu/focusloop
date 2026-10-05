@@ -8,6 +8,13 @@ import { completionBudget, prepareBudget, type BudgetExecutionOptions } from './
 import { ProviderError } from './errors';
 import { MockAIProvider } from './mock-provider';
 import { assertExecutionActive, withExecution, type ExecutableAIProvider } from './execution';
+import {
+  isRetryableReason,
+  pauseBeforeRetry,
+  resolveRetryPolicy,
+  type ResolvedRetryPolicy,
+  type RetryOptions,
+} from './retry-policy';
 
 export interface ProviderSelection {
   readonly primary: ExecutableAIProvider;
@@ -29,23 +36,20 @@ export interface CompleteWithFallbackResult extends CompletionResult {
 }
 
 /**
- * Try the primary, then bounded deterministic fallback on a provider failure.
- * Caller cancellation and the total deadline are terminal, never fallback triggers.
+ * Try the primary (with the bounded retry the policy allows), then a deterministic fallback.
+ * Caller cancellation and the total deadline are terminal, never retry or fallback triggers.
  */
 export async function completeWithFallback(
   selection: ProviderSelection,
   request: CompletionRequest,
-  options?: BudgetExecutionOptions,
+  options?: BudgetExecutionOptions & RetryOptions,
 ): Promise<CompleteWithFallbackResult> {
   const prepared = prepareBudget(request, options?.budgets);
   const bounded = prepared.request;
+  const retry = resolveRetryPolicy(options);
   assertExecutionActive(options, selection.primary.id);
   try {
-    const result = await withExecution(
-      (signal) => selection.primary.complete(bounded, { signal }),
-      options,
-      selection.primary.id,
-    );
+    const result = await completeWithRetry(selection.primary, bounded, options, retry);
     const budget = completionBudget(prepared.report, result);
     assertExecutionActive(options, selection.primary.id);
     return budgetedResult(result, budget, false, null);
@@ -66,6 +70,39 @@ export async function completeWithFallback(
     assertExecutionActive(options, selection.fallback.id);
     return budgetedResult(result, budget, true, failure);
   }
+}
+
+/**
+ * The primary's attempts, bounded by the policy.
+ *
+ * Only a transient reason buys the next attempt, and the pause before it is guarded on both sides so
+ * cancellation or the deadline ends the loop instead of starting another call.
+ */
+async function completeWithRetry(
+  provider: ExecutableAIProvider,
+  request: CompletionRequest,
+  options: (BudgetExecutionOptions & RetryOptions) | undefined,
+  retry: ResolvedRetryPolicy,
+): Promise<CompletionResult> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= retry.maxAttempts; attempt += 1) {
+    try {
+      return await withExecution(
+        (signal) => provider.complete(request, { signal }),
+        options,
+        provider.id,
+      );
+    } catch (error) {
+      lastError = error;
+      // Terminal before anything is classified: a caller's cancellation and a passed deadline are
+      // not provider failures, and must not be retried.
+      assertExecutionActive(options, provider.id);
+      const retryable = error instanceof ProviderError && isRetryableReason(error.reason);
+      if (!retryable || attempt >= retry.maxAttempts) throw error;
+      await pauseBeforeRetry(attempt, retry, options, provider.id);
+    }
+  }
+  throw lastError;
 }
 
 function budgetedResult(

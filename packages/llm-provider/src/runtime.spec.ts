@@ -9,6 +9,7 @@ import type {
 import { ProviderError } from './errors';
 import { MockAIProvider } from './mock-provider';
 import { AgentRuntime, createProviderSelection } from './index';
+import { RETRY_POLICY } from './retry-policy';
 
 const SCHEMA: RuntimeSchema = {
   type: 'object',
@@ -106,16 +107,22 @@ describe('AgentRuntime structured conformance', () => {
     expect(runtime.degraded).toBe(true);
   });
 
-  it('timeout: degrades to fallback without committing invalid data', async () => {
+  it('timeout: retries once, then degrades to fallback without committing invalid data', async () => {
     const commit = vi.fn();
+    const sleep = vi.fn(async () => {});
+    const complete = vi.fn(async () => {
+      throw new ProviderError('timeout', 'primary', 'too slow');
+    });
     const selection = {
-      primary: failingProvider('primary', new ProviderError('timeout', 'primary', 'too slow')),
+      primary: { id: 'primary', model: 'primary-model', offline: false, complete },
       fallback: textProvider('mock', VALID_JSON),
     };
     const runtime = new AgentRuntime(selection);
 
-    const result = await runtime.executeStructured(data(), request(), { commit });
+    const result = await runtime.executeStructured(data(), request(), { commit, sleep });
 
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(RETRY_POLICY.baseDelayMs);
     expect(result.status).toBe('degraded');
     expect(result.failureReason).toBe('timeout');
     expect(result.providerId).toBe('mock');
@@ -137,16 +144,89 @@ describe('AgentRuntime structured conformance', () => {
     expect(commit).toHaveBeenCalled();
   });
 
-  it('rate limit degrades to fallback', async () => {
+  it('rate limit degrades to fallback after one retry', async () => {
+    const sleep = vi.fn(async () => {});
+    const complete = vi.fn(async () => {
+      throw new ProviderError('rate-limited', 'primary', '429');
+    });
     const runtime = new AgentRuntime({
-      primary: failingProvider('primary', new ProviderError('rate-limited', 'primary', '429')),
+      primary: { id: 'primary', model: 'primary-model', offline: false, complete },
       fallback: textProvider('mock', VALID_JSON),
     });
 
-    const result = await runtime.executeStructured(data(), request());
+    const result = await runtime.executeStructured(data(), request(), { sleep });
 
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
     expect(result.status).toBe('degraded');
     expect(result.failureReason).toBe('rate-limited');
+  });
+
+  it('a terminal transport failure is not retried and starts no pause', async () => {
+    const sleep = vi.fn(async () => {});
+    const complete = vi.fn(async () => {
+      throw new ProviderError('unauthorized', 'primary', 'no key');
+    });
+    const runtime = new AgentRuntime({
+      primary: { id: 'primary', model: 'primary-model', offline: false, complete },
+      fallback: textProvider('mock', VALID_JSON),
+    });
+
+    const result = await runtime.executeStructured(data(), request(), { sleep });
+
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result.status).toBe('degraded');
+    expect(result.failureReason).toBe('unauthorized');
+    expect(result.providerId).toBe('mock');
+  });
+
+  it('attempt limits compose: maxAttemptsPerProvider 1 disables the transport retry', async () => {
+    const sleep = vi.fn(async () => {});
+    const complete = vi.fn(async () => {
+      throw new ProviderError('offline', 'primary', 'no network');
+    });
+    const runtime = new AgentRuntime({
+      primary: { id: 'primary', model: 'primary-model', offline: false, complete },
+      fallback: textProvider('mock', VALID_JSON),
+    });
+
+    const result = await runtime.executeStructured(data(), request(), {
+      sleep,
+      maxAttemptsPerProvider: 1,
+    });
+
+    expect(complete).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'degraded', failureReason: 'offline' });
+  });
+
+  it('the schema retry and the transport retry share one bounded attempt budget', async () => {
+    const sleep = vi.fn(async () => {});
+    let calls = 0;
+    const primary: AIProvider = {
+      id: 'primary',
+      model: 'primary-model',
+      offline: false,
+      async complete() {
+        calls += 1;
+        if (calls === 1) {
+          return { text: 'not-json', providerId: 'primary', model: 'primary-model', latencyMs: 1 };
+        }
+        throw new ProviderError('offline', 'primary', 'no network');
+      },
+    };
+    const runtime = new AgentRuntime({
+      primary,
+      fallback: textProvider('mock', VALID_JSON),
+    });
+
+    const result = await runtime.executeStructured(data(), request(), { sleep });
+
+    // One schema retry consumed the budget, so the transient failure gets no pause and no retry.
+    expect(calls).toBe(2);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'degraded', failureReason: 'offline' });
   });
 
   it('abort mid-flight: nothing is committed, status is aborted', async () => {

@@ -1338,7 +1338,14 @@ describe('FocusLoopEngine', () => {
           prompts.push(request.prompt);
           systems.push(request.system ?? '');
           calls += 1;
-          if (calls === 2) throw new ProviderError('timeout', 'scripted', 'the retry timed out');
+          if (calls === 2) {
+            /*
+             * Terminal on purpose. A transient reason would be retried by the runtime's transport
+             * policy, so the second prompt would end up answered by a third call and the case this
+             * test pins — a prompt that was sent and answered by nobody — would never be reached.
+             */
+            throw new ProviderError('unauthorized', 'scripted', 'the retry had no key');
+          }
           return {
             text: 'prose, which is refused',
             providerId: 'scripted',
@@ -1360,14 +1367,16 @@ describe('FocusLoopEngine', () => {
         expect(answer.outcome.status).toBe('unavailable');
         if (answer.outcome.status !== 'unavailable') return;
         expect(answer.outcome.reason).toBe('provider-failed');
-        // Both calls, each with its own system prompt, as an equality against what the provider received.
-        // A zero report and a first-call-only report both fail it.
-        expect(answer.context.sent.inputCharacters).toBe(
-          (systems[0]?.length ?? 0) +
-            (prompts[0]?.length ?? 0) +
-            (systems[1]?.length ?? 0) +
-            (prompts[1]?.length ?? 0),
+        /*
+         * Every call, each with its own system prompt, as an equality against what the provider
+         * received: a retry is a second payment, and a zero report and a first-call-only report
+         * both fail it.
+         */
+        const handedOver = prompts.reduce(
+          (total, prompt, index) => total + prompt.length + (systems[index]?.length ?? 0),
+          0,
         );
+        expect(answer.context.sent.inputCharacters).toBe(handedOver);
       } finally {
         scripted.close();
       }

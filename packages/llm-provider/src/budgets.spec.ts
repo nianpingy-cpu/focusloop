@@ -181,9 +181,12 @@ describe('one runtime budget boundary', () => {
       { prompt: 'q', maxTokens: 100 },
       { budgets: data() },
     );
-    expect(seen).toHaveLength(2);
+    // A transient `offline` failure buys one primary retry, so the bounded request is shared by
+    // three calls: the primary twice, then the fallback.
+    expect(seen).toHaveLength(3);
     expect(seen[0]).toBe(seen[1]);
-    expect(seen[1]?.maxTokens).toBe(8);
+    expect(seen[1]).toBe(seen[2]);
+    expect(seen[2]?.maxTokens).toBe(8);
   });
   it('reports UTF-16 input characters separately from caps and provider-reported token usage', async () => {
     const runtime = new AgentRuntime({

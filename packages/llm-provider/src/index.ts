@@ -22,6 +22,19 @@ export {
 } from './streaming';
 export { DEFAULT_RUNTIME_BUDGETS, RuntimeBudgetError } from './budgets';
 export type { BudgetExecutionOptions, RuntimeBudgetErrorCode } from './budgets';
+/**
+ * The transport retry policy: which provider failures are transient, how many attempts a provider
+ * gets, and the bounded pause between them. Exported so callers can assert the bound.
+ */
+export {
+  backoffDelayMs,
+  isRetryableReason,
+  pauseBeforeRetry,
+  resolveRetryPolicy,
+  RETRYABLE_REASONS,
+  RETRY_POLICY,
+} from './retry-policy';
+export type { ResolvedRetryPolicy, RetryOptions } from './retry-policy';
 export type { ExecutableAIProvider, ProviderExecutionOptions } from './execution';
 /**
  * The cancellation/deadline vocabulary, so a caller can classify an outcome without string-matching
