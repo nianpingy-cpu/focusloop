@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -186,6 +186,18 @@ test.afterAll(async () => {
 /** The state chip's visible text is translated; the raw state is a data attribute. */
 function stateIs(expected: string) {
   return expect(window.getByTestId('state')).toHaveAttribute('data-state', expected);
+}
+
+/**
+ * A path as the filesystem sees it, or as given when it cannot be resolved.
+ *
+ * Two spellings can name one directory — a symlinked prefix on macOS, a differently cased drive on Windows —
+ * and a comparison that treats those as a mismatch is testing how the OS spells a path rather than where the
+ * app says its data is. A path that does not resolve is returned unchanged, so a path that is wrong still
+ * fails with both strings printed.
+ */
+function resolvedPath(path: string): string {
+  return existsSync(path) ? realpathSync(path) : path;
 }
 
 /**
@@ -1753,13 +1765,17 @@ test('the learner can find their data and delete all of it, without a restart', 
 
   /*
    * The path is the app's, not the test's: it is compared against the profile this launch was given, which
-   * is what `--user-data-dir` and `app.getPath('userData')` agree on. Case-insensitively, because Windows
-   * may report a different drive case than the one the test created, and a path that differs only in case
-   * is the same directory rather than a defect.
+   * is what `--user-data-dir` and `app.getPath('userData')` agree on. Compared by what each resolves to,
+   * because more than one spelling names the same directory: Windows may report a different drive case
+   * (`D:\a` for `d:\a`), and macOS resolves `/var/folders/…` to `/private/var/folders/…` — `/var` is a
+   * symlink there, so Electron reports the target while `os.tmpdir()` keeps the name the test created. A
+   * path that differs only in how it is spelled is not the defect this assertion is for; a path that
+   * resolves somewhere else is, and it still fails here, spelled differently.
    */
   const shownPath = window.getByTestId('data-path');
   await expect(shownPath).toBeVisible();
-  expect((await shownPath.innerText()).trim().toLowerCase()).toBe(userDataDir.toLowerCase());
+  const shown = (await shownPath.innerText()).trim();
+  expect(resolvedPath(shown).toLowerCase()).toBe(resolvedPath(userDataDir).toLowerCase());
 
   /*
    * `data-open-folder` is present and is not pressed: the channel behind it hands the directory to the OS
