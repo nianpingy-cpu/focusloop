@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { ADAPTIVE_TASK_LIMITS, isAdaptiveTaskDraft, type AdaptiveTaskDraft } from './adaptive-task';
+import {
+  ADAPTIVE_TASK_LIMITS,
+  TASK_REWRITE_LIMITS,
+  isAdaptiveTaskDraft,
+  isTaskRewrite,
+  type AdaptiveTaskDraft,
+  type TaskRewrite,
+} from './adaptive-task';
 
 const draft = (): AdaptiveTaskDraft => ({
   operation: 'SHRINK_TASK',
@@ -85,5 +92,93 @@ describe('adaptive task draft contract', () => {
     // object, which is also empty, this can only be rejected by the prototype rule itself.
     expect(isAdaptiveTaskDraft(Object.assign(Object.create({}), draft()))).toBe(false);
     expect(isAdaptiveTaskDraft({ ...draft(), [Symbol('metadata')]: 'secret' })).toBe(false);
+  });
+});
+
+const rewrite = (): TaskRewrite => ({
+  action: 'MICRO_START',
+  taskId: 't1',
+  steps: [
+    {
+      text: 'Remove the root and write down what happens to the left subtree.',
+      estimatedMinutes: 2,
+    },
+  ],
+  estimatedMinutes: 2,
+  sourceEstimatedMinutes: 8,
+});
+
+describe('task rewrite contract', () => {
+  it('accepts a narrower rewrite after JSON round-trip', () => {
+    expect(isTaskRewrite(JSON.parse(JSON.stringify(rewrite())))).toBe(true);
+    expect(
+      isTaskRewrite({
+        ...rewrite(),
+        action: 'SIMPLIFY',
+        steps: [
+          { text: 'first', estimatedMinutes: 2 },
+          { text: 'second', estimatedMinutes: 3 },
+        ],
+        estimatedMinutes: 5,
+      }),
+    ).toBe(true);
+  });
+
+  it.each([
+    null,
+    [],
+    'text',
+    new Date(),
+    { ...rewrite(), action: 'BREAK' },
+    { ...rewrite(), action: 'micro_start' },
+    { ...rewrite(), taskId: '' },
+    { ...rewrite(), taskId: ' ' },
+    { ...rewrite(), taskId: 'x'.repeat(ADAPTIVE_TASK_LIMITS.idCharacters + 1) },
+    { ...rewrite(), steps: [] },
+    { ...rewrite(), steps: 'not a list' },
+    { ...rewrite(), steps: ['not a step object'] },
+    { ...rewrite(), steps: [{ text: 'step' }] },
+    { ...rewrite(), steps: [{ text: '', estimatedMinutes: 2 }] },
+    { ...rewrite(), steps: [{ text: ' ', estimatedMinutes: 2 }] },
+    {
+      ...rewrite(),
+      steps: [{ text: 'x'.repeat(TASK_REWRITE_LIMITS.stepCharacters + 1), estimatedMinutes: 2 }],
+    },
+    { ...rewrite(), steps: [{ text: 'step', estimatedMinutes: 0 }] },
+    { ...rewrite(), steps: [{ text: 'step', estimatedMinutes: 6 }] },
+    {
+      ...rewrite(),
+      steps: Array.from({ length: TASK_REWRITE_LIMITS.steps + 1 }, () => ({
+        text: 'step',
+        estimatedMinutes: 1,
+      })),
+      estimatedMinutes: TASK_REWRITE_LIMITS.steps + 1,
+    },
+    // The total has to be the steps', not a number that happens to sit beside them.
+    { ...rewrite(), estimatedMinutes: 1 },
+    { ...rewrite(), estimatedMinutes: 3 },
+    { ...rewrite(), estimatedMinutes: 1.5 },
+    // Not narrower than the task it replaces, so there is nothing for it to rewrite.
+    { ...rewrite(), sourceEstimatedMinutes: 2 },
+    { ...rewrite(), sourceEstimatedMinutes: 8, estimatedMinutes: 8 },
+    { ...rewrite(), sourceEstimatedMinutes: NaN },
+    { ...rewrite(), extra: undefined },
+    { ...rewrite(), execute: () => {} },
+  ])('rejects %p', (value) => {
+    expect(isTaskRewrite(value)).toBe(false);
+  });
+
+  it('rejects accessors without running them and inherited records', () => {
+    let reads = 0;
+    const accessor = {
+      ...rewrite(),
+      get taskId() {
+        reads += 1;
+        return 't1';
+      },
+    };
+    expect(isTaskRewrite(accessor)).toBe(false);
+    expect(reads).toBe(0);
+    expect(isTaskRewrite(Object.assign(Object.create({}), rewrite()))).toBe(false);
   });
 });
