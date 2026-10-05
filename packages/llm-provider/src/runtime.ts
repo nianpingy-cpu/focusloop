@@ -1,10 +1,21 @@
 import type {
   CompletionRequest,
+  ProviderFailure,
+  RuntimeBudgetReport,
   RuntimeRequestData,
   RuntimeSchema,
   StructuredRuntimeResult,
 } from '@focusloop/shared-types';
 import { validateRuntimeSchema } from '@focusloop/shared-types';
+import { completionBudget, prepareBudget, type BudgetExecutionOptions } from './budgets';
+import { controlledStream } from './stream-control';
+import {
+  outputLimit,
+  providerStream,
+  StreamInterruptedError,
+  type ProviderStreamEvent,
+} from './streaming';
+import type { CompletionResult } from '@focusloop/shared-types';
 import type { CompleteWithFallbackResult, ProviderSelection } from './registry';
 import { completeWithFallback, toProviderFailure } from './registry';
 import {
@@ -14,16 +25,41 @@ import {
   RuntimeDeadlineError,
   validateExecutionOptions,
   withExecution,
+  type ExecutableAIProvider,
   type ExecutionOptions,
   type ProviderExecutionOptions,
 } from './execution';
+import {
+  classifyFailure,
+  createAttemptLedger,
+  pauseBeforeRetry,
+  primaryCallLimit,
+  resolveRetryPolicy,
+  type RetryPolicy,
+} from './retry-policy';
 
 /** In-process controls only: never shared/IPC/persisted request data. */
 export type RuntimeExecutionOptions = ProviderExecutionOptions;
 
+export interface StreamExecutionOptions extends BudgetExecutionOptions {
+  /** Independent finite assembly guard, not a token estimate. May tighten the 65536-unit ceiling. */
+  readonly maxOutputCharacters?: number;
+}
+export interface StructuredStreamOptions extends StructuredExecuteOptions {
+  readonly maxOutputCharacters?: number;
+}
+export type RuntimeStreamEvent =
+  | (Extract<ProviderStreamEvent, { type: 'text' }> & {
+      readonly degraded: boolean;
+      readonly mode: 'provider' | 'collected';
+    })
+  | { readonly type: 'complete'; readonly result: CompleteWithFallbackResult };
+
 export interface StructuredExecuteOptions extends RuntimeExecutionOptions {
   /** Invoked once only after validation and a final cancellation/deadline check. */
   readonly commit?: (value: unknown) => void;
+  /** Per-call overrides for the runtime's bounded retry policy; process-local only. */
+  readonly retry?: Partial<RetryPolicy>;
 }
 
 /**
@@ -34,7 +70,20 @@ export interface StructuredExecuteOptions extends RuntimeExecutionOptions {
  */
 export class AgentRuntime {
   private lastDegraded = false;
-  public constructor(private readonly selection: ProviderSelection) {}
+  private readonly retry: RetryPolicy;
+  public constructor(
+    private readonly selection: ProviderSelection,
+    options?: { readonly retry?: Partial<RetryPolicy> },
+  ) {
+    this.retry = resolveRetryPolicy(options?.retry);
+  }
+
+  /** Per-call overrides merge over the runtime policy; both stay process-local. */
+  private policyFor(overrides?: Partial<RetryPolicy>): RetryPolicy {
+    return overrides === undefined
+      ? this.retry
+      : resolveRetryPolicy({ ...this.retry, ...overrides });
+  }
 
   get degraded(): boolean {
     return this.lastDegraded;
@@ -46,10 +95,15 @@ export class AgentRuntime {
   /** Cancelled text calls reject with AbortError; expired calls reject with timeout. */
   async completeText(
     request: CompletionRequest,
-    options?: ExecutionOptions,
+    options?: BudgetExecutionOptions,
   ): Promise<CompleteWithFallbackResult> {
     this.lastDegraded = false;
-    const result = await completeWithFallback(this.selection, request, options);
+    const result = await completeWithFallback(
+      this.selection,
+      request,
+      options,
+      this.policyFor(options?.retry),
+    );
     assertExecutionActive(options, result.providerId);
     this.lastDegraded = result.degraded;
     return result;
@@ -70,142 +124,316 @@ export class AgentRuntime {
     };
     validateExecutionOptions(controls);
     this.lastDegraded = false;
-    const bounded: CompletionRequest = {
-      ...request,
-      maxTokens: Math.min(request.maxTokens ?? data.tokenBudget, data.tokenBudget),
-    };
-    let failureReason: string | undefined;
-    let committing = false;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
+    const prepared = prepareBudget(request, data);
+    return this.runStructured<T>(
+      schema,
+      prepared,
+      controls,
+      options,
+      this.policyFor(options?.retry),
+      async (provider, observe) => {
         const raw = await withExecution(
-          (signal) => this.selection.primary.complete(bounded, { signal }),
+          (signal) => provider.complete(prepared.request, { signal }),
           controls,
-          this.selection.primary.id,
+          provider.id,
         );
-        const parsed = parseSchema(raw.text, schema);
-        assertExecutionActive(controls, raw.providerId);
-        if (parsed.ok) {
-          // No asynchronous boundary between the final check and this synchronous commit.
-          committing = true;
-          options?.commit?.(parsed.value);
-          return {
-            status: 'ok',
-            value: parsed.value as T,
-            providerId: raw.providerId,
-            model: raw.model,
-            degraded: false,
-          };
-        }
-        failureReason = parsed.problems.join('; ');
-      } catch (error) {
-        // A caller's failed commit is not a provider failure: never retry/fallback and commit twice.
-        if (committing) throw error;
-        const stopped = this.stoppedResult(controls);
-        if (stopped !== null) return stopped;
-        failureReason = toProviderFailure(error, this.selection.primary.id).reason;
-        break; // transport failures do not gain another retry in this slice
-      }
-    }
-    return this.degradeStructured<T>(bounded, schema, controls, options, failureReason);
+        observe({ id: raw.providerId, model: raw.model });
+        return raw;
+      },
+      false,
+    );
   }
 
-  /**
-   * Compatibility display fragments, NOT provider token streaming. The first chunk
-   * arrives after full completion; real streaming is tracked separately in #144.
-   * Cancellation ends the stream quietly; expiration between fragments rejects with the same
-   * timeout the text API uses, so a caller is never handed a silently truncated story and a
-   * caller that wants a committed value must use `executeStructured`. Nothing here commits.
-   */
-  async *streamText(
+  /** Provenance-aware display events. Only a pre-first-text failure may select fallback. */
+  streamEvents(
     request: CompletionRequest,
-    options?: ExecutionOptions,
-  ): AsyncGenerator<string> {
-    let result: CompleteWithFallbackResult;
-    try {
-      result = await this.completeText(request, options);
-    } catch (error) {
-      if (isExecutionAbort(error)) return;
-      throw error;
-    }
-    const chunkSize = 48;
-    for (let index = 0; index < result.text.length; index += chunkSize) {
+    options?: StreamExecutionOptions,
+  ): AsyncGenerator<RuntimeStreamEvent> {
+    this.lastDegraded = false;
+    const prepared = prepareBudget(request, options?.budgets);
+    const maxCharacters = outputLimit(options?.maxOutputCharacters);
+    const controls = { signal: options?.signal, deadlineMs: options?.deadlineMs };
+    return controlledStream(
+      async function* (
+        this: AgentRuntime,
+        signal: AbortSignal,
+      ): AsyncGenerator<RuntimeStreamEvent> {
+        const policy = this.policyFor(options?.retry);
+        const ledger = createAttemptLedger(policy.maxModelCalls);
+        const failures: ProviderFailure[] = [];
+        let lastError: unknown;
+        providers: for (const [index, provider] of [
+          this.selection.primary,
+          this.selection.fallback,
+        ].entries()) {
+          const degraded = index > 0;
+          const callLimit = Math.min(
+            index === 0 ? primaryCallLimit(policy) : policy.maxTransportAttempts,
+            ledger.remaining,
+          );
+          for (let attempt = 1; attempt <= callLimit; attempt += 1) {
+            if (!ledger.take()) break;
+            try {
+              for await (const event of providerStream(
+                provider,
+                prepared.request,
+                prepared.report,
+                { ...controls, signal },
+                maxCharacters,
+              )) {
+                assertExecutionActive({ ...controls, signal }, provider.id);
+                this.lastDegraded = degraded;
+                if (event.type === 'text')
+                  yield {
+                    ...event,
+                    degraded,
+                    mode: provider.stream === undefined ? 'collected' : 'provider',
+                  };
+                else {
+                  const budget = completionBudget(prepared.report, event.result);
+                  yield {
+                    type: 'complete',
+                    result: {
+                      text: event.result.text,
+                      providerId: event.result.providerId,
+                      model: event.result.model,
+                      latencyMs: event.result.latencyMs,
+                      ...(budget.usage === undefined ? {} : { usage: budget.usage }),
+                      budget,
+                      degraded,
+                      failure: failures[0] ?? null,
+                      attempts: ledger.used,
+                      failures,
+                    },
+                  };
+                }
+              }
+              return;
+            } catch (error) {
+              assertExecutionActive({ ...controls, signal }, provider.id);
+              lastError = error;
+              // A stream that already emitted text is never continued by another provider.
+              if (error instanceof StreamInterruptedError) break providers;
+              // A failing local fallback is terminal: never loop back to the primary.
+              if (index > 0) throw error;
+              const failure = toProviderFailure(error, provider.id);
+              failures.push(failure);
+              if (
+                classifyFailure(failure.reason) === 'terminal' ||
+                attempt >= callLimit ||
+                ledger.remaining === 0
+              )
+                break;
+              await pauseBeforeRetry(policy, controls, provider.id, attempt);
+            }
+          }
+        }
+        throw lastError;
+      }.bind(this),
+      controls,
+      this.selection.primary.id,
+      (event) => event.type === 'complete',
+    );
+  }
+
+  /** String compatibility view over real streams. Caller abort is quiet; other failures reject. */
+  streamText(
+    request: CompletionRequest,
+    options?: StreamExecutionOptions,
+  ): AsyncGenerator<string, RuntimeBudgetReport | undefined> {
+    const events = this.streamEvents(request, options);
+    let budget: RuntimeBudgetReport | undefined;
+    const next = async (): Promise<IteratorResult<string, RuntimeBudgetReport | undefined>> => {
       try {
-        assertExecutionActive(options, result.providerId);
+        for (;;) {
+          const event = await events.next();
+          if (event.done) return { done: true, value: budget };
+          if (event.value.type === 'text') return { done: false, value: event.value.text };
+          budget = event.value.result.budget;
+        }
       } catch (error) {
-        this.lastDegraded = false;
-        if (isExecutionAbort(error)) return;
+        if (isExecutionAbort(error)) {
+          this.lastDegraded = false;
+          return { done: true, value: undefined };
+        }
+        if (error instanceof RuntimeDeadlineError) this.lastDegraded = false;
         throw error;
       }
-      yield result.text.slice(index, index + chunkSize);
-    }
+    };
+    return {
+      next,
+      return: async (value) => {
+        await events.return(undefined);
+        return { done: true, value: await value };
+      },
+      throw: async (error) => {
+        await events.throw(error);
+        throw error;
+      },
+      [Symbol.asyncIterator]() {
+        return this;
+      },
+    };
   }
 
-  /**
-   * Compatibility name: this was already one collected completion, not real streaming.
-   * Share the validated path so cancellation, deadline, retry count and provenance
-   * cannot drift between the two final-result entry points.
-   */
+  /** Assemble each real stream completely, then validate/commit. No partial stream is accepted. */
   async executeStructuredViaStream<T>(
     data: RuntimeRequestData,
     request: CompletionRequest,
-    options?: StructuredExecuteOptions,
+    options?: StructuredStreamOptions,
   ): Promise<StructuredRuntimeResult<T>> {
-    return this.executeStructured<T>(data, request, options);
+    const schema = data.schema;
+    if (schema === undefined)
+      throw new Error('executeStructuredViaStream requires RuntimeRequestData.schema');
+    const controls: ExecutionOptions = {
+      signal: options?.signal,
+      deadlineMs: data.deadlineMs ?? options?.deadlineMs,
+    };
+    validateExecutionOptions(controls);
+    this.lastDegraded = false;
+    const prepared = prepareBudget(request, data);
+    const streamLimit = outputLimit(options?.maxOutputCharacters);
+    return this.runStructured<T>(
+      schema,
+      prepared,
+      controls,
+      options,
+      this.policyFor(options?.retry),
+      async (provider, observe) => {
+        let raw: CompletionResult | undefined;
+        for await (const event of providerStream(
+          provider,
+          prepared.request,
+          prepared.report,
+          controls,
+          streamLimit,
+        )) {
+          if (event.type === 'text') observe({ id: event.providerId, model: event.model });
+          else {
+            raw = event.result;
+            observe({ id: raw.providerId, model: raw.model });
+          }
+        }
+        if (raw === undefined) throw new Error('Missing final stream result');
+        return raw;
+      },
+      true,
+    );
   }
 
-  private async degradeStructured<T>(
-    request: CompletionRequest,
+  /**
+   * One bounded attempt loop shared by the completion and streamed structured entry points.
+   * `acquire` performs exactly one provider call (already raced against the absolute deadline) and
+   * reports the real provider/model it reached. Schema and transport retries share a per-provider
+   * cap, and the ledger bounds every provider call in the operation.
+   */
+  private async runStructured<T>(
     schema: RuntimeSchema,
+    prepared: { readonly request: CompletionRequest; readonly report: RuntimeBudgetReport },
     controls: ExecutionOptions,
     options: StructuredExecuteOptions | undefined,
-    failureReason: string | undefined,
+    policy: RetryPolicy,
+    acquire: (
+      provider: ExecutableAIProvider,
+      observe: (origin: { readonly id: string; readonly model: string }) => void,
+    ) => Promise<CompletionResult>,
+    stopOnInterrupted: boolean,
   ): Promise<StructuredRuntimeResult<T>> {
-    let committing = false;
-    try {
-      const raw = await withExecution(
-        (signal) => this.selection.fallback.complete(request, { signal }),
-        controls,
-        this.selection.fallback.id,
+    const ledger = createAttemptLedger(policy.maxModelCalls);
+    const failures: ProviderFailure[] = [];
+    // Schema and transport retries share this per-provider cap; the ledger still bounds the total.
+    const providerCap = policy.maxTransportAttempts + policy.maxSchemaAttempts - 1;
+    let failureReason: string | undefined;
+    let origin = { id: this.selection.primary.id, model: this.selection.primary.model };
+    providers: for (const [index, provider] of [
+      this.selection.primary,
+      this.selection.fallback,
+    ].entries()) {
+      let transportFailures = 0;
+      let schemaFailures = 0;
+      let committing = false;
+      const limit = Math.min(
+        index === 0 ? primaryCallLimit(policy, providerCap) : providerCap,
+        ledger.remaining,
       );
-      const parsed = parseSchema(raw.text, schema);
-      assertExecutionActive(controls, raw.providerId);
-      this.lastDegraded = true;
-      if (parsed.ok) {
-        committing = true;
-        options?.commit?.(parsed.value);
-        return {
-          status: 'degraded',
-          value: parsed.value as T,
-          providerId: raw.providerId,
-          model: raw.model,
-          degraded: true,
-          ...(failureReason === undefined ? {} : { failureReason }),
-        };
+      for (let call = 1; call <= limit; call += 1) {
+        if (!ledger.take()) break;
+        try {
+          const raw = await acquire(provider, (reached) => {
+            origin = reached;
+          });
+          const budget = completionBudget(prepared.report, raw);
+          const parsed = parseSchema(raw.text, schema);
+          assertExecutionActive(controls, raw.providerId);
+          if (parsed.ok) {
+            // No asynchronous boundary between the final check and this synchronous commit.
+            committing = true;
+            this.lastDegraded = index > 0;
+            options?.commit?.(parsed.value);
+            return {
+              status: index > 0 ? 'degraded' : 'ok',
+              value: parsed.value as T,
+              providerId: raw.providerId,
+              model: raw.model,
+              degraded: index > 0,
+              budget,
+              attempts: ledger.used,
+              failures,
+              ...(failureReason === undefined ? {} : { failureReason }),
+            };
+          }
+          schemaFailures += 1;
+          failureReason = parsed.problems.join('; ');
+          if (schemaFailures >= policy.maxSchemaAttempts || ledger.remaining === 0) break;
+          await pauseBeforeRetry(policy, controls, provider.id, schemaFailures);
+        } catch (error) {
+          // A caller's failed commit is not a provider failure: never retry/fallback and commit twice.
+          if (committing) throw error;
+          const stopped = this.stoppedResult(
+            controls,
+            prepared.report,
+            origin,
+            ledger.used,
+            failures,
+          );
+          if (stopped !== null) return stopped;
+          const failure = toProviderFailure(error, provider.id);
+          failures.push(failure);
+          failureReason = failure.reason;
+          // A stream that already emitted text is never continued by another provider.
+          if (stopOnInterrupted && error instanceof StreamInterruptedError) break providers;
+          transportFailures += 1;
+          if (
+            classifyFailure(failure.reason) === 'terminal' ||
+            transportFailures >= policy.maxTransportAttempts ||
+            ledger.remaining === 0
+          )
+            break;
+          await pauseBeforeRetry(policy, controls, provider.id, transportFailures);
+        }
       }
-      return {
-        status: 'degraded',
-        providerId: raw.providerId,
-        model: raw.model,
-        degraded: true,
-        failureReason: failureReason ?? parsed.problems.join('; '),
-      };
-    } catch (error) {
-      if (committing) throw error;
-      const stopped = this.stoppedResult(controls);
-      if (stopped !== null) return stopped;
-      this.lastDegraded = true;
-      return {
-        status: 'degraded',
-        providerId: this.selection.fallback.id,
-        model: this.selection.fallback.model,
-        degraded: true,
-        failureReason: failureReason ?? toProviderFailure(error, this.selection.fallback.id).reason,
-      };
     }
+    // Exhausted (or the ledger is). Keep the recorded provenance instead of inventing a provider.
+    this.lastDegraded = true;
+    return {
+      status: 'degraded',
+      providerId: origin.id,
+      model: origin.model,
+      degraded: true,
+      budget: prepared.report,
+      attempts: ledger.used,
+      failures,
+      ...(failureReason === undefined ? {} : { failureReason }),
+    };
   }
 
-  private stoppedResult(controls: ExecutionOptions): StructuredRuntimeResult<never> | null {
+  private stoppedResult(
+    controls: ExecutionOptions,
+    budget: RuntimeBudgetReport,
+    origin: { readonly id: string; readonly model: string } = this.selection.primary,
+    attempts = 0,
+    failures: readonly ProviderFailure[] = [],
+  ): StructuredRuntimeResult<never> | null {
     let boundary: unknown = null;
     try {
       assertExecutionActive(controls, this.selection.primary.id);
@@ -225,9 +453,12 @@ export class AgentRuntime {
     this.lastDegraded = false;
     return {
       status,
-      providerId: this.selection.primary.id,
-      model: this.selection.primary.model,
+      providerId: origin.id,
+      model: origin.model,
       degraded: false,
+      budget,
+      attempts,
+      failures,
     };
   }
 }

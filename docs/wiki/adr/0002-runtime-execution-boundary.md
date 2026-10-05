@@ -1,6 +1,7 @@
 # ADR 0002: Runtime cancellation and total deadline
 
-Status: proposed implementation in the #142 PR; not a claim of merged delivery.
+Status: #142 merged via #147; #143 merged via #156; #144 merged via #161. The #145 retry/fallback
+policy is proposed, not yet claimed as merged.
 Parent: #94 (AG9 Model Runtime).
 
 ## Decision and scope
@@ -12,6 +13,11 @@ new providers or skill-specific fallback redesign.
 Implementation sequence: #142 cancellation/deadline → #143 budgets → #144 real streaming →
 #145 retry/fallback policy → #146 deterministic skill fallback and final conformance audit.
 Tests ship with every slice. Landing one slice does not close #94.
+
+The merged [#143 budget boundary](../../runtime-budgets.md) applies one frozen, bounded request
+across text/structured/fragment paths and retries/fallback. It rejects oversized whole-input text
+without clipping the question and separates character counts, per-completion token caps and
+optional reported usage. Budget values/reports remain JSON data; execution controls remain local.
 
 ## Process boundary
 
@@ -65,12 +71,26 @@ invoke fallback, or commit twice. Invalid primary output still gets at most one 
 followed by one fallback. A fallback's output must validate before any commit; generic mock prose
 is not magically valid structured JSON.
 
-`executeStructuredViaStream` is a compatibility entry point over the same structured final-result
-path. It was already a collected completion, not a real provider stream. `streamText` still emits
-post-completion display fragments: cancellation ends the stream quietly, while expiration between
-fragments rejects with the same timeout the text API uses, so a truncated display is never handed
-back as a complete one. #144 will introduce the actual streaming contract without claiming this
-slice delivers it.
+The original #142 compatibility stream entry points used collected completions. The merged
+[#144 incremental streaming boundary](../../runtime-streaming.md) consumes optional process-local
+provider iterables, with an honest collected compatibility adapter when absent. First display text
+may precede response-body completion; after-first-text failure cannot splice in fallback. Structured
+streams must reach a protocol-complete, schema-validated final result before committing. The same
+absolute deadline governs reads, idle consumer pauses and retries; cancellation ends the string view
+quietly, expiration rejects, and abandonment releases cooperative readers without waiting for a
+pending next. Renderer streaming IPC is not part of these slices.
+
+## Bounded retry and fallback
+
+The proposed [#145 retry/fallback policy](../../runtime-retry-policy.md) extends, without replacing,
+the primary → local-fallback contract. Retryable reasons (`offline`, `timeout`, `rate-limited`) may
+repeat the same provider inside an injected, capped attempt limit; `unauthorized`, `not-configured`,
+`bad-response`, cancellation and the deadline never retry. One ledger bounds primary transport
+retries, schema retries and fallback calls together (`maxModelCalls`), and the primary reserves the
+last slot so the deterministic local fallback is always reachable. Pauses are injected, deterministic
+and refuse to cross the absolute deadline; no attempt or pause starts after cancellation/expiration.
+Provenance is reported per attempt. Streaming keeps the split above: pre-text failures may retry or
+fall back, post-text failures never splice a second provider's answer.
 
 ## Regression evidence
 

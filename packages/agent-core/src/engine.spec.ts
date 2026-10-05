@@ -452,6 +452,41 @@ describe('FocusLoopEngine', () => {
       expect(ctx.engine.listOutcomes(session.id)).toHaveLength(1);
     });
 
+    it('keeps the learner on the same task and step through a three minute break', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+      const before = ctx.engine.getCurrentSession();
+      const response = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { reason: 'tired', taskId: 'rbt-t1' },
+      });
+      expect(response.decision?.action).toBe('BREAK');
+      expect(response.decision?.estimatedMinutes).toBe(3);
+      const accepted = ctx.engine.resolveRescue({
+        sessionId: session.id,
+        interventionId: response.interventionId!,
+        resolution: 'accept',
+      });
+      expect(accepted.rescue?.plan?.estimatedMinutes).toBe(3);
+      ctx.clock.advance(3 * 60_000);
+      ctx.engine.resolveRescue({
+        sessionId: session.id,
+        interventionId: response.interventionId!,
+        resolution: 'continue',
+      });
+      const after = ctx.engine.getCurrentSession();
+      expect(after?.session.currentTaskId).toBe('rbt-t1');
+      // Only the wall clock moves: nothing was completed, skipped or reordered by taking a break.
+      expect(after?.progress).toEqual({ ...before?.progress, elapsedMs: 3 * 60_000 });
+    });
+
     it('does not restore or accept a rescue after the task has changed', () => {
       const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
       ctx.engine.dispatch({
@@ -965,6 +1000,25 @@ describe('FocusLoopEngine', () => {
   });
 
   describe('degraded mode (no network, no key)', () => {
+    it('returns numeric-only runtime budget inspection data through optional enrichment', async () => {
+      const result = await ctx.engine.enrich('中', '😀');
+      expect(result.budget).toMatchObject({
+        contextBudget: 16384,
+        tokenBudget: 4096,
+        callerMaxTokens: 256,
+        effectiveMaxTokens: 256,
+        inputCharacters: 3,
+        characterUnit: 'utf16-code-units',
+      });
+      expect(result.budget.usage).toBeUndefined();
+      expect(JSON.stringify(result.budget)).not.toContain('中');
+    });
+    it('rejects oversized optional enrichment rather than silently clipping its question', async () => {
+      await expect(ctx.engine.enrich('q'.repeat(16385))).rejects.toMatchObject({
+        code: 'context-budget-exceeded',
+      });
+      expect(ctx.engine.providerInfo().degraded).toBe(false);
+    });
     it('works end to end with the mock provider', async () => {
       const result = await ctx.engine.enrich('Explain rotations briefly.');
       expect(result.degraded).toBe(false);
@@ -1319,7 +1373,13 @@ describe('FocusLoopEngine', () => {
           prompts.push(request.prompt);
           systems.push(request.system ?? '');
           calls += 1;
-          if (calls === 2) throw new ProviderError('timeout', 'scripted', 'the retry timed out');
+          /*
+           * Terminal on purpose: a transient reason would now be retried by the runtime's bounded
+           * policy before the tutor saw any failure, which is a different scenario from the one this
+           * test pins — the tutor's own retry being the call that fails.
+           */
+          if (calls === 2)
+            throw new ProviderError('bad-response', 'scripted', 'the retry failed terminally');
           return {
             text: 'prose, which is refused',
             providerId: 'scripted',

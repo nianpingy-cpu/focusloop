@@ -14,6 +14,31 @@ export * from './mock-provider';
 export * from './deepseek-provider';
 export * from './registry';
 export * from './runtime';
+export type { ProviderStreamEvent, StreamingProvider } from './streaming';
+export {
+  MAX_STREAM_OUTPUT_CHARACTERS,
+  MAX_SSE_FRAME_BYTES,
+  StreamInterruptedError,
+} from './streaming';
+export { DEFAULT_RUNTIME_BUDGETS, RuntimeBudgetError } from './budgets';
+export type { BudgetExecutionOptions, RuntimeBudgetErrorCode } from './budgets';
+export {
+  backoffDelay,
+  classifyFailure,
+  createAttemptLedger,
+  DEFAULT_RETRY_POLICY,
+  primaryCallLimit,
+  resolveRetryPolicy,
+  RETRYABLE_FAILURE_REASONS,
+  TERMINAL_FAILURE_REASONS,
+} from './retry-policy';
+export type {
+  AttemptLedger,
+  FailureClassification,
+  RetryPolicy,
+  RetrySleep,
+  RetrySleepControls,
+} from './retry-policy';
 export type { ExecutableAIProvider, ProviderExecutionOptions } from './execution';
 /**
  * The cancellation/deadline vocabulary, so a caller can classify an outcome without string-matching
