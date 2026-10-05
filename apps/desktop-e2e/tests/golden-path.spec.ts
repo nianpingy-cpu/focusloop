@@ -1621,11 +1621,35 @@ test('an active focus commitment survives leaving and returning to the route', a
  * deletion can reach is what is above it here. Nothing but this comment enforces the order, which is why it
  * says only what is true.
  *
+ * Being last is not the same as depending on what is above it, and this test does not: it stores the data it
+ * asserts on itself, because a test that borrowed it would be reading a database Playwright is free to
+ * replace when it restarts the worker. See the comment inside.
+ *
  * It ends on a session, which is also what makes its last assertions the interesting ones: "back to a
  * first-run state without a restart" is only shown by the app still working afterwards, not by the screen
  * it redrew.
  */
 test('the learner can find their data and delete all of it, without a restart', async () => {
+  /*
+   * The data the assertions below are about is stored here rather than borrowed from the tests above, and
+   * the difference is not tidiness. `beforeAll` creates one profile for the file, but Playwright starts a
+   * fresh worker — and calls `beforeAll` again, with a brand new profile — after a failed attempt, and the
+   * suite has more than one test that can fail on CI (the import-form flake, #152). This test read 0 on CI
+   * exactly that way: the only test that stores an interruption had run before the worker was recycled, so
+   * the second attempt had a profile with almost nothing in it, and the first had one whose interruptions
+   * came from a test that no longer shared its database. Storing an interruption here costs a second and
+   * makes the precondition this test's own.
+   */
+  await clickSidebarLink('Home');
+  await window.getByTestId('course-card').first().getByTestId('start-session').click();
+  await window.getByTestId('start-task').first().click();
+  await window.getByTestId('complete-task').click();
+  await window.getByTestId('sim-distraction').click();
+  await window.getByTestId('sim-return').click();
+  // The interruption is stored when the state engine marks it, which is what the dashboard counts below.
+  await stateIs('INTERRUPTED');
+  await window.getByTestId('resume-continue').click();
+
   // The dashboard's aggregate over the current window, which is the app's own count of what the run has
   // stored. Read before the delete so that "the cancel changed nothing" is a comparison rather than a
   // second guess.
