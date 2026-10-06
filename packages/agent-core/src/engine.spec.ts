@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProviderError, createProviderSelection } from '@focusloop/llm-provider';
-import { TUTOR_LIMITS, type AIProvider, type CompletionRequest } from '@focusloop/shared-types';
+import {
+  TUTOR_LIMITS,
+  type AIProvider,
+  type CompletionRequest,
+  type RescueOutcomeSummary,
+} from '@focusloop/shared-types';
 import { EngineError, FocusLoopEngine } from './engine';
 import { DEMO_COURSE_ID } from './demo-course';
 import { createTestEngine, type TestEngine } from './test-helpers';
@@ -765,6 +770,42 @@ describe('FocusLoopEngine', () => {
       expect(ctx.engine.getPendingRescue(session.id)?.plan?.grounding).toEqual(
         accepted.rescue?.plan?.grounding,
       );
+    });
+
+    it('reports how accepted rescues turned out, per action, from the event log', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+      const asked = ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'HELP_REQUESTED',
+        source: 'user',
+        payload: { reason: 'went-wrong', taskId: 'rbt-t1' },
+      });
+      const row = (): RescueOutcomeSummary | undefined =>
+        ctx.engine.getDashboard().rescueOutcomes.find((item) => item.action === 'HINT');
+      // Offered but not accepted: nothing was tried, so nothing is counted.
+      expect(row()?.accepted).toBe(0);
+
+      ctx.engine.resolveRescue({
+        sessionId: session.id,
+        interventionId: asked.interventionId!,
+        resolution: 'accept',
+      });
+      expect(row()).toMatchObject({ accepted: 1, pending: 1, successRate: null });
+
+      ctx.clock.advance(30_000);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_COMPLETED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+      expect(row()).toMatchObject({ accepted: 1, succeeded: 1, pending: 0, successRate: 1 });
     });
 
     it('does not restore or accept a rescue after the task has changed', () => {
