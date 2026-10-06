@@ -17,6 +17,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **Stuck rescue: HINT and EXAMPLE quote your own concept and material.** An accepted HINT shows the
+  idea behind the step (the concept summary, else its first key point); an accepted EXAMPLE shows a
+  passage of your material (else a key point). The text is taken from what the agent context already
+  carries, so it works offline, is never generated, and is not stored. A card with nothing to quote
+  keeps its fixed steps. (#170)
 - **Desktop shell: the sidebar folds completely.** The sidebar's own toggle collapses it; a small
   floating brand button in the top-left corner recalls it — during focus too. While a focus
   commitment runs, the sidebar now folds away entirely instead of shrinking to a 64px icon rail,
