@@ -17,6 +17,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **The eval suite covers what the rescue actions actually do.** `agent-evals` gains eight fixtures for
+  the MICRO_START/SIMPLIFY rewrite (through the production builder, read back through
+  `applyTaskRewrite`, with the original task's text forbidden in the output) and eight for what a HINT
+  or an EXAMPLE quotes, including the cases where there is deliberately nothing to quote. (#173)
+- **Stuck rescue: HINT and EXAMPLE quote your own concept and material.** An accepted HINT shows the
+  idea behind the step (the concept summary, else its first key point); an accepted EXAMPLE shows a
+  passage of your material (else a key point). The text is taken from what the agent context already
+  carries, so it works offline, is never generated, and is not stored. A card with nothing to quote
+  keeps its fixed steps. (#170)
+- **Stuck rescue: the dashboard says how each rescue went.** A new "How rescues went" section shows,
+  per action, how many accepted rescues helped (a Continue or progress on the task), how many were
+  followed by another request for help, how many showed no progress, and how many are still inside
+  their window. It is recomputed from the event log on every read, so nothing new is stored. (#173)
 - **Desktop shell: the sidebar folds completely.** The sidebar's own toggle collapses it; a small
   floating brand button in the top-left corner recalls it — during focus too. While a focus
   commitment runs, the sidebar now folds away entirely instead of shrinking to a 64px icon rail,
