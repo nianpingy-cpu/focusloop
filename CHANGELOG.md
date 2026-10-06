@@ -17,6 +17,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **The agent-context event projection is exhaustive by construction (AG1.2).** Every learning event
+  type in `LEARNING_EVENT_TYPES` must have an explicit projection: adding one without deciding what an
+  agent may be told about it is now a compile error (the `default` branch is `never`, as the state
+  machine's switch already was) and a failing test (the spec's expectation map is keyed by the union).
+  Previously such an event was dropped from every context with only a count in the omissions. (#97)
 - **The eval suite covers what the rescue actions actually do.** `agent-evals` gains eight fixtures for
   the MICRO_START/SIMPLIFY rewrite (through the production builder, read back through
   `applyTaskRewrite`, with the original task's text forbidden in the output) and eight for what a HINT
