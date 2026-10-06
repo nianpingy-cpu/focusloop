@@ -2009,15 +2009,13 @@ test('the ambient layer is off until the learner asks for it, and the store answ
   await expect(toggle).toHaveAttribute('aria-pressed', 'false');
 
   /*
-   * And it sits below the primary action rather than beside it, which is the half of "never takes the
-   * task's level" that a test can measure: the row is under Complete in the layout as well as in the
-   * document, so it cannot be the thing the eye lands on or the thumb reaches for first.
+   * And it is a quiet control rather than a second primary: the research document's rule is that the
+   * layer never takes the task's level, and the class is what carries that. It also lives in the
+   * session's own row of the topbar rather than in the task box, whose height is a contract against the
+   * notice's reserved row (#77) and against where the tutor panel decides to open.
    */
-  const complete = await window.getByTestId('complete-task').boundingBox();
-  const row = await toggle.boundingBox();
-  expect(complete).not.toBeNull();
-  expect(row).not.toBeNull();
-  expect(row!.y).toBeGreaterThanOrEqual(complete!.y + complete!.height);
+  await expect(toggle).toHaveClass(/btn--quiet/);
+  await expect(toggle).not.toHaveClass(/btn--primary/);
 
   await window.getByTestId('end-session').click();
   await expect(window.getByRole('heading', { name: 'No session running' })).toBeVisible();

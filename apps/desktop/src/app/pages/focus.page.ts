@@ -71,6 +71,25 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
             >
               {{ stateLabel() }}
             </span>
+            <!--
+              The ambient layer (#57), in the session's own row rather than beside the task.
+
+              Two rules decide this. The research document's: sound never takes the task's level, so it
+              is a quiet control and not a second primary. And #77's: the task box has a height contract
+              against the notice's reserved row, so a control that is decoration must not be inside it —
+              the first attempt was, and both the notice geometry and the tutor panel's placement said so.
+            -->
+            <button
+              type="button"
+              class="btn btn--small btn--quiet ambient-toggle"
+              data-testid="ambient-toggle"
+              [title]="t('focus.ambient.hint')"
+              [class.is-active]="ambientSound()"
+              [attr.aria-pressed]="ambientSound()"
+              (click)="toggleAmbient()"
+            >
+              {{ t(ambientSound() ? 'focus.ambient.on' : 'focus.ambient.off') }}
+            </button>
             <button type="button" class="btn btn--ghost" data-testid="end-session" (click)="end()">
               {{ t('focus.end') }}
             </button>
@@ -367,32 +386,6 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
               </div>
             }
           </section>
-
-          <!--
-            The ambient layer (#57), below the task and the plan.
-
-            It sits outside the task section on purpose: that box has a height contract against the
-            notice's reserved row (#77) — the task and its action must end above the notice — and a
-            decorative control must not spend any of it. The research document's rule is the other
-            half: sound never takes the task's level, so this is a quiet row of its own rather than a
-            second primary beside Pause. The button reports what the store holds; whether sound is
-            coming out is the session's decision.
-          -->
-          <div class="focus-ambient">
-            <button
-              type="button"
-              class="btn btn--small btn--quiet"
-              data-testid="ambient-toggle"
-              [class.is-active]="ambientSound()"
-              [attr.aria-pressed]="ambientSound()"
-              (click)="toggleAmbient()"
-            >
-              {{ t(ambientSound() ? 'focus.ambient.on' : 'focus.ambient.off') }}
-            </button>
-            <span class="muted small" data-testid="ambient-hint">{{
-              t('focus.ambient.hint')
-            }}</span>
-          </div>
         </main>
         <fl-focus-notice [expired]="phase() === 'expired'" (continueTimer)="resume()" />
       </div>

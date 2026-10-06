@@ -2232,22 +2232,15 @@ code {
 }
 
 /*
- * The ambient layer (#57), a row of its own below the plan.
+ * The ambient layer's control (#57), in the session's row of the topbar.
  *
- * Deliberately outside the task section: that box is measured against the notice's reserved row in
- * the e2e (#77), and a control that is decoration must not spend any of the height the task and its
- * action need. Weight rather than position is what keeps it below the task in the visual hierarchy —
- * a small quiet button, no accent, no primary.
+ * It is quiet by construction rather than by position: a small ghost button with no accent, beside the
+ * session state and End session, and never inside the task box — that box has a height contract against
+ * the notice's reserved row (#77) and against the tutor panel's placement, and a decorative control
+ * that spends any of it breaks both. The one thing the active state adds is the accent border the other
+ * "this is on" controls use.
  */
-.focus-ambient {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.focus-ambient .btn.is-active {
+.ambient-toggle.is-active {
   border-color: var(--accent);
   background: var(--bg-soft);
   color: var(--text);
