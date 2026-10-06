@@ -2232,6 +2232,28 @@ code {
 }
 
 /*
+ * The ambient layer (#57), a row of its own below the plan.
+ *
+ * Deliberately outside the task section: that box is measured against the notice's reserved row in
+ * the e2e (#77), and a control that is decoration must not spend any of the height the task and its
+ * action need. Weight rather than position is what keeps it below the task in the visual hierarchy —
+ * a small quiet button, no accent, no primary.
+ */
+.focus-ambient {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.focus-ambient .btn.is-active {
+  border-color: var(--accent);
+  background: var(--bg-soft);
+  color: var(--text);
+}
+
+/*
  * The reason chooser: a group inside the control row rather than a row of its own.
  *
  * It takes a line to itself, because seven labelled buttons beside Pause, +1 minute and Complete is

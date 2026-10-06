@@ -1982,3 +1982,44 @@ test('the learner can find their data and delete all of it, without a restart', 
   await expect(window.getByRole('heading', { name: 'No session running' })).toBeVisible();
   await expect(window.locator('.banner--error')).toHaveCount(0);
 });
+
+/*
+ * The ambient layer (#57) is a preference the store owns and a sound the session owns, and only the
+ * first half can be asserted here: a headless run has no audio device, so what is checked is what the
+ * control reports — off before anyone asks, and then whatever the store answered. That round trip is
+ * the point: `setAmbientSound` reflects `settings.ambientSound` from the main process, so the report
+ * only moves if the channel, the preload payload and the stored word all agreed. Whether the layer
+ * *should* be audible is `shouldPlayAmbient`, tested where it lives.
+ */
+test('the ambient layer is off until the learner asks for it, and the store answers the toggle', async () => {
+  await clickSidebarLink('Home');
+  await window.getByTestId('course-card').first().getByTestId('start-session').click();
+  await window.getByTestId('start-task').first().click();
+
+  const toggle = window.getByTestId('ambient-toggle');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(toggle).toHaveText('Quiet sound: off');
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(toggle).toHaveText('Quiet sound: on');
+
+  // Off again, reported by the store rather than by the click: the second press is a round trip too.
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+  /*
+   * And it sits below the primary action rather than beside it, which is the half of "never takes the
+   * task's level" that a test can measure: the row is under Complete in the layout as well as in the
+   * document, so it cannot be the thing the eye lands on or the thumb reaches for first.
+   */
+  const complete = await window.getByTestId('complete-task').boundingBox();
+  const row = await toggle.boundingBox();
+  expect(complete).not.toBeNull();
+  expect(row).not.toBeNull();
+  expect(row!.y).toBeGreaterThanOrEqual(complete!.y + complete!.height);
+
+  await window.getByTestId('end-session').click();
+  await expect(window.getByRole('heading', { name: 'No session running' })).toBeVisible();
+  await expect(window.locator('.banner--error')).toHaveCount(0);
+});

@@ -367,6 +367,32 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
               </div>
             }
           </section>
+
+          <!--
+            The ambient layer (#57), below the task and the plan.
+
+            It sits outside the task section on purpose: that box has a height contract against the
+            notice's reserved row (#77) — the task and its action must end above the notice — and a
+            decorative control must not spend any of it. The research document's rule is the other
+            half: sound never takes the task's level, so this is a quiet row of its own rather than a
+            second primary beside Pause. The button reports what the store holds; whether sound is
+            coming out is the session's decision.
+          -->
+          <div class="focus-ambient">
+            <button
+              type="button"
+              class="btn btn--small btn--quiet"
+              data-testid="ambient-toggle"
+              [class.is-active]="ambientSound()"
+              [attr.aria-pressed]="ambientSound()"
+              (click)="toggleAmbient()"
+            >
+              {{ t(ambientSound() ? 'focus.ambient.on' : 'focus.ambient.off') }}
+            </button>
+            <span class="muted small" data-testid="ambient-hint">{{
+              t('focus.ambient.hint')
+            }}</span>
+          </div>
         </main>
         <fl-focus-notice [expired]="phase() === 'expired'" (continueTimer)="resume()" />
       </div>
@@ -406,6 +432,7 @@ export class FocusPage implements OnDestroy {
   protected readonly t = this.i18n.t;
   protected readonly snapshot = this.state.snapshot;
   protected readonly task = this.state.currentTask;
+  protected readonly ambientSound = this.state.ambientSound;
   private readonly timer = this.focusTimer.state;
   protected readonly CLOCK_RADIUS = CLOCK_RADIUS;
   protected readonly CLOCK_CIRCUMFERENCE = CLOCK_CIRCUMFERENCE;
@@ -829,6 +856,14 @@ export class FocusPage implements OnDestroy {
     this.focusTimer.set(createFocusTimer());
     this.completedView.set(true);
   }
+  /**
+   * The learner's own call, like the material text: the layer is offered rather than assumed, and
+   * turning it on does not make it start on its own the next time the app opens.
+   */
+  protected toggleAmbient(): void {
+    void this.state.setAmbientSound(!this.ambientSound());
+  }
+
   protected readonly STUCK_REASON_KEYS = STUCK_REASON_KEYS;
   protected readonly stuckReasons = STUCK_REASONS;
   protected readonly stuckOpen = signal(false);
