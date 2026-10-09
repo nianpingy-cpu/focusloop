@@ -112,8 +112,6 @@ export class AppStateService {
   readonly lastError = signal<string | null>(null);
   readonly busy = signal(false);
   readonly recentEvents = signal<readonly LearningEvent[]>([]);
-  /** The tool-audit rows the inspector's third tab lists (AG8.8), newest first. */
-  readonly toolCalls = signal<readonly ToolCallRecord[]>([]);
   /**
    * What the data panel shows of the agent's memory (AG7.5): the whole input, metadata only.
    * `null` before the first read — distinct from a refusal, which is an answer.
@@ -364,7 +362,7 @@ export class AppStateService {
    * Drops everything the renderer holds that came out of the database.
    *
    * `refresh` reloads the database-derived ones (the session, the log, the card, the rescue, the dashboard,
-   * the agent context, the courses, the material, the outbound request) and `reloadInsightsQuietly` reloads
+   * the courses, the material) and `reloadInsightsQuietly` reloads
    * the insights window. What is left is what has no session to belong to any more — the tutor's last
    * answer, the pending decision and the intervention it refers to, and the focus-notice fold — and those
    * are meant to stay empty rather than come back.
@@ -463,7 +461,6 @@ export class AppStateService {
         taskId: snapshot.session.currentTaskId ?? null,
         answer: await this.api.askTutor({ sessionId: snapshot.session.id, mode, question }),
       });
-      // Reload so the Outbound Inspector shows the prompt that was just handed over.
     });
   }
 
@@ -743,7 +740,6 @@ export class AppStateService {
       this.resumeCard.set(await this.api.getResumeCard(snapshot.session.id));
       this.rescue.set(await this.api.getPendingRescue(snapshot.session.id));
       this.recentEvents.set(await this.api.listEvents(snapshot.session.id));
-      this.toolCalls.set(await this.api.listToolCalls(snapshot.session.id));
     } else {
       /*
        * Everything derived from the session goes when the session does. The card is the
@@ -753,7 +749,6 @@ export class AppStateService {
       this.resumeCard.set(null);
       this.rescue.set(null);
       this.recentEvents.set([]);
-      this.toolCalls.set([]);
     }
     await this.refreshToday();
   }

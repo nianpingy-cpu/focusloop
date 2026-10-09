@@ -268,11 +268,6 @@ export function createHandlers(service: FocusLoopService) {
       handle: (request) => engine.getInsights(request.range),
     }),
     defineHandler({
-      channel: IPC_CHANNELS.listToolCalls,
-      parse: parseSessionId,
-      handle: (sessionId) => engine.listToolCalls(sessionId),
-    }),
-    defineHandler({
       channel: IPC_CHANNELS.memorySummary,
       parse: parseSessionId,
       handle: (sessionId) => engine.getMemorySummary(sessionId),

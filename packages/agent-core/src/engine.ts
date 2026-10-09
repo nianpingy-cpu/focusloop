@@ -781,6 +781,18 @@ export class FocusLoopEngine {
     );
   }
 
+  /**
+   * This session's tool calls, resolved to their events (AG8.8) — the audit's read surface.
+   *
+   * A passthrough on purpose: the store's join is the query that must not become a per-row round
+   * trip, and there is nothing to derive between it and the caller. Nothing in the renderer asks
+   * for it any more — the developer panel that displayed it is gone — so the callers are the
+   * registry's own specs.
+   */
+  listToolCalls(sessionId: string): readonly ToolCallRecord[] {
+    return this.store.listToolCalls(sessionId);
+  }
+
   getSessionProgress(sessionId: string) {
     const record = this.store.getSession(sessionId);
     if (record === null) return null;
@@ -1656,7 +1668,7 @@ export class FocusLoopEngine {
   }
 
   /**
-   * What agent memory exists for this session — nine sources, counts and newest times (AG7.5).
+   * What agent memory exists for this session — eight sources, counts and newest times (AG7.5).
    *
    * Session-scoped on purpose: the read is refused for another session and when nothing is running,
    * so the panel cannot show one learner's counts under another's visit, and "no session" is a
@@ -1677,15 +1689,6 @@ export class FocusLoopEngine {
       if (source === 'transcript') {
         // Turns, not messages: the transcript keeps a bounded window of exchanges.
         return { source, count: this.transcript.list(sessionId).length, latestAt: null };
-      }
-      if (source === 'outbound') {
-        // One is ever held per session — the newest — so the count is 0 or 1 and its time is real.
-        const request = this.outboundBySession.get(sessionId);
-        return {
-          source,
-          count: request === undefined ? 0 : 1,
-          latestAt: request?.at ?? null,
-        };
       }
       return counted.get(source) ?? { source, count: 0, latestAt: null };
     });
@@ -1734,8 +1737,6 @@ export class FocusLoopEngine {
       const items: AgentMemoryItem[] = [];
       if (this.transcript.list(sessionId).length > 0)
         items.push({ source: 'transcript', at: null });
-      const request = this.outboundBySession.get(sessionId);
-      if (request !== undefined) items.push({ source: 'outbound', at: request.at });
       return { ok: true, list: { scope, items, truncated: false } };
     }
 

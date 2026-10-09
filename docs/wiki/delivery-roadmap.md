@@ -178,7 +178,7 @@ Home
 
 ### Phase 1：收口现有 MVP（AG1 + AG2 + AG3 + AG5 + AG10）
 
-1. AG1 字段 allowlist、敏感 payload 回归、Inspector 说明。
+1. AG1 字段 allowlist、敏感 payload 回归。
 2. AG2 outcome 成功窗口与六类 E2E。
 3. AG3 中英场景、section anchor、transcript 生命周期。
 4. AG5 gap-band 与 resume success（先不依赖 adaptive restore）。

@@ -196,8 +196,8 @@ describe('agent memory clear (ADR 0001)', () => {
     });
     try {
       /*
-       * One session, because the engine allows one: starting a second ends the first, and ending it clears the
-       * outbound entry anyway, so "every session" is not a state this engine can be put in to be asserted. What
+       * One session, because the engine allows one: starting a second ends the first, and ending it discards the
+       * transient data anyway, so "every session" is not a state this engine can be put in to be asserted. What
        * the difference from `clearAgentMemory` rests on is that nothing is named here — the call takes no id.
        */
       const { session } = scripted.engine.startSession(DEMO_COURSE_ID);
