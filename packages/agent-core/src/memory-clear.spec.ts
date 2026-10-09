@@ -183,40 +183,11 @@ describe('agent memory clear (ADR 0001)', () => {
     expect(raw).not.toContain('HELP_REQUESTED');
   });
 
-  it('Working: clear forgets the outbound request, so the recorded prompt is not readable', async () => {
-    const prompts: string[] = [];
-    const scripted = createTestEngine({
-      providers: createProviderSelection(capturingProvider(prompts)),
-    });
-    try {
-      const { session } = scripted.engine.startSession(DEMO_COURSE_ID);
-      await scripted.engine.askTutor({
-        sessionId: session.id,
-        mode: 'HINT',
-        question: 'SECRET_OUTBOUND_QUESTION',
-      });
-      expect(scripted.engine.getOutboundRequest(session.id)?.prompt).toContain(
-        'SECRET_OUTBOUND_QUESTION',
-      );
-
-      scripted.engine.clearAgentMemory(session.id);
-
-      /*
-       * The map was only cleared by `endSession`, so a cleared session's prompt — the learner's question
-       * verbatim — stayed readable through the Outbound Inspector. The ADR already named this class as
-       * deleted on clear; the code did not do it.
-       */
-      expect(scripted.engine.getOutboundRequest(session.id)).toBeNull();
-    } finally {
-      scripted.close();
-    }
-  });
-
   /*
    * The delete-everything path (#10) rather than the per-session clear: the database is about to be
-   * removed, so there is no session left to clear one at a time. What the transcript and the outbound map
-   * hold is the learner's own words, which is why a deletion that stopped at the file would be a
-   * deletion that says less than it does.
+   * removed, so there is no session left to clear one at a time. What the transcript holds is the
+   * learner's own words, which is why a deletion that stopped at the file would be a deletion that says
+   * less than it does.
    */
   it('Working: discarding transient data forgets the session, with no session named', async () => {
     const prompts: string[] = [];
@@ -235,11 +206,7 @@ describe('agent memory clear (ADR 0001)', () => {
         mode: 'HINT',
         question: 'QUESTION_BEFORE_DELETE',
       });
-      expect(scripted.engine.getOutboundRequest(session.id)).not.toBeNull();
-
       scripted.engine.discardTransientData();
-
-      expect(scripted.engine.getOutboundRequest(session.id)).toBeNull();
 
       // The transcript is observable only through the next prompt, which is where it would come back.
       await scripted.engine.askTutor({

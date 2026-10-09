@@ -23,7 +23,6 @@ import type {
   LearningSession,
   MaterialDocument,
   MicroTask,
-  OutboundRequest,
   ProposalConfirmResult,
   ProposalExecuteResult,
   ResolveInterventionRequest,
@@ -207,22 +206,6 @@ export class FocusLoopEngine {
    * a working aid whose value ends with the session. AG7 is where this becomes durable, deliberately.
    */
   private readonly transcript = new TutorTranscript();
-  /**
-   * Last outbound tutor request per session — the Outbound Request Inspector's data.
-   *
-   * In memory only: the prompt contains learner text, so it is never written to the store and never
-   * logged. Cleared when the session ends, with the transcript.
-   */
-  private readonly outboundBySession = new Map<string, OutboundRequest>();
-  /**
-   * How many sessions' outbound requests may be held at once.
-   *
-   * `endSession` drops the entry, but an *abandoned* session never reaches it, and its question plus
-   * material excerpt would then sit in the heap for the life of the process — the opposite of \"for the
-   * current session only\". The bound is small because only the newest is ever interesting.
-   */
-  private static readonly MAX_OUTBOUND_SESSIONS = 4;
-
   constructor(options: FocusLoopEngineOptions) {
     this.store = options.store;
     this.providers = options.providers;
@@ -247,15 +230,14 @@ export class FocusLoopEngine {
   /**
    * Drops the learner's words that were never written to disk.
    *
-   * The tutor transcript and the last outbound request are held in memory on purpose (the transcript is
-   * a working aid, and persisting model prose would be a table that grows with every question), which
-   * makes them the part of "my data" that deleting the database does not reach. Called by the
-   * delete-everything path, after the file is gone, so nothing of the learner is left in this process
-   * either — a deletion that leaves the last question in memory is not the deletion it claims to be.
+   * The tutor transcript is held in memory on purpose (it is a working aid, and persisting model prose
+   * would be a table that grows with every question), which makes it the part of "my data" that
+   * deleting the database does not reach. Called by the delete-everything path, after the file is gone,
+   * so nothing of the learner is left in this process either — a deletion that leaves the last question
+   * in memory is not the deletion it claims to be.
    */
   discardTransientData(): void {
     this.transcript.clear();
-    this.outboundBySession.clear();
   }
 
   // --------------------------------------------------------------- catalogue
@@ -409,7 +391,6 @@ export class FocusLoopEngine {
      * is not in the store, so this is the one place it can leak per-session.
      */
     this.transcript.forget(request.sessionId);
-    this.outboundBySession.delete(request.sessionId);
     return session;
   }
 
@@ -589,8 +570,6 @@ export class FocusLoopEngine {
       return this.unavailable('no-model', context, unsentReport(built.report));
     }
 
-    // Recorded immediately before the hand-off: the Outbound Inspector shows what left, not a rebuild.
-    this.rememberOutbound(request.sessionId, built.system, built.prompt);
     let completion = await this.complete(built.system, built.prompt);
     if (completion.degraded) {
       /*
@@ -683,7 +662,6 @@ export class FocusLoopEngine {
           detail: 'the answer could not be asked for again: it would have gone over the limit',
         });
       } else {
-        this.rememberOutbound(request.sessionId, built.system, composed.prompt);
         completion = await this.complete(built.system, composed.prompt);
         sent = {
           turns: built.report.sent.turns,
@@ -801,45 +779,6 @@ export class FocusLoopEngine {
         },
       },
     );
-  }
-
-  /**
-   * Stores the exact strings about to be handed to the provider.
-   *
-   * Memory only — never the store, never a log line. The character total is
-   * `system.length + prompt.length`, the same formula as `sent.inputCharacters`,
-   * so the inspector figure cannot drift from the string it describes.
-   */
-  private rememberOutbound(sessionId: string, system: string, prompt: string): void {
-    // Re-insert so eviction follows insertion order and the oldest session goes first.
-    this.outboundBySession.delete(sessionId);
-    this.outboundBySession.set(sessionId, {
-      sessionId,
-      at: this.clock(),
-      system,
-      prompt,
-      inputCharacters: system.length + prompt.length,
-    });
-    while (this.outboundBySession.size > FocusLoopEngine.MAX_OUTBOUND_SESSIONS) {
-      const oldest = this.outboundBySession.keys().next().value;
-      if (oldest === undefined) break;
-      this.outboundBySession.delete(oldest);
-    }
-  }
-
-  /** Last outbound request for this session, or null if nothing has been sent. */
-  /**
-   * This session's tool calls, resolved to their events — the inspector's read surface (AG8.8).
-   *
-   * A passthrough on purpose: the store's join is the query that must not become a per-row round
-   * trip, and there is nothing to derive between it and the caller.
-   */
-  listToolCalls(sessionId: string): readonly ToolCallRecord[] {
-    return this.store.listToolCalls(sessionId);
-  }
-
-  getOutboundRequest(sessionId: string): OutboundRequest | null {
-    return this.outboundBySession.get(sessionId) ?? null;
   }
 
   getSessionProgress(sessionId: string) {
@@ -1683,7 +1622,7 @@ export class FocusLoopEngine {
    * Clears agent memory for one session — ADR
    * `docs/wiki/adr/0001-agent-memory-deletion.md`.
    *
-   * - **Working**: tutor transcript and the last outbound prompt (physical, in-process).
+   * - **Working**: the tutor transcript (physical, in-process).
    * - **Episodic**: events, checkpoints, interventions, outcomes, resume_cards, proposals
    *   (physical, SQLite).
    * - **Audit**: opaque `agent_memory_clears` row (session id, timestamp, actor) — no content.
@@ -1700,12 +1639,6 @@ export class FocusLoopEngine {
     const actor = options.actor ?? 'user';
     const clearedAt = this.clock();
     this.transcript.forget(sessionId);
-    /*
-     * The outbound prompt is the learner's question verbatim. `endSession` cleared it; clearing memory
-     * did not, so a cleared session stayed readable through the Outbound Inspector. The ADR already
-     * named this class as deleted on clear — the code only did half of it.
-     */
-    this.outboundBySession.delete(sessionId);
 
     const run = this.store.transaction(() => {
       this.store.clearSessionEpisodic(sessionId);

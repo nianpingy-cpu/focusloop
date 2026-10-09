@@ -27,9 +27,6 @@ import type {
   MaterialDocument,
   ResumeCardView,
   RescueView,
-  AgentContextReport,
-  ToolCallRecord,
-  OutboundRequest,
   TutorAnswer,
   TutorMode,
   RuntimeInfo,
@@ -125,20 +122,6 @@ export class AppStateService {
   /** Stored preferences for this session (AG7.4), read the same way as the summary. */
   readonly preferences = signal<LearnerPreferenceListResult | null>(null);
   /**
-   * What the agent would be given about the current moment, and what it would not (AG1).
-   *
-   * Built in the main process, where the course, the material and the log are. This is a display
-   * copy: the developer inspector shows it and nothing here re-derives it, because a debug view that
-   * computes its own version eventually shows something the agent never receives.
-   */
-  readonly agentContext = signal<AgentContextReport | null>(null);
-  /**
-   * Last outbound tutor request for the current session — the second inspector view.
-   *
-   * Display copy only: the main process holds the strings in memory and never persists them.
-   */
-  readonly outboundRequest = signal<OutboundRequest | null>(null);
-  /**
    * The tutor's last result, all three outcomes included, **and the step it was about**.
    *
    * Not an error signal: a rejected answer and an unreachable model are outcomes the learner reads, and
@@ -202,23 +185,18 @@ export class AppStateService {
 
   async refresh(): Promise<void> {
     await this.run(async () => {
-      const [runtime, courses, materials, snapshot, dashboard, agentContext] = await Promise.all([
+      const [runtime, courses, materials, snapshot, dashboard] = await Promise.all([
         this.api.getRuntimeInfo(),
         this.api.listCourses(),
         this.api.listMaterials(),
         this.api.getCurrentSession(),
         this.api.getDashboard(),
-        this.api.getAgentContext(),
       ]);
       this.runtime.set(runtime);
       this.courses.set(courses);
       this.materials.set(materials);
       this.snapshot.set(snapshot);
       this.dashboard.set(dashboard);
-      this.agentContext.set(agentContext);
-      this.outboundRequest.set(
-        snapshot === null ? null : await this.api.getOutboundRequest(snapshot.session.id),
-      );
       this.rescue.set(
         snapshot === null ? null : await this.api.getPendingRescue(snapshot.session.id),
       );
@@ -397,11 +375,9 @@ export class AppStateService {
     this.resumeCard.set(null);
     this.rescue.set(null);
     this.dashboard.set(null);
-    this.agentContext.set(null);
     this.courses.set([]);
     this.materials.set([]);
     this.tutorAnswer.set(null);
-    this.outboundRequest.set(null);
     this.decision.set(null);
     this.interventionId.set(null);
     this.insights.set(null);
@@ -458,7 +434,6 @@ export class AppStateService {
        * finished session is the state `getCurrentSession` was already fixed not to have.
        */
       this.tutorAnswer.set(null);
-      this.outboundRequest.set(null);
     });
   }
 
@@ -489,7 +464,6 @@ export class AppStateService {
         answer: await this.api.askTutor({ sessionId: snapshot.session.id, mode, question }),
       });
       // Reload so the Outbound Inspector shows the prompt that was just handed over.
-      this.outboundRequest.set(await this.api.getOutboundRequest(snapshot.session.id));
     });
   }
 
@@ -765,12 +739,6 @@ export class AppStateService {
     const snapshot = await this.api.getCurrentSession();
     this.snapshot.set(snapshot);
     this.dashboard.set(await this.api.getDashboard());
-    /*
-     * Rebuilt on every event, not only on refresh: the inspector exists to be watched while a
-     * session runs, so a copy that only updated at launch would show the empty state for the whole
-     * of the one moment it is useful.
-     */
-    this.agentContext.set(await this.api.getAgentContext());
     if (snapshot !== null) {
       this.resumeCard.set(await this.api.getResumeCard(snapshot.session.id));
       this.rescue.set(await this.api.getPendingRescue(snapshot.session.id));
