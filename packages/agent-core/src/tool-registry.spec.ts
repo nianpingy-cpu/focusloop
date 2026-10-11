@@ -4,6 +4,7 @@ import { createProviderSelection } from '@focusloop/llm-provider';
 import { FocusLoopStore, openDatabase } from '@focusloop/persistence';
 import { createTestEngine } from './test-helpers';
 import { FocusLoopEngine } from './engine';
+import { DEMO_COURSE_ID } from './demo-course';
 import { ToolRegistry, createAgentReadRegistry, createAgentRegistry } from './tool-registry';
 
 const DEPS = {
@@ -443,6 +444,50 @@ describe('the four read tools over the engine', () => {
     } finally {
       engine.initialize(); // no-op on purpose: closes nothing; the store closes below
       plain.close();
+    }
+  });
+});
+
+/*
+ * The timer is learner-only (AG8.3a / #237's decision): the model may not pause and may not
+ * extend. This is an absence pin — it passes today, by construction, and that is the point: a
+ * future change that registers either name fails here, in CI, rather than passing review as a
+ * quiet addition. The refusal a model actually sees is `unknown-tool`, not a permission: the
+ * names are outside the vocabulary, exactly like any unregistered one.
+ */
+describe('the timer stays learner-only (AG8.3a / #237)', () => {
+  it('keeps pauseTask and extendTask out of the registry — absence is the decision, pinned', () => {
+    const registry = createAgentRegistry();
+    expect(registry.names()).not.toContain('pauseTask');
+    expect(registry.names()).not.toContain('extendTask');
+    expect(registry.get('pauseTask')).toBeUndefined();
+    expect(registry.get('extendTask')).toBeUndefined();
+  });
+
+  it('refuses either name through the engine as unknown-tool, and records the attempt', () => {
+    const ctx = createTestEngine();
+    try {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      for (const tool of ['pauseTask', 'extendTask']) {
+        const result = ctx.engine.executeToolCall({ sessionId: session.id, tool, args: {} });
+        expect(result.ok).toBe(false);
+        if (result.ok) continue;
+        expect(result.reason).toBe('unknown-tool');
+        expect(result.messageKey).toBe('tool.refusal.unknown-tool');
+      }
+      const audit = ctx.engine.listToolCalls(session.id);
+      // Sorted, not in query order: what matters is that both attempts are on the record as
+      // `unknown-tool`, whatever order the audit read returns them in.
+      expect(
+        audit
+          .map((row) => [row.tool, row.error])
+          .sort(([left], [right]) => String(left).localeCompare(String(right))),
+      ).toEqual([
+        ['extendTask', 'unknown-tool'],
+        ['pauseTask', 'unknown-tool'],
+      ]);
+    } finally {
+      ctx.close();
     }
   });
 });

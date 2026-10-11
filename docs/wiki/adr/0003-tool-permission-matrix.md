@@ -4,7 +4,7 @@
 - **Date**: 2026-10-09
 - **Parent**: [#93](https://github.com/nianpingy-cpu/focusloop/issues/93) (AG8 Tools & Actions)
 - **Blocks**: [#208](https://github.com/nianpingy-cpu/focusloop/issues/208) (the `permission` union), [#209](https://github.com/nianpingy-cpu/focusloop/issues/209) (what each level shows), [#212](https://github.com/nianpingy-cpu/focusloop/issues/212) (one scenario per cell)
-- **Related**: [#114](https://github.com/nianpingy-cpu/focusloop/issues/114) confirmation envelope (PR #126), [ADR 0001](./0001-agent-memory-deletion.md), [ADR 0002](./0002-runtime-execution-boundary.md)
+- **Related**: [#114](https://github.com/nianpingy-cpu/focusloop/issues/114) confirmation envelope (PR #126), [#237](https://github.com/nianpingy-cpu/focusloop/issues/237) the timer's learner-only decision (§3b), [ADR 0001](./0001-agent-memory-deletion.md), [ADR 0002](./0002-runtime-execution-boundary.md)
 
 ## Context
 
@@ -80,14 +80,14 @@ that level. "Today" is `main` at `d9f1783`.
 
 #### reversible-write
 
-| Tool                 | Existing implementation today (evidence)                                                                                                                     | Way back (why it is not structural)                                                                                                                                                              |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `startTask`          | `dispatch(TASK_STARTED)`; `appendEvent` already reports current truth on a replayed event instead of writing twice                                           | Switching back is another `TASK_STARTED`; nothing is deleted, progress is unaffected. Session precondition checked in main.                                                                      |
-| `pauseTask`          | Renderer `focus-timer.ts` `pause()` — phases `ready/active/paused/expired`, no domain event today; the tool lands in phase 2 over IPC                        | Undo is `resumeTask`; the timer never outlives the session.                                                                                                                                      |
-| `resumeTask`         | `acceptResume` / `dismissResume` + `dispatch(TASK_STARTED)`; renderer `focus-timer.ts` `resume()`                                                            | The mirror of pause; the learner can always dismiss instead.                                                                                                                                     |
-| `extendTask`         | Renderer `focus-timer.ts` `addMinute()` — no engine write today                                                                                              | Self-expiring: an extension ends at expiry or session end; there is nothing to clean up afterwards.                                                                                              |
-| `createAdaptiveTask` | AG4's rewrites through the envelope (`engine.ts` proposes kind `structural-write`); the rewrite is derived on every read, the stored course is never written | Derived on read and ends with the task or with Continue — the reversibility AG2 documented. Registers as `reversible-write` when the kind vocabulary grows (AG8.4); typed structural until then. |
-| `startBreak`         | The BREAK rescue path (#169): the deterministic policy offers, `resolveRescue` accepts, steps come from `buildRescuePlan`                                    | Self-expiring — three minutes that keep the position. Policy-gated: the tool cannot break where policy did not offer one.                                                                        |
+| Tool                 | Existing implementation today (evidence)                                                                                                                          | Way back (why it is not structural)                                                                                                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `startTask`          | `dispatch(TASK_STARTED)`; `appendEvent` already reports current truth on a replayed event instead of writing twice                                                | Switching back is another `TASK_STARTED`; nothing is deleted, progress is unaffected. Session precondition checked in main.                                                                      |
+| `pauseTask`          | Renderer `focus-timer.ts` `pause()` — phases `ready/active/paused/expired`, no domain event today; **learner-only** (#237): no model-facing surface will be built | Undo is `resumeTask`; the timer never outlives the session.                                                                                                                                      |
+| `resumeTask`         | `acceptResume` / `dismissResume` + `dispatch(TASK_STARTED)`; renderer `focus-timer.ts` `resume()`                                                                 | The mirror of pause; the learner can always dismiss instead.                                                                                                                                     |
+| `extendTask`         | Renderer `focus-timer.ts` `addMinute()` — no engine write today; **learner-only** (#237): no model-facing surface will be built                                   | Self-expiring: an extension ends at expiry or session end; there is nothing to clean up afterwards.                                                                                              |
+| `createAdaptiveTask` | AG4's rewrites through the envelope (`engine.ts` proposes kind `structural-write`); the rewrite is derived on every read, the stored course is never written      | Derived on read and ends with the task or with Continue — the reversibility AG2 documented. Registers as `reversible-write` when the kind vocabulary grows (AG8.4); typed structural until then. |
+| `startBreak`         | The BREAK rescue path (#169): the deterministic policy offers, `resolveRescue` accepts, steps come from `buildRescuePlan`                                         | Self-expiring — three minutes that keep the position. Policy-gated: the tool cannot break where policy did not offer one.                                                                        |
 
 #### structural-write
 
@@ -112,10 +112,10 @@ than being repeated. The idempotency mechanism differs by what the tool already 
   proposal means dispatching an event (`startTask`, `completeTask`, `reorderSessionPlan`), the
   store's replay detection — `appendEvent` reporting current truth instead of appending twice — is
   the second belt under the key.
-- **Renderer-local tools** (`pauseTask`, `extendTask`) have no store write today, so there is
-  nothing to double — until they gain an IPC surface in phase 2, at which point the key sits on the
-  **tool**, not the command: `addMinute` twice is two minutes, which is exactly the kind of double
-  the tool layer must absorb.
+- **Renderer-local tools** (`pauseTask`, `extendTask`) have no store write, so there is nothing
+  to double. §3b spends this in the negative: they will not gain a model-facing IPC surface at all,
+  so the double-press concern (`addMinute` twice is two minutes) stays where it already lives —
+  the renderer's own control, which the learner presses.
 
 ### 3a. Amendment: preference-write (AG6.7, #236)
 
@@ -144,6 +144,35 @@ way back this grade relies on (ADR 0001). Opaque proposal identity/status and de
 
 This cell is driven by a learner's suggestion button; it does not add a provider call, an unmetered
 skill, or a registry bypass for model-written claims. Proposal status/events are its audit record.
+
+### 3b. Amendment: the timer rows are learner-only (AG8.3a, #237)
+
+`pauseTask` and `extendTask` keep their **reversible** grade — a pause resumes and an extension
+expires with the session, which is why that grade was right — and gain a qualifier the other rows
+do not have: **learner-only**. The model may not name either. The owner's decision (#237's
+comment) is a double no with one reason seen from three sides:
+
+1. **A pause the learner did not ask for _is_ an interruption.** §2's invariant puts that decision
+   with the deterministic policy: "may I stop what you are doing?" is a question whose _asking_ is
+   the interruption. `startBreak` stays the one interruption the agent may cause — policy-gated,
+   quick-confirmed.
+2. **An extension moves a promise the timer made.** "Five minutes" is the learner's own
+   commitment; letting the model adjust it — even behind a confirm — makes the timer's promise
+   negotiable by the thing that benefits from more of the learner's time.
+3. **The need behind both is already served**: `startBreak` for "I need a moment", the timer's own
+   one-click controls for the learner, and AG2's `MICRO_START`/`SIMPLIFY` for "this step is too big".
+
+What follows, recorded rather than implied:
+
+- **No effect is plumbed.** Neither `FOCUS_TIMER_PAUSED`/`FOCUS_TIMER_EXTENDED` nor a dedicated
+  command exists — the absence is the decision: there is nothing a proposal could apply, so there
+  is no proposal.
+- **No new kind, no §2 change.** The envelope stays exactly as it is.
+- **The refusal is enforced, not agreed.** The two names stay out of the registry, so a model
+  naming either gets `unknown-tool` like any unregistered name — pinned by a test in
+  `tool-registry.spec.ts`, so a future registration fails CI rather than passing review quietly.
+- **§4's phase-2 sentence is spent in the negative**: there is no model-facing surface for the
+  timer, so the double-press concern stays with the renderer's own control.
 
 ### 4. Invariants the levels ride on
 
