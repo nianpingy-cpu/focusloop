@@ -790,10 +790,20 @@ export class AppStateService {
     return cleared;
   }
 
+  /**
+   * What the engine did without being asked: an event from the bridge, a tick, a demo command.
+   *
+   * The response is applied the same way a renderer action's own response is (`applyResponse`), and
+   * that is the point: the decision used to ride back only to the caller, so an intervention taken in
+   * the main process was applied, stored, and visible to nobody — the panel appeared only after the
+   * window itself had acted. One push, one path: whoever caused the event, the learner sees what the
+   * agent decided about it (#204).
+   */
   subscribeToEvents(): () => void {
-    return this.api.onEvent((event) => {
-      if (event.type === 'AGENT_PROPOSAL_PROPOSED') {
-        this.pendingProposal.set(event.payload.proposal);
+    return this.api.onDispatch((response) => {
+      this.applyResponse(response);
+      if (response.event.type === 'AGENT_PROPOSAL_PROPOSED') {
+        this.pendingProposal.set(response.event.payload.proposal);
       }
       void this.reloadSnapshot();
     });

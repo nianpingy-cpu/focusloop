@@ -92,7 +92,7 @@ export const IPC_CHANNELS = {
   deleteAllData: 'focusloop:data:delete-all',
   subscribeEvents: 'focusloop:event:subscribe',
   unsubscribeEvents: 'focusloop:event:unsubscribe',
-  onEvent: 'focusloop:event:push',
+  onDispatch: 'focusloop:event:push',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -503,6 +503,14 @@ export interface FocusLoopApi {
    */
   askTutor(request: TutorAskRequest): Promise<TutorAnswer>;
 
-  /** Returns an unsubscribe function. */
-  onEvent(listener: (event: LearningEvent) => void): () => void;
+  /**
+   * What the engine just did, whoever caused it (#204): the same response a renderer action gets back.
+   *
+   * The whole response rather than only its event, because the decision is part of the news. An event
+   * this window did not cause — the bridge's, the tick's, a demo command — can still be answered with
+   * an intervention, and a response reduced to its event left that answer on the main process side of
+   * the boundary: the panel shows what the decision was, so a listener that cannot see the decision
+   * cannot show it. Returns an unsubscribe function.
+   */
+  onDispatch(listener: (response: DispatchEventResponse) => void): () => void;
 }
