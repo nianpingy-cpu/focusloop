@@ -332,17 +332,22 @@ async function pressOnGrip(fromRow: number, key: string, times = 1): Promise<voi
 
 /*
  * First on purpose: everything below claims to exercise the offline path, and that claim is only
- * true when no provider credential reached the child process. The run-mode indicator is the
- * product's own answer to "which model is speaking" — without `hermeticEnv()` clearing the key,
- * a developer machine that exports `FOCUSLOOP_DEEPSEEK_API_KEY` would show network mode and this
- * test would fail rather than silently spend their key.
+ * true when no provider credential reached the child process. The model entry is the product's own
+ * answer to "which model is speaking" — without `hermeticEnv()` clearing the key, a developer machine
+ * that exports `FOCUSLOOP_DEEPSEEK_API_KEY` would show a connected model and this test would fail
+ * rather than silently spend their key.
+ *
+ * The model's name used to be read from the footer's meta line, which now carries only the run mode
+ * and the version: the name moved to the entry that changes it, and it stays visible there rather
+ * than behind the disclosure, so this assertion keeps its teeth.
  */
 test('the suite exercises the offline mock, never a real provider', async () => {
-  const footer = window.locator('.footer__meta');
-  await expect(footer).toBeVisible();
+  const entry = window.getByTestId('model-entry');
+  await expect(entry).toBeVisible();
   // The model name is locale-independent; the mode label is the English default of a fresh profile.
-  await expect(footer).toContainText('focusloop-mock-v1');
-  await expect(footer).toContainText('offline mode');
+  await expect(entry).toContainText('focusloop-mock-v1');
+  await expect(entry.locator('.model-entry__state')).toHaveAttribute('data-state', 'offline');
+  await expect(window.locator('.footer__meta')).toContainText('offline mode');
 });
 
 /*

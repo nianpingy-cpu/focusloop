@@ -534,6 +534,18 @@ html[data-theme='dark'] .brand__wordmark--dark {
   gap: 6px;
 }
 
+/*
+ * The provider's id on the same line as the state, and it may truncate rather than wrap: a long model
+ * name would otherwise push the state chip off the row it has to be readable on. `min-width: 0` is what
+ * lets a flex item shrink below its content at all.
+ */
+.model-entry__name {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .model-entry__state::before {
   content: '';
   width: 7px;

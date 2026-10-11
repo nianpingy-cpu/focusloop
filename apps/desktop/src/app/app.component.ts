@@ -190,7 +190,13 @@ const PEEK_CLOSE_DELAY_MS = 150;
               <span class="model-entry__state" [attr.data-state]="modelState()">
                 {{ t(modelLabelKey()) }}
               </span>
-              <span class="muted small">{{ t('app.model.change') }}</span>
+              <!--
+                The provider's own id, kept on screen rather than behind the disclosure. It moved here
+                from the footer's meta line when this entry was built, and it has to stay visible: the
+                golden-path suite reads it to prove no real provider was ever reached, and "which
+                model" is the question the entry exists to answer.
+              -->
+              <span class="muted small model-entry__name">{{ model()?.providerModel }}</span>
             </button>
 
             @if (modelOpen()) {
