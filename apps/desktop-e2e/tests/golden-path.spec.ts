@@ -11,6 +11,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { hermeticEnv } from '../hermetic-env.mjs';
+import { fireDemoEvent } from '../demo-events.mjs';
 
 const DESKTOP_MAIN = resolve(__dirname, '..', '..', 'desktop', 'dist', 'main', 'main.cjs');
 
@@ -412,11 +413,11 @@ test('golden path: learn, get interrupted, resume, see the outcome', async () =>
   await expect(window.getByTestId('tasks-completed')).toBeVisible();
 
   // 5. Simulate a distraction.
-  await window.getByTestId('sim-distraction').click();
+  await fireDemoEvent(window, 'distraction');
   await stateIs('DISTRACTED');
 
   // 6. ...and a late return: the state engine must mark the interruption.
-  await window.getByTestId('sim-return').click();
+  await fireDemoEvent(window, 'return');
   await stateIs('INTERRUPTED');
 
   // 7. The resume card appears and restores the cognitive position.
@@ -501,7 +502,7 @@ test('the app keeps working when the agent has nothing to say', async () => {
 
   // Overload: the policy must offer a break, and the learner can decline it.
   await clickSidebarLink('Focus Session');
-  await window.getByTestId('sim-overload').click();
+  await fireDemoEvent(window, 'overload');
   const agent = window.locator('.agent');
   await expect(agent).toBeVisible();
   await expect(agent).toHaveAttribute('data-action', 'BREAK');
@@ -516,8 +517,8 @@ test('resume is offered once, by the resume card alone', async () => {
   await window.getByTestId('course-card').first().getByTestId('start-session').click();
   await window.getByTestId('start-task').first().click();
 
-  await window.getByTestId('sim-distraction').click();
-  await window.getByTestId('sim-return').click();
+  await fireDemoEvent(window, 'distraction');
+  await fireDemoEvent(window, 'return');
 
   // The card is the surface for RESUME; the agent panel must not repeat it.
   await expect(
@@ -602,7 +603,7 @@ test('the sidebar summary refreshes without hijacking the dashboard window', asy
   await expect(window.getByTestId('today-total')).not.toHaveText('—');
 
   // An event refreshes the ambient summary...
-  await window.getByTestId('sim-confusion').click();
+  await fireDemoEvent(window, 'confusion');
   await expect(window.getByTestId('today-meta')).toBeVisible();
 
   // ...and must not drag the dashboard's window back to "today". One cell per calendar
@@ -669,7 +670,7 @@ test('the interface can be switched to Chinese, and the choice survives a restar
   // 2. The wording the domain emits is translated too — the learner must never
   //    see an English sentence in the middle of a Chinese screen.
   await clickSidebarLink('专注会话');
-  await window.getByTestId('sim-overload').click();
+  await fireDemoEvent(window, 'overload');
   const agent = window.locator('.agent');
   await expect(agent).toBeVisible();
   await expect(agent).toContainText('一次塞进来的东西太多了');
@@ -741,7 +742,7 @@ test('a run of identical events is folded into one row', async () => {
 
   // Break any run that is still open, so the row arithmetic below does not depend on what
   // the previous test happened to leave behind.
-  await window.getByTestId('sim-success').click();
+  await fireDemoEvent(window, 'success');
   /*
    * #8: the row's text is the learner's wording; the enum member is the row's `title`, the way the state
    * chip's raw value is a data attribute. `toContainText` never consults attributes, so it cannot see it.
@@ -757,7 +758,7 @@ test('a run of identical events is folded into one row', async () => {
 
   // A single "overload" fires three HELP_REQUESTED events back to back. That is how one
   // click used to add three identical cards to the log.
-  await window.getByTestId('sim-overload').click();
+  await fireDemoEvent(window, 'overload');
 
   await expect(rows).toHaveCount(rowsBefore + 1);
 
@@ -835,8 +836,8 @@ test('the intervention outcomes read as rows with a share and a sample size', as
 
 test('the non-modal resume notice is keyboard reachable and folds without dismissing', async () => {
   await clickSidebarLink('Focus Session');
-  await window.getByTestId('sim-distraction').click();
-  await window.getByTestId('sim-return').click();
+  await fireDemoEvent(window, 'distraction');
+  await fireDemoEvent(window, 'return');
 
   const resume = window.getByRole('region', { name: 'Resume where you left off', exact: true });
   await expect(resume).toBeVisible();
@@ -970,8 +971,8 @@ test('ending a session leaves nothing current', async () => {
 
 /*
  * Last: it runs its own session from start to finish, so the "nothing to work with" left
- * by the test above is a state it brings itself out of. It never touches the simulator,
- * so the intervention budget the folding test above relies on is not disturbed.
+ * by the test above is a state it brings itself out of. It fires no demo event, so the
+ * intervention budget the folding test above relies on is not disturbed.
  */
 test('the sidebar folds on click, and focus folds it fully, with a floating recall', async () => {
   // 1. A running commitment folds the whole sidebar away — no icon rail. The floating
@@ -1113,8 +1114,8 @@ test('the plan closes the way a panel closes, and never covers the step it start
    * It arrives as a sheet anchored to the bottom edge rather than to a corner, and it is centred.
    * "Closer to the bottom than to the top" is the property, not "entirely below the middle": a
    * sheet with four blocks and a timeline is tall enough to cross the middle on purpose. The exact
-   * offset is not asserted, because the simulator bar is present in this run and the sheet starts
-   * above it.
+   * offset is not asserted, because the sheet's own inset from the edge is a style choice; what is
+   * asserted is that it is near the bottom and centred.
    */
   const sheet = await window.locator('.focus-plan[data-open]').evaluate((el) => {
     const box = el.getBoundingClientRect();
@@ -1442,7 +1443,7 @@ test('the reason the learner gives is answered according to which kind of stuck 
 });
 
 /*
- * The short tier is the one length an e2e can reach, because the simulator's interruption is 30
+ * The short tier is the one length an e2e can reach, because the demo command's interruption is 30
  * seconds and the boundary is fifteen minutes. What it changes is visible: a short card lists one
  * item per column even when more is done, which is the difference between "where was I" and a
  * summary. Medium and long need a gap no test can wait for; the eval scenarios and the unit tests
@@ -1457,8 +1458,8 @@ test('a short interruption resumes into one line, not a summary', async () => {
   await window.getByTestId('complete-task').click();
   await window.getByTestId('start-task').first().click();
 
-  await window.getByTestId('sim-distraction').click();
-  await window.getByTestId('sim-return').click();
+  await fireDemoEvent(window, 'distraction');
+  await fireDemoEvent(window, 'return');
 
   const resume = window.getByRole('region', { name: 'Resume where you left off', exact: true });
   await expect(resume).toBeVisible();
@@ -1486,7 +1487,7 @@ test('an absence as long as the policy boundary resumes with the refresher', asy
   await window.getByTestId('course-card').first().getByTestId('start-session').click();
   await window.getByTestId('start-task').first().click();
 
-  await window.getByTestId('sim-distraction').click();
+  await fireDemoEvent(window, 'distraction');
   const state = await window.evaluate(async (durationMs) => {
     const snapshot = await globalThis.focusloop.getCurrentSession();
     const response = await globalThis.focusloop.simulate({
@@ -1547,9 +1548,9 @@ test('accepting MICRO_START narrows the task to its first step, for two minutes'
    * minutes over a screen showing two — which is the one number on that card a learner can be misled
    * by, since it is what they plan the next few minutes around.
    */
-  await window.getByTestId('sim-distraction').click();
+  await fireDemoEvent(window, 'distraction');
   await window.waitForTimeout(300);
-  await window.getByTestId('sim-return').click();
+  await fireDemoEvent(window, 'return');
   const resume = window.getByRole('region', { name: 'Resume where you left off', exact: true });
   await expect(resume).toBeVisible();
   await expect(window.getByTestId('resume-step')).toContainText('in-order traversal is sorted');
@@ -1985,8 +1986,8 @@ test('the learner can find their data and delete all of it, without a restart', 
   await window.getByTestId('course-card').first().getByTestId('start-session').click();
   await window.getByTestId('start-task').first().click();
   await window.getByTestId('complete-task').click();
-  await window.getByTestId('sim-distraction').click();
-  await window.getByTestId('sim-return').click();
+  await fireDemoEvent(window, 'distraction');
+  await fireDemoEvent(window, 'return');
   // The interruption is stored when the state engine marks it, which is what the dashboard counts below.
   await stateIs('INTERRUPTED');
   await window.getByTestId('resume-continue').click();

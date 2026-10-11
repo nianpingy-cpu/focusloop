@@ -119,6 +119,11 @@ const api: FocusLoopApi = {
   setAmbientSound: (request) =>
     ipcRenderer.invoke(IPC_CHANNELS.setAmbientSound, payload.setAmbientSound(request.ambientSound)),
 
+  getModelSettings: () => ipcRenderer.invoke(IPC_CHANNELS.getModelSettings, payload.none()),
+  setModelApiKey: (request) =>
+    ipcRenderer.invoke(IPC_CHANNELS.setModelApiKey, payload.setModelApiKey(request.apiKey)),
+  clearModelApiKey: () => ipcRenderer.invoke(IPC_CHANNELS.clearModelApiKey, payload.none()),
+
   getDataInfo: () => ipcRenderer.invoke(IPC_CHANNELS.getDataInfo, payload.none()),
   openDataFolder: () => ipcRenderer.invoke(IPC_CHANNELS.openDataFolder, payload.none()),
   deleteAllData: (request) =>

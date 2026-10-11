@@ -84,6 +84,9 @@ export const IPC_CHANNELS = {
   setTheme: 'focusloop:settings:set-theme',
   setShowMaterialText: 'focusloop:settings:set-material-text',
   setAmbientSound: 'focusloop:settings:set-ambient-sound',
+  getModelSettings: 'focusloop:model:settings',
+  setModelApiKey: 'focusloop:model:set-key',
+  clearModelApiKey: 'focusloop:model:clear-key',
   getDataInfo: 'focusloop:data:info',
   openDataFolder: 'focusloop:data:open-folder',
   deleteAllData: 'focusloop:data:delete-all',
@@ -107,6 +110,40 @@ export interface RuntimeInfo {
   /** True when the last runtime call failed over to the fallback provider. */
   readonly providerDegraded: boolean;
 }
+
+/**
+ * The model the app is using, and whether the learner can change it (#255).
+ *
+ * Deliberately not the key: the renderer displays this and never holds the secret. `keySource` is
+ * here because "I saved a key and nothing changed" is the failure this surface has to prevent — an
+ * environment variable outranks a stored key, and the learner deserves to be told which one is in
+ * force rather than watching their own input do nothing.
+ */
+export interface ModelSettings {
+  readonly providerId: string;
+  readonly providerModel: string;
+  /** True while no key is configured: the deterministic mock answers, and nothing leaves the machine. */
+  readonly offline: boolean;
+  /** True when the last runtime call failed over to the fallback provider. */
+  readonly degraded: boolean;
+  readonly keySource: 'environment' | 'stored' | 'none';
+  /** False when this machine has no OS keychain: a key cannot be stored, and the surface says so. */
+  readonly canStore: boolean;
+}
+
+export interface SetModelApiKeyRequest {
+  readonly apiKey: string;
+}
+
+/**
+ * How long a model key may be.
+ *
+ * A bound rather than a format: provider keys are opaque strings that change shape between providers
+ * and between their own versions, so anything that pattern-matched them would reject a valid key the
+ * day the provider changed. What has to be true of a value arriving from the renderer and going to
+ * disk is that it is a string, and that it is not an unbounded one.
+ */
+export const MODEL_API_KEY_MAX_LENGTH = 512;
 
 export interface ImportMaterialRequest {
   readonly fileName: string;
@@ -372,6 +409,17 @@ export interface FocusLoopApi {
   setTheme(request: SetThemeRequest): Promise<AppSettings>;
   setShowMaterialText(request: SetShowMaterialTextRequest): Promise<AppSettings>;
   setAmbientSound(request: SetAmbientSoundRequest): Promise<AppSettings>;
+
+  /**
+   * The model in use, and the way to change it (#255).
+   *
+   * `getModelSettings` never returns the key. `setModelApiKey` stores it encrypted by the OS keychain
+   * and takes effect immediately — a setting that needed a restart would be a setting the app only
+   * claims to have — and answers with the state that is now true rather than with an acknowledgement.
+   */
+  getModelSettings(): Promise<ModelSettings>;
+  setModelApiKey(request: SetModelApiKeyRequest): Promise<ModelSettings>;
+  clearModelApiKey(): Promise<ModelSettings>;
 
   /**
    * Where the local database is. Local-first, so this is the whole of it: one directory, one file, and
