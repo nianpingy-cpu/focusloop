@@ -10,7 +10,11 @@ import type {
   EpisodicCleanupResult,
 } from './memory';
 import type { WeeklyReflection } from './reflection';
-import type { LearnerPreferenceListResult, PreferenceDeleteResult } from './learner-preference';
+import type {
+  LearnerPreferenceCandidatesResult,
+  LearnerPreferenceListResult,
+  PreferenceDeleteResult,
+} from './learner-preference';
 import type { InterventionDecision, InterventionOutcome } from './intervention';
 import type { RescueView } from './rescue';
 import type { InsightsRequest, InsightsSummary } from './insights';
@@ -26,6 +30,7 @@ import type {
   ConfirmProposalRequest,
   ExecuteProposalRequest,
   ProposalConfirmResult,
+  ProposalDeclineResult,
   ProposalExecuteResult,
 } from './proposal';
 
@@ -57,11 +62,13 @@ export const IPC_CHANNELS = {
   memoryList: 'focusloop:agent:memory-list',
   memoryClear: 'focusloop:agent:memory-clear',
   preferencesList: 'focusloop:agent:preferences-list',
+  preferenceCandidates: 'focusloop:agent:preference-candidates',
   preferenceDelete: 'focusloop:agent:preference-delete',
   memoryCleanup: 'focusloop:agent:memory-cleanup',
   weeklyReflection: 'focusloop:reflection:weekly',
   proposeStructuralChange: 'focusloop:agent:propose',
   confirmProposal: 'focusloop:agent:confirm-proposal',
+  declineProposal: 'focusloop:agent:decline-proposal',
   executeProposal: 'focusloop:agent:execute-proposal',
   askTutor: 'focusloop:tutor:ask',
   listOutcomes: 'focusloop:outcome:list',
@@ -410,6 +417,8 @@ export interface FocusLoopApi {
   clearAgentMemory(sessionId: string): Promise<{ clearedAt: string; actor: string } | null>;
   /** This session's stored preferences, newest first; refused like the memory reads (AG7.4). */
   listPreferences(sessionId: string): Promise<LearnerPreferenceListResult>;
+  /** This session's suggestion candidates (AG6.6) — derived with evidence, stored nowhere. */
+  listPreferenceCandidates(sessionId: string): Promise<LearnerPreferenceCandidatesResult>;
   /**
    * Deletes one preference (AG7.6). Idempotent — the second delete of an id is `deleted: false`,
    * not an error — and another session's row is a refusal, never a row that quietly vanished.
@@ -431,6 +440,8 @@ export interface FocusLoopApi {
     request: ProposeStructuralChangeRequest,
   ): Promise<ProposeStructuralChangeResponse>;
   confirmProposal(request: ConfirmProposalRequest): Promise<ProposalConfirmResult>;
+  /** Saves the learner's decline on the existing proposal; no preference is written. */
+  declineProposal(request: ConfirmProposalRequest): Promise<ProposalDeclineResult>;
   executeProposal(request: ExecuteProposalRequest): Promise<ProposalExecuteResult>;
 
   /**

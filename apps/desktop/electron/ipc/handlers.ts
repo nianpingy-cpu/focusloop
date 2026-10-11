@@ -297,6 +297,11 @@ export function createHandlers(service: FocusLoopService, router: EventRouter) {
       handle: (sessionId) => engine.listPreferences(sessionId),
     }),
     defineHandler({
+      channel: IPC_CHANNELS.preferenceCandidates,
+      parse: parseSessionId,
+      handle: (sessionId) => engine.listPreferenceCandidates(sessionId),
+    }),
+    defineHandler({
       channel: IPC_CHANNELS.preferenceDelete,
       parse: parsePreferenceDelete,
       handle: (request) => engine.deletePreference(request),
@@ -342,6 +347,11 @@ export function createHandlers(service: FocusLoopService, router: EventRouter) {
       channel: IPC_CHANNELS.confirmProposal,
       parse: parseConfirmProposal,
       handle: (request) => engine.confirmProposal(request),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.declineProposal,
+      parse: parseConfirmProposal,
+      handle: (request) => engine.declineProposal(request),
     }),
     defineHandler({
       channel: IPC_CHANNELS.executeProposal,

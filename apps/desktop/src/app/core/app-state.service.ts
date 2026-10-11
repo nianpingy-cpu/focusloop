@@ -23,6 +23,7 @@ import type {
   Locale,
   AgentProposal,
   ProposalConfirmResult,
+  ProposalDeclineResult,
   ProposalExecuteResult,
   MaterialDocument,
   ResumeCardView,
@@ -33,12 +34,14 @@ import type {
   SessionSnapshot,
   ThemePreference,
   AgentMemorySummaryResult,
+  LearnerPreferenceCandidatesResult,
   LearnerPreferenceListResult,
   PreferenceDeleteResult,
   WeeklyReflection,
 } from '@focusloop/shared-types';
 
 import type { FocusNoticeFold } from './focus-notice';
+import type { MessageKey } from './i18n/messages.en';
 import { shouldSuggestRescueText } from './rescue-suggestion';
 
 declare global {
@@ -82,6 +85,7 @@ export class AppStateService {
     effect(() => {
       void this.loadMemorySummary();
       void this.loadPreferences();
+      void this.loadPreferenceCandidates();
     });
   }
 
@@ -139,6 +143,9 @@ export class AppStateService {
   readonly weeklyReflection = signal<WeeklyReflection | null>(null);
   /** Stored preferences for this session (AG7.4), read the same way as the summary. */
   readonly preferences = signal<LearnerPreferenceListResult | null>(null);
+  /** This session's suggestion candidates (AG6.6) — derived with evidence, stored nowhere. */
+  readonly preferenceCandidates = signal<LearnerPreferenceCandidatesResult | null>(null);
+  readonly preferenceNotice = signal<MessageKey | null>(null);
   /**
    * The tutor's last result, all three outcomes included, **and the step it was about**.
    *
@@ -403,6 +410,9 @@ export class AppStateService {
     this.insights.set(null);
     this.todayInsights.set(null);
     this.weeklyReflection.set(null);
+    this.preferenceCandidates.set(null);
+    this.preferenceNotice.set(null);
+    this.pendingProposal.set(null);
     this.focusNoticeFold.set({ sessionId: null, folded: false });
   }
 
@@ -685,6 +695,23 @@ export class AppStateService {
   }
 
   /**
+   * Reads this session's suggestions, same gate, same refusal composition (AG6.6). The candidate
+   * list is read-only — the renderer displays it and #236's confirm flow is the only writer.
+   */
+  async loadPreferenceCandidates(): Promise<void> {
+    const sessionId = this.snapshot()?.session.id;
+    if (sessionId === undefined || sessionId === '') {
+      this.preferenceCandidates.set({
+        ok: false,
+        reason: 'no-session',
+        messageKey: 'memory.refusal.no-session',
+      });
+      return;
+    }
+    this.preferenceCandidates.set(await this.api.listPreferenceCandidates(sessionId));
+  }
+
+  /**
    * Forgets one preference and re-reads both views it moves: the list loses the row and the memory
    * summary's preference count drops with it — the same write→delete→query the engine spec pins.
    */
@@ -692,7 +719,13 @@ export class AppStateService {
     const sessionId = this.snapshot()?.session.id;
     if (sessionId === undefined || sessionId === '') return null;
     const result = await this.api.deletePreference({ id, sessionId });
-    await Promise.all([this.loadPreferences(), this.loadMemorySummary()]);
+    // Forget also scrubs confirmation snapshots; reload the event cache and reflection quotes.
+    await Promise.all([
+      this.loadPreferences(),
+      this.loadMemorySummary(),
+      this.reloadSnapshot(),
+      this.reloadInsightsQuietly(),
+    ]);
     return result;
   }
 
@@ -733,6 +766,39 @@ export class AppStateService {
       }
       void this.reloadSnapshot();
     });
+  }
+
+  /** Ask to store a suggestion. Only its identity crosses IPC; main supplies the frozen claim. */
+  async proposePreference(candidateId: string): Promise<void> {
+    const sessionId = this.snapshot()?.session.id;
+    if (sessionId === undefined || this.pendingProposal() !== null || this.busy()) return;
+    await this.run(async () => {
+      this.preferenceNotice.set(null);
+      const response = await this.api.proposeStructuralChange({
+        sessionId,
+        kind: 'reversible-write',
+        payload: { preferenceCandidateId: candidateId },
+        createdBy: 'ag6.suggestion',
+        idempotencyKey: candidateId,
+      });
+      if (response.proposal === null)
+        this.preferenceNotice.set('proposal.refusal.unknown-proposal');
+      else this.pendingProposal.set(response.proposal);
+      await this.loadPreferenceCandidates();
+    });
+  }
+
+  async declineProposal(proposal: AgentProposal): Promise<ProposalDeclineResult> {
+    const result = await this.api.declineProposal({
+      proposalId: proposal.id,
+      sessionId: proposal.sessionId,
+      expectedHash: proposal.proposalHash,
+    });
+    if (result.ok && 'preference' in proposal.payload) {
+      this.preferenceNotice.set('app.reflection.declined');
+      await this.loadPreferenceCandidates();
+    }
+    return result;
   }
 
   /** Confirm a pending proposal, bound to the hash the dialog showed (#209). */
