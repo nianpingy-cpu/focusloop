@@ -42,6 +42,7 @@ const api: FocusLoopApi = {
 
   dispatchEvent: (request) =>
     ipcRenderer.invoke(IPC_CHANNELS.dispatchEvent, payload.dispatchEvent(request)),
+  answerQuiz: (request) => ipcRenderer.invoke(IPC_CHANNELS.answerQuiz, payload.answerQuiz(request)),
   listEvents: (sessionId) =>
     ipcRenderer.invoke(IPC_CHANNELS.listEvents, payload.sessionId(sessionId)),
 

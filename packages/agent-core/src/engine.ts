@@ -26,6 +26,8 @@ import type {
   ProposalConfirmResult,
   ProposalDeclineResult,
   ProposalExecuteResult,
+  QuizAnswerRequest,
+  QuizAnswerResponse,
   ResolveInterventionRequest,
   ResumeCardView,
   RescueView,
@@ -78,6 +80,7 @@ import {
   isTaskRewrite,
   isTaskRewriteAction,
   message,
+  normaliseLearnerAnswer,
 } from '@focusloop/shared-types';
 import { buildAgentContext } from './agent-context';
 import { buildRescueGrounding } from './rescue-grounding';
@@ -137,6 +140,7 @@ import {
 import { demoCourse, demoInterruption } from './demo-course';
 import { DEFAULT_COURSE_COPY, type CourseCopy } from './course-copy';
 import { generateCourse } from './micro-task-generator';
+import { gradeQuiz, quizForTask } from './quiz';
 import { buildTutorPrompt, buildTutorRetryPrompt, isRetryable, readTutorReply } from './tutor';
 import {
   confirmAgentProposal,
@@ -173,14 +177,22 @@ export const AMBIENT_SOUND_KEY = 'ambient-sound';
 /**
  * A request the engine refuses, carrying the code the caller branches on — so a rejection is a value
  * rather than a message to parse.
- */
-export class EngineError extends Error {
+ */ export class EngineError extends Error {
   readonly code:
     | 'session-not-found'
     | 'session-ended'
     | 'course-not-found'
     | 'checkpoint-not-found'
-    | 'simulator-disabled';
+    | 'simulator-disabled'
+    /**
+     * The step has no quiz to answer, or the chosen option is not one of its options.
+     *
+     * One code for both because they are the same refusal from the caller's side: the screen only
+     * offers the options it was given, so either means the request did not come from the screen it
+     * claims to. Refusing loudly is the point — a silently "incorrect" verdict for a choice that does
+     * not exist would write a wrong answer into the learner's record for them.
+     */
+    | 'quiz-not-answerable';
 
   constructor(code: EngineError['code'], message: string) {
     super(message);
@@ -965,7 +977,7 @@ export class FocusLoopEngine {
       at,
       type: request.type,
       source: request.source,
-      payload: request.payload ?? {},
+      payload: storedPayload(request),
     } as unknown as LearningEvent;
 
     const stored = this.store.appendEvent(event);
@@ -1019,6 +1031,52 @@ export class FocusLoopEngine {
 
   listEvents(sessionId: string): LearningEvent[] {
     return this.store.listEvents(sessionId);
+  }
+
+  /**
+   * Answers the quiz attached to the step in front of the learner.
+   *
+   * The grading is here rather than on the screen because the screen must not be able to decide it:
+   * a renderer that compared the choice against `answerIndex` would be marking its own homework, and
+   * the learner's record — the quiz event, the state machine, the dashboard's "progressed" count —
+   * would be built from whatever it said. So the screen sends the option and this returns the verdict.
+   *
+   * The step it may be asked about is the running one, the same rule the tutor keeps: a request about
+   * any other step is refused rather than recorded, because a quiz answered for a task the learner is
+   * not on would move the state machine on the strength of a question that is not in front of them.
+   *
+   * A refusal here is an `EngineError`, not a verdict: only this screen produces these requests, and it
+   * offers the options the course holds. One arriving for something else is a caller that has got out
+   * of step with the course, which is worth failing loudly for — an "incorrect" written for a choice
+   * that does not exist would be the learner's own record, wrong, with nobody to correct it.
+   */
+  answerQuiz(request: QuizAnswerRequest): QuizAnswerResponse {
+    const record = this.requireSession(request.sessionId);
+    if (record.engineState.currentTaskId !== request.taskId) {
+      throw new EngineError(
+        'quiz-not-answerable',
+        `task ${request.taskId} is not the step in front of the learner`,
+      );
+    }
+    const course = this.getCourse(record.session.courseId);
+    if (course === null) {
+      throw new EngineError('course-not-found', `no course for session ${request.sessionId}`);
+    }
+    const quiz = quizForTask(course, request.taskId);
+    const verdict = quiz === null ? null : gradeQuiz(quiz, request.choiceIndex);
+    if (quiz === null || verdict === null) {
+      throw new EngineError(
+        'quiz-not-answerable',
+        `task ${request.taskId} has no option ${request.choiceIndex} to answer`,
+      );
+    }
+    const response = this.dispatch({
+      sessionId: request.sessionId,
+      type: verdict.correct ? 'QUIZ_CORRECT' : 'QUIZ_INCORRECT',
+      source: 'user',
+      payload: { taskId: request.taskId, quizId: quiz.id },
+    });
+    return { ...response, quiz: verdict };
   }
 
   /**
@@ -2569,6 +2627,31 @@ export class FocusLoopEngine {
 function findTask(course: Course | null, taskId: string | null): MicroTask | null {
   if (course === null || taskId === null) return null;
   return course.microTasks.find((task) => task.id === taskId) ?? null;
+}
+
+/**
+ * The payload as it will be stored, which is the only place a learner's words get their bound.
+ *
+ * The screen bounds its own box, because a textarea that accepts more than the record keeps is a lie
+ * about what was kept — but the screen is not the only writer: the bridge and the simulator dispatch
+ * through the same door. Normalising here means one answer, and one answer only, whatever route the
+ * completion arrived by; and an answer that is empty once trimmed is *removed* rather than stored as
+ * `''`, so "they wrote nothing" keeps being the absence of a field rather than a blank string that a
+ * later reader would have to know how to read.
+ *
+ * Deliberately narrow: it touches `TASK_COMPLETED` and nothing else. Every other event's payload is
+ * its builder's business, and a general sanitiser here would quietly become the place where event
+ * shapes are decided.
+ */
+function storedPayload(request: DispatchEventRequest): Record<string, unknown> {
+  const payload = { ...(request.payload ?? {}) };
+  if (request.type !== 'TASK_COMPLETED') return payload;
+
+  const raw = payload['answer'];
+  const answer = typeof raw === 'string' ? normaliseLearnerAnswer(raw) : null;
+  if (answer === null) delete payload['answer'];
+  else payload['answer'] = answer;
+  return payload;
 }
 
 function toSession(

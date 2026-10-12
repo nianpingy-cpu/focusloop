@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AGENT_CONTEXT_LIMITS,
+  LEARNER_ANSWER_CHARACTERS,
   LEARNING_EVENT_TYPES,
   type Course,
   type LearningCheckpoint,
@@ -668,6 +669,67 @@ describe('buildAgentContext', () => {
       detail: '9 invalid events are not included',
     });
     expect(rawEvents).toEqual(before);
+  });
+
+  /*
+   * The learner's own words about a step, which is the whole reason the agent can tell "they finished
+   * it" from "they understood it". Two bounds, and they are different on purpose: the record keeps
+   * `LEARNER_ANSWER_CHARACTERS`, the prompt gets `AGENT_CONTEXT_LIMITS.answerCharacters`.
+   */
+  describe('the answer a completion carries', () => {
+    it('passes the learner’s answer through', () => {
+      const report = buildAgentContext(
+        source({
+          events: [rawEvent('TASK_COMPLETED', { taskId: 't1', answer: 'A BST keeps order.' })],
+        }),
+      );
+
+      expect(report.context?.recentEvents[0]?.payload).toEqual({
+        taskId: 't1',
+        answer: 'A BST keeps order.',
+      });
+    });
+
+    it('cuts it to the context budget rather than dropping the event', () => {
+      const long = 'y'.repeat(LEARNER_ANSWER_CHARACTERS);
+      const report = buildAgentContext(
+        source({ events: [rawEvent('TASK_COMPLETED', { taskId: 't1', answer: long })] }),
+      );
+
+      const payload = report.context?.recentEvents[0]?.payload as { answer?: string };
+      expect(payload.answer).toHaveLength(AGENT_CONTEXT_LIMITS.answerCharacters);
+      expect(report.omissions.filter((omission) => omission.field === 'events')).toEqual([]);
+    });
+
+    /*
+     * Longer than the record's own bound means the caller is not the screen — nothing in this product
+     * writes an answer that big — so the whole event is refused rather than trimmed. The difference
+     * matters: a context that quietly truncated it would tell a model the learner's account was shorter
+     * than it is.
+     */
+    it('refuses an answer longer than the record keeps', () => {
+      const report = buildAgentContext(
+        source({
+          events: [
+            rawEvent('TASK_COMPLETED', {
+              taskId: 't1',
+              answer: 'y'.repeat(LEARNER_ANSWER_CHARACTERS + 1),
+            }),
+          ],
+        }),
+      );
+
+      expect(report.context?.recentEvents).toEqual([]);
+    });
+
+    it('refuses an answer that is not a non-empty string', () => {
+      for (const answer of ['', 42, null, { text: 'hi' }, ['hi']]) {
+        const report = buildAgentContext(
+          source({ events: [rawEvent('TASK_COMPLETED', { taskId: 't1', answer })] }),
+        );
+        expect(report.context?.recentEvents, JSON.stringify(answer)).toEqual([]);
+      }
+    });
   });
 });
 

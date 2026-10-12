@@ -87,7 +87,15 @@ type EmptyAgentContextPayload = Record<string, never>;
 export type AgentContextEvent =
   | AgentContextEventBase<'SESSION_STARTED', EmptyAgentContextPayload>
   | AgentContextEventBase<'TASK_STARTED', { readonly taskId: string }>
-  | AgentContextEventBase<'TASK_COMPLETED', { readonly taskId: string }>
+  /*
+   * The learner's own words about the step, bounded by `AGENT_CONTEXT_LIMITS.answerCharacters`.
+   *
+   * This is the field the whole "does the agent know what they learned" question turns on, and it is
+   * bounded here rather than trusted from the payload: the event may hold
+   * `LEARNER_ANSWER_CHARACTERS` of prose, which is far too much to put in every prompt that ever lists
+   * the log. Absent means they completed the step without writing anything — a fact, not a gap.
+   */
+  | AgentContextEventBase<'TASK_COMPLETED', { readonly taskId: string; readonly answer?: string }>
   | AgentContextEventBase<
       'HELP_REQUESTED',
       { readonly taskId?: string; readonly reason?: StuckReason }
@@ -189,6 +197,15 @@ export const AGENT_CONTEXT_LIMITS = {
    * course this product has.
    */
   eventListItems: 32,
+  /**
+   * Upper bound for the learner's own account of a step.
+   *
+   * Smaller than what the event may hold, and deliberately so: `LEARNER_ANSWER_CHARACTERS` is the bound
+   * on the *record*, this is the bound on the *prompt*. A learner's paragraph is worth having in the
+   * context; their pasted essay is not worth spending the material and event budgets on, so it is cut
+   * here instead of squeezing the things the agent needs to answer the question it was asked.
+   */
+  answerCharacters: 600,
   checkpointTextCharacters: 320,
   checkpointItems: 6,
   checkpointParams: 4,

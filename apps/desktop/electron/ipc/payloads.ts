@@ -9,6 +9,7 @@ import type {
   InsightsRequest,
   Locale,
   ProposeStructuralChangeRequest,
+  QuizAnswerRequest,
   ResumeDecisionRequest,
   ResolveInterventionRequest,
   SetAmbientSoundRequest,
@@ -106,6 +107,7 @@ export const payload = {
   insights: (range: InsightRange): InsightsRequest => ({ range }),
   askTutor: (request: TutorAskRequest): TutorAskRequest => request,
   dispatchEvent: (request: DispatchEventRequest): DispatchEventRequest => request,
+  answerQuiz: (request: QuizAnswerRequest): QuizAnswerRequest => request,
   proposeStructuralChange: (
     request: ProposeStructuralChangeRequest,
   ): ProposeStructuralChangeRequest => request,

@@ -8,6 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **The step asks what you came up with, and answers back.** A running step now offers the one thing
+  the loop was missing: a place to produce something. Every step carries a box for the learner's own
+  words — the text travels with the completion, so the checkpoint and every prompt an agent builds know
+  what was written rather than only that a button was pressed — with a button that hands that text to
+  the tutor in **Check my answer**, filled in and opened rather than sent. A step whose kind is `quiz`
+  shows its question and its options instead, and is graded **in the main process**: the screen sends
+  the option and is told the verdict, which marks the right answer next to the one that was chosen and
+  explains why. That also gives `QUIZ_CORRECT` / `QUIZ_INCORRECT` a producer inside the app again —
+  since the simulator bar was removed nothing could emit them, so the state machine's confused branch,
+  the dashboard's "progressed" count and the intervention outcomes had no way to be reached by a
+  learner. The learner's answer is bounded (`LEARNER_ANSWER_CHARACTERS`) where it is written, refused at
+  the IPC boundary past that, and cut to a smaller budget (`AGENT_CONTEXT_LIMITS.answerCharacters`) on
+  the way to a model.
 - **An optional quiet layer, generated in the app rather than shipped (#57).** Brown noise through a
   low-pass filter, off until the learner asks for it, offered as a small quiet control in the focus
   screen's session row — beside the session state and End session, never inside the task box, whose

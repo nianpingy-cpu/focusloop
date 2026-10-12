@@ -8,6 +8,7 @@ import type { FocusLoopService } from '../service';
 import type { EventRouter } from '../event-router';
 import {
   parseConfirmProposal,
+  parseAnswerQuiz,
   parseCourseId,
   parseDeleteAllData,
   parseDispatchRequest,
@@ -138,6 +139,21 @@ export function createHandlers(service: FocusLoopService, router: EventRouter) {
       channel: IPC_CHANNELS.dispatchEvent,
       parse: parseDispatchRequest,
       handle: (request) => router.dispatch(request),
+    }),
+    /*
+     * Through the router's publish, exactly as the simulator does it: a right answer moves the state
+     * machine to FOCUSED and a second wrong one moves it to CONFUSED, so the window has to be told in
+     * the same step rather than waiting for a tick to carry it (#204). The engine applies and this
+     * tells; the response the caller gets back is the same object.
+     */
+    defineHandler({
+      channel: IPC_CHANNELS.answerQuiz,
+      parse: parseAnswerQuiz,
+      handle: (request) => {
+        const response = engine.answerQuiz(request);
+        router.publish(response);
+        return response;
+      },
     }),
     defineHandler({
       channel: IPC_CHANNELS.listEvents,

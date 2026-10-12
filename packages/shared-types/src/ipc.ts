@@ -10,6 +10,7 @@ import type {
   DiscoverModelsResult,
 } from './llm-settings';
 import type { Course } from './course';
+import type { QuizAnswerRequest, QuizAnswerResult } from './quiz';
 import type { LearningCheckpoint } from './checkpoint';
 import type { DashboardSummary } from './dashboard';
 import type { AgentProposalProposedEvent, LearningEvent, SessionEndReason } from './events';
@@ -61,6 +62,7 @@ export const IPC_CHANNELS = {
   getCurrentSession: 'focusloop:session:current',
   getSessionProgress: 'focusloop:session:progress',
   dispatchEvent: 'focusloop:event:dispatch',
+  answerQuiz: 'focusloop:quiz:answer',
   listEvents: 'focusloop:event:list',
   getCheckpoint: 'focusloop:checkpoint:latest',
   createCheckpoint: 'focusloop:checkpoint:create',
@@ -210,6 +212,19 @@ export interface DispatchEventResponse {
   readonly decision: InterventionDecision | null;
   readonly interventionId: string | null;
   readonly rescue: RescueView | null;
+}
+
+/**
+ * What answering a quiz comes back with.
+ *
+ * A dispatch's response *and* the verdict, because answering a quiz is a dispatch: the state machine
+ * moves on `QUIZ_CORRECT` / `QUIZ_INCORRECT`, the policy may speak, and the screen needs all of that
+ * as well as the right/wrong it has to show. Returning only the verdict would leave the screen to make
+ * a second call and reconcile two answers, and returning only the dispatch would leave the learner
+ * without the explanation.
+ */
+export interface QuizAnswerResponse extends DispatchEventResponse {
+  readonly quiz: QuizAnswerResult;
 }
 
 export interface ResolveInterventionRequest {
@@ -393,6 +408,15 @@ export interface FocusLoopApi {
   getSessionProgress(sessionId: string): Promise<SessionProgress | null>;
 
   dispatchEvent(request: DispatchEventRequest): Promise<DispatchEventResponse>;
+  /**
+   * Answers the quiz attached to a step, and is told whether it was right.
+   *
+   * A channel of its own rather than a `dispatchEvent` with a `QUIZ_CORRECT` in it, because the screen
+   * does not know which of the two it is: it sends the option the learner picked and the main process
+   * compares it against the course row. A renderer that decided this would be grading its own
+   * homework — and it is the one caller that could be wrong about the answer without anyone noticing.
+   */
+  answerQuiz(request: QuizAnswerRequest): Promise<QuizAnswerResponse>;
   listEvents(sessionId: string): Promise<readonly LearningEvent[]>;
 
   getLatestCheckpoint(sessionId: string): Promise<LearningCheckpoint | null>;

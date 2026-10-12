@@ -33,6 +33,7 @@ import type {
   TestModelResult,
   DiscoverModelsRequest,
   DiscoverModelsResult,
+  QuizAnswerResponse,
   ResumeCardView,
   RescueView,
   TutorAnswer,
@@ -177,6 +178,16 @@ export class AppStateService {
     readonly taskId: string | null;
     readonly answer: TutorAnswer;
   } | null>(null);
+  /**
+   * A request from a step's answer box to the tutor panel: this text, in this mode, opened.
+   *
+   * The signal's *identity* is the message — every request is a fresh object and the panel consumes
+   * each one once. A boolean or a counter would need clearing, and clearing it is a second place that
+   * knows whether the request has been handled, which is the shape of bug this avoids.
+   */
+  readonly tutorCheckRequest = signal<{ readonly mode: TutorMode; readonly text: string } | null>(
+    null,
+  );
   readonly locale = signal<Locale>(DEFAULT_LOCALE);
   readonly theme = signal<ThemePreference>(DEFAULT_THEME);
   /**
@@ -530,6 +541,41 @@ export class AppStateService {
        */
       this.tutorAnswer.set(null);
     });
+  }
+
+  /**
+   * Hands the step's answer to the tutor panel, with the mode that checks it.
+   *
+   * The panel owns whether it is open, what is in its box and which mode is chosen, so this asks rather
+   * than does. It fills the box and opens; it does **not** send. A model call the learner did not press
+   * for — spending a request, on text they can no longer edit — is the one thing this must not do, and
+   * leaving the last press to them is also what lets them correct a typo before it costs anything.
+   */
+  requestTutorCheck(mode: TutorMode, text: string): void {
+    this.tutorCheckRequest.set({ mode, text });
+  }
+
+  /**
+   * Answers the quiz this step asks, and returns the verdict for the screen to show.
+   *
+   * The grading is the main process's (see `focusloop:quiz:answer`): the screen sends the option and is
+   * told whether it was right, which is also what makes the event the state machine reacts to a fact
+   * rather than a renderer's opinion about a question it happens to be holding.
+   */
+  async answerQuiz(taskId: string, choiceIndex: number): Promise<QuizAnswerResponse | null> {
+    const snapshot = this.snapshot();
+    if (snapshot === null) return null;
+    let response: QuizAnswerResponse | null = null;
+    await this.run(async () => {
+      response = await this.api.answerQuiz({
+        sessionId: snapshot.session.id,
+        taskId,
+        choiceIndex,
+      });
+      this.applyResponse(response);
+      await this.reloadSnapshot();
+    });
+    return response;
   }
 
   /**

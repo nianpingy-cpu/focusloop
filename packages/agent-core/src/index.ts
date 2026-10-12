@@ -8,6 +8,7 @@
 
 export * from './demo-course';
 export * from './course-copy';
+export * from './quiz';
 export * from './micro-task-generator';
 export * from './agent-context';
 export * from './tutor';

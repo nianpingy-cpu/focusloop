@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProviderError, createProviderSelection } from '@focusloop/llm-provider';
 import {
   DEFAULT_RESUME_POLICY_CONFIG,
+  LEARNER_ANSWER_CHARACTERS,
   TUTOR_LIMITS,
   type AIProvider,
   type CompletionRequest,
   type Course,
+  type LearningEvent,
   type RescueOutcomeSummary,
 } from '@focusloop/shared-types';
 import { EngineError, FocusLoopEngine } from './engine';
@@ -312,6 +314,156 @@ describe('FocusLoopEngine', () => {
       } finally {
         local.close();
       }
+    });
+  });
+
+  /*
+   * Answering the quiz a step asks, and saying what you came up with (#…).
+   *
+   * The two halves of the loop that did not exist: the app could not produce a `QUIZ_CORRECT` at all
+   * after the simulator bar was removed, and a completion carried nothing but a task id, so the
+   * checkpoint's "mastered" list and the agent's view of the session were built on clicks. These are
+   * the tests that fail if either half goes back to being decorative.
+   */
+  describe('answering a step', () => {
+    const startQuizStep = (): string => {
+      const session = ctx.engine.startSession(DEMO_COURSE_ID).session;
+      // `rbt-t4` is the demo course's quiz step, and `rbt-q1` is its quiz with the answer at index 1.
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t4' },
+      });
+      return session.id;
+    };
+
+    it('tells the learner their choice was right, and records it', () => {
+      const sessionId = startQuizStep();
+      const response = ctx.engine.answerQuiz({ sessionId, taskId: 'rbt-t4', choiceIndex: 1 });
+
+      expect(response.quiz).toEqual({
+        quizId: 'rbt-q1',
+        correct: true,
+        answerIndex: 1,
+        explanation: 'The red-red rule is one of the five invariants and admits no exceptions.',
+      });
+      expect(response.event.type).toBe('QUIZ_CORRECT');
+      expect(response.event.payload).toEqual({ taskId: 'rbt-t4', quizId: 'rbt-q1' });
+      const stored = ctx.store.listEvents(sessionId).map((event) => event.type);
+      expect(stored).toContain('QUIZ_CORRECT');
+    });
+
+    it('tells them it was wrong, names the right option, and records that instead', () => {
+      const sessionId = startQuizStep();
+      const response = ctx.engine.answerQuiz({ sessionId, taskId: 'rbt-t4', choiceIndex: 0 });
+
+      expect(response.quiz).toMatchObject({ correct: false, answerIndex: 1 });
+      expect(response.event.type).toBe('QUIZ_INCORRECT');
+      expect(ctx.store.listEvents(sessionId).map((event) => event.type)).toContain(
+        'QUIZ_INCORRECT',
+      );
+    });
+
+    /*
+     * The refusal, which is the half that keeps the record honest. A choice that is not an option did
+     * not come from this screen, and writing "incorrect" for it would put a wrong answer against the
+     * learner for a question they were never asked.
+     */
+    it('refuses a choice that is not one of the options, and writes nothing', () => {
+      const sessionId = startQuizStep();
+      expect(() =>
+        ctx.engine.answerQuiz({ sessionId, taskId: 'rbt-t4', choiceIndex: 7 }),
+      ).toThrowError(expect.objectContaining({ code: 'quiz-not-answerable' }));
+      expect(ctx.store.listEvents(sessionId).map((event) => event.type)).not.toContain(
+        'QUIZ_INCORRECT',
+      );
+    });
+
+    /*
+     * Only the step in front of the learner. `rbt-t3` has a quiz of its own (`rbt-q2`), so this is a
+     * real quiz being refused — not a missing one — which is the case that would otherwise move the
+     * state machine on the strength of a question the learner cannot see.
+     */
+    it('refuses a quiz for a step the learner is not on', () => {
+      const sessionId = startQuizStep();
+      expect(() =>
+        ctx.engine.answerQuiz({ sessionId, taskId: 'rbt-t3', choiceIndex: 0 }),
+      ).toThrowError(expect.objectContaining({ code: 'quiz-not-answerable' }));
+    });
+
+    it('refuses a step that asks no quiz at all', () => {
+      const session = ctx.engine.startSession(DEMO_COURSE_ID).session;
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+      expect(() =>
+        ctx.engine.answerQuiz({ sessionId: session.id, taskId: 'rbt-t1', choiceIndex: 0 }),
+      ).toThrowError(expect.objectContaining({ code: 'quiz-not-answerable' }));
+    });
+  });
+
+  describe('what a completion carries', () => {
+    const completedEvent = (sessionId: string): LearningEvent | undefined =>
+      ctx.store.listEvents(sessionId).find((event) => event.type === 'TASK_COMPLETED');
+
+    it('stores the learner’s answer with the step they finished', () => {
+      const session = ctx.engine.startSession(DEMO_COURSE_ID).session;
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_COMPLETED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1', answer: '  Every left descendant is smaller.  ' },
+      });
+
+      expect(completedEvent(session.id)?.payload).toEqual({
+        taskId: 'rbt-t1',
+        answer: 'Every left descendant is smaller.',
+      });
+    });
+
+    /*
+     * "They wrote nothing" is the absence of the field, not a blank string. A model shown `answer: ''`
+     * would read an answer that happened to be empty, and every later reader would have to know that the
+     * two meant the same thing.
+     */
+    it('leaves the answer out when there is nothing to carry', () => {
+      const session = ctx.engine.startSession(DEMO_COURSE_ID).session;
+      for (const payload of [
+        { taskId: 'rbt-t1' },
+        { taskId: 'rbt-t1', answer: '   ' },
+        { taskId: 'rbt-t1', answer: 42 },
+      ]) {
+        ctx.engine.dispatch({
+          sessionId: session.id,
+          type: 'TASK_COMPLETED',
+          source: 'user',
+          payload,
+        });
+      }
+
+      for (const event of ctx.store
+        .listEvents(session.id)
+        .filter((entry) => entry.type === 'TASK_COMPLETED')) {
+        expect(event.payload).toEqual({ taskId: 'rbt-t1' });
+      }
+    });
+
+    it('cuts an answer longer than the record keeps', () => {
+      const session = ctx.engine.startSession(DEMO_COURSE_ID).session;
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_COMPLETED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1', answer: 'x'.repeat(LEARNER_ANSWER_CHARACTERS + 500) },
+      });
+
+      expect(String(completedEvent(session.id)?.payload['answer'])).toHaveLength(
+        LEARNER_ANSWER_CHARACTERS,
+      );
     });
   });
 

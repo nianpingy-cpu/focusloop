@@ -5,8 +5,10 @@ import {
   isStuckReason,
   isThemePreference,
   isTutorMode,
+  LEARNER_ANSWER_CHARACTERS,
   LEARNING_EVENT_TYPES,
   MODEL_API_KEY_MAX_LENGTH,
+  QUIZ_LIMITS,
   SESSION_END_REASONS,
   TUTOR_LIMITS,
   type ConfirmDeleteDataRequest,
@@ -18,6 +20,7 @@ import {
   type ImportMaterialRequest,
   type InsightsRequest,
   type LearningEvent,
+  type QuizAnswerRequest,
   type ResumeDecisionRequest,
   type ResolveInterventionRequest,
   type ResolveRescueRequest,
@@ -139,6 +142,25 @@ export function parseDispatchRequest(channel: string, value: unknown): DispatchE
     const reason = fields['reason'];
     if (reason !== undefined && !isStuckReason(reason)) {
       fail(channel, '"reason" must be a known stuck reason when present');
+    }
+  }
+
+  /*
+   * `TASK_COMPLETED` is the other one that is read rather than carried, because its `answer` is the
+   * learner's own prose: it is stored, it is shown back to them, and it is put in front of a model. The
+   * engine bounds it too — the bridge writes through the same door — but a value this size is refused
+   * here rather than silently cut there, so a caller that is not the screen is told rather than served.
+   */
+  if (type === 'TASK_COMPLETED') {
+    const answer = fields['answer'];
+    if (
+      answer !== undefined &&
+      (typeof answer !== 'string' || answer.length > LEARNER_ANSWER_CHARACTERS)
+    ) {
+      fail(
+        channel,
+        `"answer" must be a string of at most ${LEARNER_ANSWER_CHARACTERS} characters when present`,
+      );
     }
   }
 
@@ -388,6 +410,32 @@ export function parseResolveRescue(channel: string, value: unknown): ResolveResc
     sessionId: asString(channel, record, 'sessionId'),
     interventionId: asString(channel, record, 'interventionId'),
     resolution,
+  };
+}
+
+/**
+ * Validates the payload of `focusloop:quiz:answer`.
+ *
+ * The index is checked against the range a quiz may have rather than against this course's options —
+ * the options live in the main process, and the engine is what refuses a choice that is not one of
+ * them. What is refused here is the shape: a negative index, a fraction, or a number larger than any
+ * quiz the product will render is not a choice that came from a screen.
+ */
+export function parseAnswerQuiz(channel: string, value: unknown): QuizAnswerRequest {
+  const record = asRecord(channel, value);
+  const choiceIndex = record['choiceIndex'];
+  if (
+    typeof choiceIndex !== 'number' ||
+    !Number.isInteger(choiceIndex) ||
+    choiceIndex < 0 ||
+    choiceIndex >= QUIZ_LIMITS.options
+  ) {
+    fail(channel, `"choiceIndex" must be an integer from 0 to ${QUIZ_LIMITS.options - 1}`);
+  }
+  return {
+    sessionId: asString(channel, record, 'sessionId'),
+    taskId: asString(channel, record, 'taskId'),
+    choiceIndex,
   };
 }
 

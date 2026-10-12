@@ -339,6 +339,28 @@ const en = {
   'focus.notice.break': 'Rest for 3 minutes',
   'focus.notice.timeUpBody': 'Your position is kept. Take another minute if you need it.',
   'focus.complete': 'Complete task',
+  /*
+   * The step's answer, and the quiz it may ask instead (#…).
+   *
+   * The two halves of the interaction the app was missing: a place to say what you came up with, and a
+   * question that tells you whether you got it right. The wording says what the box is *for* — an agent
+   * reads it later — rather than asking for homework, because that is the reason it is worth typing.
+   */
+  'focus.answer.title': 'What you came up with',
+  'focus.answer.hint':
+    'This goes with the step, so the agent knows what you understood — not just that you finished.',
+  'focus.answer.placeholder.read': 'Say it in your own words…',
+  'focus.answer.placeholder.practice': 'Write what you did, or what you got…',
+  'focus.answer.placeholder.quiz': 'Write your answer…',
+  'focus.answer.tooLong': 'Keep it under {count} characters.',
+  'focus.answer.check': 'Have the tutor check it',
+  'focus.quiz.title': 'This step asks a question',
+  'focus.quiz.options': 'Answers to choose from',
+  'focus.quiz.check': 'Check my answer',
+  'focus.quiz.correct': 'Right — that is the answer.',
+  'focus.quiz.incorrect': 'Not this one. The right answer is marked.',
+  'focus.quiz.why': 'Why',
+  'focus.quiz.answered': 'Answered',
   'focus.noTask': 'No task in progress.',
   'focus.upNext': 'Up next',
   'focus.startTask': 'Start',

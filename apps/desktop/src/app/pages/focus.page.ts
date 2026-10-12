@@ -11,7 +11,12 @@ import {
 } from '@angular/core';
 import type { ElementRef, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import type { MicroTask, MicroTaskKind, StuckReason } from '@focusloop/shared-types';
+import type {
+  MicroTask,
+  MicroTaskKind,
+  QuizAnswerResult,
+  StuckReason,
+} from '@focusloop/shared-types';
 import { STUCK_REASONS, applyTaskOrder } from '@focusloop/shared-types';
 import { AppStateService } from '../core/app-state.service';
 import {
@@ -35,6 +40,14 @@ import { FocusTimerService } from '../core/focus-timer.service';
 import { PLAN_INITIAL_OPEN, nextPlanOpen, type PlanEvent } from '../core/plan-visibility';
 import { dropIndexFor, reorder, sameOrder } from '../core/task-order';
 import { helpRequestPayload } from '../core/stuck-picker';
+import {
+  answerTooLong,
+  canCheckAnswer,
+  canCheckQuiz,
+  quizVerdictKey,
+  stepAnswerView,
+} from '../core/step-answer';
+import type { MessageKey } from '../core/i18n/messages.en';
 import { TutorPanelComponent } from '../components/tutor-panel.component';
 import { FocusNoticeComponent } from '../components/focus-notice.component';
 
@@ -196,6 +209,102 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                   <span class="chip" data-testid="task-kind">{{ kind(currentTask.kind) }}</span>
                   <span class="muted small">{{ estimate(currentTask.estimatedMinutes) }}</span>
                 </div>
+
+                <!--
+                  What the step asks the learner to produce, and the one place they can say it.
+
+                  Without this the only thing a completion carried was the task id: the checkpoint's
+                  "mastered" list, the quiz events the state machine listens for and everything a model
+                  could be told about the session were all built on a button press. So a quiz step shows
+                  its question and its options and is graded in the main process, and every other step
+                  offers a box whose text travels with the completion and can be handed to the tutor.
+                -->
+                @if (answerView(); as step) {
+                  <div class="step-answer" data-testid="step-answer">
+                    @if (step.quiz; as quiz) {
+                      <p class="eyebrow">{{ t('focus.quiz.title') }}</p>
+                      <p class="step-answer__question" data-testid="quiz-question">
+                        {{ quiz.question }}
+                      </p>
+                      <div
+                        class="step-answer__options"
+                        role="group"
+                        [attr.aria-label]="t('focus.quiz.options')"
+                      >
+                        @for (option of quiz.options; track $index) {
+                          <button
+                            type="button"
+                            class="btn step-answer__option"
+                            [attr.data-testid]="'quiz-option-' + $index"
+                            [attr.data-mark]="optionMark($index)"
+                            [class.is-chosen]="choice() === $index"
+                            [attr.aria-pressed]="choice() === $index"
+                            (click)="chooseOption($index)"
+                          >
+                            {{ option }}
+                          </button>
+                        }
+                      </div>
+                      <div class="step-answer__actions">
+                        <button
+                          type="button"
+                          class="btn btn--small btn--primary"
+                          data-testid="quiz-check"
+                          [disabled]="!quizCheckable()"
+                          (click)="checkQuiz()"
+                        >
+                          {{ t('focus.quiz.check') }}
+                        </button>
+                      </div>
+                      @if (verdict(); as result) {
+                        <p
+                          class="step-answer__verdict"
+                          [attr.data-correct]="result.correct"
+                          role="status"
+                          data-testid="quiz-verdict"
+                        >
+                          {{ t(verdictKey(result.correct)) }}
+                        </p>
+                        <p class="muted small" data-testid="quiz-explanation">
+                          {{ t('focus.quiz.why') }}: {{ result.explanation }}
+                        </p>
+                      }
+                    } @else {
+                      <label class="eyebrow" for="step-answer">
+                        {{ t('focus.answer.title') }}
+                      </label>
+                      <textarea
+                        id="step-answer"
+                        class="step-answer__input"
+                        rows="3"
+                        [attr.maxlength]="step.maxCharacters"
+                        [placeholder]="t(step.placeholderKey)"
+                        data-testid="step-answer-input"
+                        [value]="answer()"
+                        (input)="onAnswerInput($event)"
+                      ></textarea>
+                      <p class="muted small step-answer__hint">
+                        {{ t('focus.answer.hint') }}
+                      </p>
+                      @if (answerTooLong()) {
+                        <p class="step-answer__error" role="alert" data-testid="answer-too-long">
+                          {{ t('focus.answer.tooLong', { count: answerLimit() }) }}
+                        </p>
+                      }
+                      <div class="step-answer__actions">
+                        <button
+                          type="button"
+                          class="btn btn--small"
+                          data-testid="answer-check"
+                          [disabled]="!answerCheckable()"
+                          (click)="checkAnswer()"
+                        >
+                          {{ t('focus.answer.check') }}
+                        </button>
+                      </div>
+                    }
+                  </div>
+                }
               </div>
               <div class="focus-clock" role="timer" [attr.aria-label]="t('focus.timerAria')">
                 <svg class="focus-clock__svg" viewBox="0 0 200 200" aria-hidden="true">
@@ -871,6 +980,8 @@ export class FocusPage implements OnDestroy, OnInit {
     this.focusTimer.sync(sessionId, taskId, now);
     const task = this.findTask(taskId);
     this.completedView.set(false);
+    // The box, the chosen option and the verdict belong to the step they were made on.
+    this.clearStepAnswer();
     this.focusTimer.set(
       startTimer(resetTimer(minutes ?? Math.max(1, task?.estimatedMinutes ?? 1)), now),
     );
@@ -895,10 +1006,114 @@ export class FocusPage implements OnDestroy, OnInit {
   protected async complete(taskId: string): Promise<void> {
     // The next step is previewed without the plan laid back over it.
     this.applyPlanEvent('finish');
-    await this.state.dispatch('TASK_COMPLETED', { taskId });
+    /*
+     * The learner's own words go with the completion when there are any, and the field is left out
+     * entirely when there are not: "they finished it and said nothing" and "they wrote nothing" are the
+     * same fact, and the engine keeps them as one by dropping a blank answer rather than storing it.
+     *
+     * The box is cleared with the step. A conversation left in the field would be carried onto the next
+     * step by whoever forgets to clear it — and the answer belongs to the step it was written for.
+     */
+    const answer = this.answer().trim();
+    await this.state.dispatch('TASK_COMPLETED', {
+      taskId,
+      ...(answer === '' ? {} : { answer }),
+    });
+    this.clearStepAnswer();
     this.clearTimer();
     this.focusTimer.set(createFocusTimer());
     this.completedView.set(true);
+  }
+
+  /**
+   * The step's answer box and quiz, read from the course the step came out of.
+   *
+   * `null` while nothing is running, and the quiz half is null for every step that does not ask a
+   * question — `stepAnswerView` is what decides that, and what keeps the key to the answer out of the
+   * renderer's hands.
+   */
+  protected readonly answerView = computed(() =>
+    stepAnswerView(this.state.currentCourse(), this.task()),
+  );
+
+  protected readonly answer = signal('');
+  protected readonly choice = signal<number | null>(null);
+  protected readonly verdict = signal<QuizAnswerResult | null>(null);
+
+  protected readonly answerTooLong = computed(() => {
+    const view = this.answerView();
+    return view !== null && answerTooLong(this.answer(), view.maxCharacters);
+  });
+
+  /** The bound as text, for the one line that names it — the template cannot interpolate one itself. */
+  protected readonly answerLimit = computed(() => {
+    const view = this.answerView();
+    return view === null ? '' : `${view.maxCharacters}`;
+  });
+
+  /**
+   * What the tutor is asked about, which is the text in the box and nothing else.
+   *
+   * `CHECK_MY_ANSWER` is the mode that quotes the learner's own words back at them, so the box and the
+   * mode belong together: the step's button asks the tutor to check *this*, rather than asking a
+   * question about the step in general.
+   */
+  protected readonly answerCheckable = computed(
+    () =>
+      this.answerView()?.quiz === null && canCheckAnswer(this.answer()) && !this.answerTooLong(),
+  );
+
+  protected readonly quizCheckable = computed(
+    () => this.verdict() === null && canCheckQuiz(this.choice()),
+  );
+
+  protected onAnswerInput(event: Event): void {
+    this.answer.set((event.target as HTMLTextAreaElement).value);
+  }
+
+  protected chooseOption(index: number): void {
+    this.choice.set(index);
+    // A new choice invalidates the verdict it replaces: the marks belong to the answer on screen.
+    this.verdict.set(null);
+  }
+
+  /** Which mark an option carries once there is a verdict: the one that was right, or the one chosen. */
+  protected optionMark(index: number): 'right' | 'wrong' | 'none' {
+    const result = this.verdict();
+    if (result === null) return 'none';
+    if (index === result.answerIndex) return 'right';
+    return index === this.choice() ? 'wrong' : 'none';
+  }
+
+  protected verdictKey(correct: boolean): MessageKey {
+    return quizVerdictKey(correct);
+  }
+
+  /**
+   * Sends the chosen option to the main process, which is the only thing that knows the answer.
+   *
+   * A refusal (the engine's `quiz-not-answerable`, or a bridge failure) leaves the step exactly as it
+   * was: no verdict is set, so the button stays pressable and the learner can try again. The error
+   * itself is the service's business — it is already in the banner.
+   */
+  protected async checkQuiz(): Promise<void> {
+    const task = this.task();
+    const index = this.choice();
+    if (task === null || index === null || !this.quizCheckable()) return;
+    const response = await this.state.answerQuiz(task.id, index);
+    if (response !== null) this.verdict.set(response.quiz);
+  }
+
+  protected checkAnswer(): void {
+    if (!this.answerCheckable()) return;
+    this.state.requestTutorCheck('CHECK_MY_ANSWER', this.answer().trim());
+  }
+
+  /** The box and its verdict belong to one step: nothing of them survives starting another. */
+  private clearStepAnswer(): void {
+    this.answer.set('');
+    this.choice.set(null);
+    this.verdict.set(null);
   }
   /**
    * The learner's own call, like the material text: the layer is offered rather than assumed, and

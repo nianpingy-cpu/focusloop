@@ -2229,6 +2229,127 @@ code {
   min-width: 0;
 }
 
+/*
+ * The step's answer, and the quiz it may ask instead.
+ *
+ * Inside the copy column rather than beside it: it is part of what the step asks the learner to do, and
+ * it sits where the instructions are. Every colour is a token, and the accent is the focus screen's own
+ * warm one, because this is the running step and not a separate surface.
+ */
+.step-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  max-width: 620px;
+}
+
+.step-answer .eyebrow {
+  color: var(--focus-warm);
+}
+
+.step-answer__input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+/*
+ * The chosen option, and — once there is a verdict — which one was right. The two are separate marks
+ * because the learner's own choice has to stay visible when it was the wrong one: telling somebody the
+ * answer without showing what they picked is not a correction.
+ */
+.step-answer__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.step-answer__option {
+  text-align: left;
+}
+
+.step-answer__option.is-chosen {
+  border-color: var(--focus-warm);
+  background: var(--focus-warm-faint);
+  color: var(--focus-warm);
+}
+
+.step-answer__option[data-mark='right'] {
+  border-color: var(--focus-warm);
+  background: var(--focus-warm-quiet);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.step-answer__option[data-mark='wrong'] {
+  border-color: var(--danger);
+  color: var(--danger);
+  text-decoration: line-through;
+}
+
+.step-answer__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.step-answer__hint,
+.step-answer__verdict {
+  margin: 0;
+}
+
+.step-answer__verdict[data-correct='true'] {
+  color: var(--focus-warm);
+}
+
+.step-answer__verdict[data-correct='false'] {
+  color: var(--danger);
+}
+
+.step-answer__error {
+  margin: 0;
+  color: var(--danger);
+}
+
+/*
+ * In a short window with a notice up, the answer block shrinks to the box and the choice.
+ *
+ * #77 reserves the row above the notice: the task ends where the notice begins, and the whole task —
+ * title included — has to fit above it, which is what `focus-notice.spec.ts` measures at 800x700. An
+ * answer box that pushed the step's own title off the screen would trade the thing the learner is doing
+ * for the thing they are being asked about, so the block gives up what it can spare instead: the label
+ * (the field's own text already says what the box is for), the line explaining why it is worth writing, and
+ * the slack in its padding. A quiz keeps its question and its options, and the block scrolls rather than
+ * growing past its share of the row.
+ */
+.focus-workspace:has(.focus-notice) .step-answer {
+  gap: 4px;
+  margin-top: 0;
+  max-height: 68px;
+  overflow: auto;
+}
+
+.focus-workspace:has(.focus-notice) .step-answer .eyebrow,
+.focus-workspace:has(.focus-notice) .step-answer__hint {
+  display: none;
+}
+
+.focus-workspace:has(.focus-notice) .step-answer__input {
+  height: 40px;
+  min-height: 40px;
+  padding: 2px 8px;
+}
+
+.focus-workspace:has(.focus-notice) .step-answer .btn {
+  padding-block: 2px;
+  font-size: 12px;
+}
+
 .focus-task__action-row {
   display: flex;
   flex-direction: column;
