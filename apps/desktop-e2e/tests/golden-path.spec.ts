@@ -12,6 +12,7 @@ import {
 } from '@playwright/test';
 import { hermeticEnv } from '../hermetic-env.mjs';
 import { fireDemoEvent } from '../demo-events.mjs';
+import { openSidebar } from '../support/sidebar';
 
 const DESKTOP_MAIN = resolve(__dirname, '..', '..', 'desktop', 'dist', 'main', 'main.cjs');
 
@@ -251,7 +252,7 @@ async function pinThroughPeek(): Promise<void> {
  * driven by things that move on their own: a commitment that becomes current folds the
  * sidebar even while a test is looking at it (which is what closing the resume card with
  * Escape invites a moment later), and a recall only holds until the next navigation away
- * from the focus screen hands the choice back to `auto`. "The navigation is reachable" is
+ * from the focus screen returns to the folded default. "The navigation is reachable" is
  * the property under test, and reaching for it again is what a learner would do.
  */
 async function clickSidebarLink(name: string): Promise<void> {
@@ -277,7 +278,7 @@ async function clickSidebarLink(name: string): Promise<void> {
           : 'nav-focus';
     await expect(window.getByTestId(target)).toHaveAttribute('aria-current', 'page');
     // Focus transitions return to the folded default; non-focus assertions may recall the summary.
-    if (target !== 'nav-focus' && (await sidebar.isHidden())) await pinThroughPeek();
+    if (target !== 'nav-focus') await openSidebar(window);
   }).toPass({ timeout: 20_000 });
 }
 

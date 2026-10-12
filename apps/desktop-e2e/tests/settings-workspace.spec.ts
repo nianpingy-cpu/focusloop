@@ -74,6 +74,39 @@ test('sidebar keeps learning navigation; modal General and Models tabs persist p
   }
 });
 
+test('settings remains reachable while leaving a focused session folds the sidebar', async () => {
+  const profile = mkdtempSync(join(tmpdir(), 'focusloop-settings-focus-'));
+  const app = await electron.launch({
+    args: [MAIN, `--user-data-dir=${profile}`],
+    env: hermeticEnv(),
+  });
+  try {
+    const page = await app.firstWindow();
+    await page.getByTestId('course-card').first().getByTestId('start-session').click();
+    await page.getByTestId('start-task').first().click();
+    await expect(page.getByTestId('state')).toHaveAttribute('data-state', 'FOCUSED');
+    await openSidebar(page);
+    await page.getByTestId('nav-dashboard').click();
+    await expect(page.getByTestId('nav-dashboard')).toHaveAttribute('aria-current', 'page');
+    // The logical fold precedes CSS visibility; recall must not mistake the fading panel for open.
+    await expect(page.locator('.shell')).toHaveClass(/is-collapsed/);
+    await openSidebar(page);
+    await expect(page.locator('.shell')).toHaveClass(/is-forced-open/);
+    await expect(page.getByTestId('insights-total')).toBeVisible();
+    const url = page.url();
+    await page.getByTestId('nav-settings').click();
+    await expect(page.getByTestId('general-settings')).toBeVisible();
+    await expect(page.getByTestId('data-path')).toBeVisible();
+    await page.getByTestId('settings-close').click();
+    expect(page.url()).toBe(url);
+    await expect(page.getByTestId('nav-settings')).toBeFocused();
+    await expect(page.getByTestId('insights-total')).toBeVisible();
+  } finally {
+    await app.close();
+    rmSync(profile, { recursive: true, force: true });
+  }
+});
+
 test('settings does not navigate; keyboard tabs and nested-dialog Escape preserve the underlying screen', async () => {
   const profile = mkdtempSync(join(tmpdir(), 'focusloop-settings-return-'));
   const app = await electron.launch({
