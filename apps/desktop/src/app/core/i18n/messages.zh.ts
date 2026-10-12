@@ -303,8 +303,7 @@ export const zh: Record<MessageKey, string> = {
   'focus.notice.timeUpBody': '你的位置已经保留，需要的话可以再加一分钟。',
   'focus.complete': '完成任务',
   'focus.answer.title': '你写下的答案',
-  'focus.answer.hint':
-    '它会跟着这一步一起留下，智能体因此知道你理解到什么程度，而不只是「点了完成」。',
+  'focus.answer.hint': '它会跟着这一步一起留下，智能体才知道你学到了哪一步。',
   'focus.answer.placeholder.read': '用你自己的话说一遍…',
   'focus.answer.placeholder.practice': '写下你做了什么，或者卡在哪…',
   'focus.answer.placeholder.quiz': '写下你的答案…',

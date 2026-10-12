@@ -155,6 +155,13 @@ test('one bottom slot preserves pending choices, priority, keyboard access and t
     `,
     });
     try {
+      /*
+       * 800x700 is narrower than the app's own minimum window, and it is measured with the classically
+       * thick scrollbars above, so it is the one size where the card and the step genuinely cannot both
+       * have the room they want. The stylesheet answers that by making the card the one that yields (it
+       * drops the prose that restates the step it already names, and tightens its own footer), which is
+       * what keeps this assertion — the step, title included, above the card — satisfiable here.
+       */
       for (const viewport of [
         { width: 1024, height: 768 },
         { width: 800, height: 700 },

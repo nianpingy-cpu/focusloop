@@ -347,8 +347,7 @@ const en = {
    * reads it later — rather than asking for homework, because that is the reason it is worth typing.
    */
   'focus.answer.title': 'What you came up with',
-  'focus.answer.hint':
-    'This goes with the step, so the agent knows what you understood — not just that you finished.',
+  'focus.answer.hint': 'It stays with this step, so the agent knows what you learned.',
   'focus.answer.placeholder.read': 'Say it in your own words…',
   'focus.answer.placeholder.practice': 'Write what you did, or what you got…',
   'focus.answer.placeholder.quiz': 'Write your answer…',

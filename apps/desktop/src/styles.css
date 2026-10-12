@@ -2239,7 +2239,7 @@ code {
 .step-answer {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   margin-top: 14px;
   max-width: 620px;
 }
@@ -2303,6 +2303,25 @@ code {
   margin: 0;
 }
 
+/*
+ * The line explaining why writing is worth it arrives with the caret, not before it.
+ *
+ * It is the one piece of chrome here that helps only at the moment of writing, and on a step that
+ * already carries a title, instructions, a timer and a box, a line about the line is what makes the
+ * step read as a form. The space stays reserved (`visibility`, not `display`) so revealing it cannot
+ * move the box, the control under it, or the step's own action.
+ */
+.step-answer__hint {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.step-answer:focus-within .step-answer__hint {
+  visibility: visible;
+  opacity: 1;
+}
+
 .step-answer__verdict[data-correct='true'] {
   color: var(--focus-warm);
 }
@@ -2317,20 +2336,18 @@ code {
 }
 
 /*
- * In a short window with a notice up, the answer block shrinks to the box and the choice.
+ * In a short window with a notice up, the answer block keeps only the box and the choice.
  *
- * #77 reserves the row above the notice: the task ends where the notice begins, and the whole task —
- * title included — has to fit above it, which is what `focus-notice.spec.ts` measures at 800x700. An
- * answer box that pushed the step's own title off the screen would trade the thing the learner is doing
- * for the thing they are being asked about, so the block gives up what it can spare instead: the label
- * (the field's own text already says what the box is for), the line explaining why it is worth writing, and
- * the slack in its padding. A quiz keeps its question and its options, and the block scrolls rather than
- * growing past its share of the row.
+ * #77 reserves the row above the notice: the step ends where the notice begins, and `focus-notice.spec.ts`
+ * brings the whole step into that row at 800x700. What the block gives up there is chrome the box does not
+ * need to be usable — the label above it (its own text already says what it is for) and the line explaining
+ * what happens to what you write (which the step has no room for and the box does not need) — while keeping
+ * the box tall enough to type into and the control beside it the size of a control.
  */
 .focus-workspace:has(.focus-notice) .step-answer {
-  gap: 4px;
+  gap: 8px;
   margin-top: 0;
-  max-height: 68px;
+  max-height: 96px;
   overflow: auto;
 }
 
@@ -2340,14 +2357,14 @@ code {
 }
 
 .focus-workspace:has(.focus-notice) .step-answer__input {
-  height: 40px;
-  min-height: 40px;
-  padding: 2px 8px;
+  height: 44px;
+  min-height: 44px;
+  padding: 6px 10px;
 }
 
 .focus-workspace:has(.focus-notice) .step-answer .btn {
-  padding-block: 2px;
-  font-size: 12px;
+  padding-block: 4px;
+  font-size: 13px;
 }
 
 .focus-task__action-row {
@@ -2385,14 +2402,14 @@ code {
 }
 
 .focus-task .eyebrow {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   color: var(--focus-warm);
 }
 
 .focus-task h2,
 .focus-task h1 {
   max-width: 18ch;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   color: var(--text);
   font-size: clamp(28px, 4vw, 46px);
   font-weight: 600;
@@ -2940,7 +2957,7 @@ body:has(fl-focus .focus-plan[data-open]) .content {
 }
 
 .focus-workspace:has(.focus-notice) .focus-task--active {
-  padding-block: 12px;
+  padding-block: 8px;
   gap: 12px 24px;
 }
 
@@ -2990,11 +3007,24 @@ fl-focus-notice {
   cursor: pointer;
 }
 
+/*
+ * The card shows everything it has, and the strip is bounded by what the step does not need.
+ *
+ * It used to be capped at `min(22dvh, 240px)`, which in a 700px-tall window is 154px — less than the
+ * resume card's own text — so the learner was handed a scrollbar inside a card that had room to grow,
+ * on a strip whose whole point is to be read at a glance. Two things changed: the card is leaner (see
+ * the summary row below), and the cap is now a share of the window rather than a slice of the viewport
+ * height: the strip may take under a third of the workspace, which is what the resume card needs at
+ * every window it is shown in, and the stage keeps the rest. The step scrolls within its own row at
+ * 800x700, which is the one place this is tight, and `focus-notice.spec.ts` is what says so.
+ *
+ * The body carries no animation of its own: it is rebuilt whenever the card is unfolded, so a second
+ * rise inside the card's rise replays on every unfold and reads as a stutter rather than arrival.
+ */
 .focus-notice__body {
-  max-height: min(22dvh, 240px);
+  max-height: min(calc((100dvh - 48px) * 0.32), 420px);
   overflow: auto;
   padding: 0 16px 16px;
-  animation: plan-rise 220ms ease-out;
 }
 
 .focus-notice__choices {
@@ -3036,12 +3066,16 @@ fl-focus-notice {
   margin-bottom: 4px;
 }
 
+/*
+ * The strip is a prompt to get back to work, not a report.
+ *
+ * It keeps what the learner needs to answer "where was I": the step they were on, and the next move.
+ * The completed/unresolved summary is the part of the card that is about the session rather than
+ * about returning to it — the dashboard is where that belongs, and it is 40px of the reserved row
+ * that the step below can use instead of being crushed to make room.
+ */
 .focus-notice .resume__grid {
-  margin-block: 4px;
-}
-
-.focus-notice .resume__grid ul {
-  margin-block: 0;
+  display: none;
 }
 
 .focus-notice .resume__next {
@@ -3059,8 +3093,50 @@ fl-focus-notice {
 
 /* In a narrow window keep the clock beside, rather than above, the task. Leave
    enough copy width even with classic (space-consuming) scrollbars: an extra
-   instruction line otherwise pushes the task beyond the reserved notice row. */
+   instruction line otherwise pushes the task beyond the reserved notice row.
+   
+   The card gives up more here than it does anywhere else, because here it is the
+   only one of the two that can. Its prose says the same thing twice — the heading
+   names the step the learner was on, and the paragraph under it names that step
+   again before adding how long they were away — and at this width that repetition
+   costs the step the height it needs to show its own title and action, which is what
+   #77 keeps it from losing. So the strip keeps the decision: where you were, what is
+   next, and the three ways to answer it. */
 @media (max-width: 900px) {
+  .focus-notice .resume__header .muted {
+    display: none;
+  }
+
+  .focus-notice .resume__actions {
+    margin-top: 0;
+    padding-block: 2px;
+  }
+
+  /* The step's own label, for the same reason: at this width the row the card reserves is measured in
+     the step's title, its instructions and its box, and "Current task" is the one line above them
+     that the heading under it already says. Its own action row is untouched — every control the step
+     offers is still there, at its usual size. */
+  .focus-workspace:has(.focus-notice) .focus-task--active .focus-task__copy > .eyebrow {
+    display: none;
+  }
+
+  .focus-notice__body {
+    padding: 0 14px 12px;
+  }
+
+  /* The step's own controls, in the row the card is competing with: the same buttons, sized so the
+     toolbar stays on one line at this width instead of wrapping under the box the learner is typing
+     into. Their height is the design system's, so the touch target does not change. */
+  .focus-workspace:has(.focus-notice) .focus-controls {
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .focus-workspace:has(.focus-notice) .focus-controls .btn {
+    padding-inline: 10px;
+    font-size: 13px;
+  }
+
   .focus-workspace:has(.focus-notice) .focus-task--active {
     grid-template-columns: minmax(0, 1fr) 80px;
     grid-template-areas: 'copy clock' 'controls controls';
@@ -3094,9 +3170,12 @@ fl-focus-notice {
 
   /* The sheet still arrives — it just appears where it belongs instead of travelling there. */
   .focus-plan[data-open],
-  .focus-notice,
-  .focus-notice__body {
+  .focus-notice {
     animation: none;
+  }
+
+  .step-answer__hint {
+    transition: none;
   }
 }
 
@@ -3104,12 +3183,24 @@ fl-focus-notice {
    wide canvases; let the timer become a clear second column only while a task
    is actually running. */
 .focus-task--ready .focus-task__meta,
-.focus-task--complete .focus-task__meta {
+.focus-task--complete .focus-task__meta,
+.focus-task--active .focus-task__meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
   margin: 0 0 22px;
+}
+
+/* The running step's metas sit between its instructions and its answer box, so the row above the box
+   is the one place the step has to breathe: the chips say what kind of work this is and how long it
+   takes, and the box they introduce is what the learner is being asked to produce. */
+.focus-task--active .focus-task__meta {
+  margin-bottom: 18px;
+}
+
+.focus-workspace:has(.focus-notice) .focus-task--active .focus-task__meta {
+  margin-bottom: 12px;
 }
 
 .focus-task--ready .focus-task__instructions,
