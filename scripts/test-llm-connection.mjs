@@ -11,6 +11,11 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import { loadEnvFile } from 'node:process';
 import { parseArgs } from 'node:util';
 
+/** Emit only the sanitized, machine-readable CLI result, one JSON object per line. */
+function writeResult(result) {
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}
+
 const { values } = parseArgs({
   options: {
     provider: { type: 'string', default: 'compatible' },
@@ -49,27 +54,23 @@ try {
     values.model ??
     (deepseek ? (process.env.DEEPSEEK_MODEL ?? 'deepseek-chat') : process.env.OPENAI_COMPATA_MODEL);
   if (!apiKey || !baseUrl || (!model && !values['list-only'])) {
-    console.log(
-      JSON.stringify({
-        provider: values.provider,
-        ok: false,
-        reason:
-          'Configure credentials and base URL in the environment, and supply --model or a model environment variable',
-      }),
-    );
+    writeResult({
+      provider: values.provider,
+      ok: false,
+      reason:
+        'Configure credentials and base URL in the environment, and supply --model or a model environment variable',
+    });
     process.exitCode = 1;
   } else {
     try {
       if (values['list-only']) {
         const models = await fetchModelList({ providerId: values.provider, apiKey, baseUrl });
-        console.log(
-          JSON.stringify({
-            provider: values.provider,
-            discovery: true,
-            modelCount: models.length,
-            ...(model ? { requestedModelAvailable: models.some((item) => item.id === model) } : {}),
-          }),
-        );
+        writeResult({
+          provider: values.provider,
+          discovery: true,
+          modelCount: models.length,
+          ...(model ? { requestedModelAvailable: models.some((item) => item.id === model) } : {}),
+        });
       } else {
         const provider = new OpenAICompatibleProvider({
           providerId: values.provider,
@@ -79,41 +80,35 @@ try {
           timeoutMs: 30_000,
         });
         const result = await provider.complete({ prompt: 'Reply with OK.', maxTokens: 64 });
-        console.log(
-          JSON.stringify({
-            provider: values.provider,
-            model,
-            ok: true,
-            latencyMs: result.latencyMs,
-            usage: result.usage,
-          }),
-        );
+        writeResult({
+          provider: values.provider,
+          model,
+          ok: true,
+          latencyMs: result.latencyMs,
+          usage: result.usage,
+        });
         let characters = 0;
         let completed = false;
         for await (const event of provider.stream({ prompt: 'Reply with OK.', maxTokens: 64 })) {
           if (event.type === 'text') characters += event.text.length;
           else completed = true;
         }
-        console.log(
-          JSON.stringify({
-            provider: values.provider,
-            model,
-            streaming: completed && characters > 0,
-            characters,
-          }),
-        );
+        writeResult({
+          provider: values.provider,
+          model,
+          streaming: completed && characters > 0,
+          characters,
+        });
         if (!completed || characters === 0) process.exitCode = 1;
       }
     } catch (error) {
       // No raw HTTP bodies, exception text, URLs or credentials leave this script.
-      console.log(
-        JSON.stringify({
-          provider: values.provider,
-          model,
-          ok: false,
-          reason: error?.reason ?? 'bad-response',
-        }),
-      );
+      writeResult({
+        provider: values.provider,
+        model,
+        ok: false,
+        reason: error?.reason ?? 'bad-response',
+      });
       process.exitCode = 1;
     }
   }
