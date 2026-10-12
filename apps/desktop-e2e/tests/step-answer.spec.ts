@@ -47,6 +47,15 @@ test('a step records what the learner wrote, and answers a quiz it asks', async 
     await expect(page.getByTestId('answer-check')).toBeDisabled();
     await expect(page.getByTestId('quiz-question')).toHaveCount(0);
 
+    /*
+     * Beside it, the way in for words the learner already has somewhere else. Only that it is there and
+     * pressable: pressing it opens the operating system's file dialog, which a test cannot drive — the
+     * reading behind it is proven through the channel below and in `electron/answer-source.spec.ts`.
+     */
+    await expect(page.getByTestId('answer-attach')).toBeVisible();
+    await expect(page.getByTestId('answer-attach')).toBeEnabled();
+    await expect(page.getByTestId('answer-source-note')).toHaveCount(0);
+
     await box.fill('Every left descendant is smaller, every right one larger.');
     await expect(page.getByTestId('answer-check')).toBeEnabled();
 

@@ -186,6 +186,14 @@ test('one bottom slot preserves pending choices, priority, keyboard access and t
      * card rather than escaping to the page behind it.
      */
     await expect(page.getByTestId('recall-input')).toBeFocused();
+    /*
+     * The same way in the step has, on the card: words the learner already has somewhere else, without
+     * retyping them. Only that it is there and pressable — pressing it opens the operating system's file
+     * dialog, which a test cannot drive.
+     */
+    await expect(page.getByTestId('recall-attach')).toBeVisible();
+    await expect(page.getByTestId('recall-attach')).toBeEnabled();
+    await expect(page.getByTestId('recall-source-note')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(toggle).toBeFocused();
     // Going to another route and back does not forget the session's presentation choice.
