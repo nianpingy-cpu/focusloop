@@ -164,6 +164,27 @@ export function parseDispatchRequest(channel: string, value: unknown): DispatchE
     }
   }
 
+  /*
+   * `TASK_ANSWERED` is read for the same reason and one more: it has nothing but the learner's prose, so
+   * a payload missing it is not a thinner event but a broken one — it would be stored without its own
+   * subject and then dropped from every agent context, which is a silent loss where a refusal is the
+   * honest answer. Bounded here as well as in the engine because a value this size is refused at the
+   * door rather than quietly cut behind it.
+   */
+  if (type === 'TASK_ANSWERED') {
+    const taskId = fields['taskId'];
+    if (typeof taskId !== 'string' || taskId.length === 0) {
+      fail(channel, '"taskId" must be a non-empty string');
+    }
+    const text = fields['text'];
+    if (typeof text !== 'string' || text.trim().length === 0) {
+      fail(channel, '"text" must be a non-empty string');
+    }
+    if (text.length > LEARNER_ANSWER_CHARACTERS) {
+      fail(channel, `"text" must be at most ${LEARNER_ANSWER_CHARACTERS} characters`);
+    }
+  }
+
   const at = asOptionalString(channel, record, 'at');
   const eventId = asOptionalString(channel, record, 'eventId');
 

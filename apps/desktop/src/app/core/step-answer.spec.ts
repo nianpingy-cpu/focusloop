@@ -9,6 +9,7 @@ import {
   answerTooLong,
   canCheckAnswer,
   canCheckQuiz,
+  quizOptionMark,
   quizVerdictKey,
   stepAnswerView,
 } from './step-answer';
@@ -121,5 +122,32 @@ describe('quizVerdictKey', () => {
   it('says which way it went', () => {
     expect(quizVerdictKey(true)).toBe('focus.quiz.correct');
     expect(quizVerdictKey(false)).toBe('focus.quiz.incorrect');
+  });
+});
+
+/*
+ * Both screens that ask a question mark their options with this, which is what makes the copy and the
+ * marks impossible to disagree: the verdict says "the right answer is marked", and this is the mark.
+ */
+describe('quizOptionMark', () => {
+  const correct = { taskId: 't1', quizId: 'q1', correct: true, answerIndex: 1, explanation: '—' };
+  const incorrect = { ...correct, correct: false };
+
+  it('marks nothing before there is a verdict', () => {
+    expect(quizOptionMark(null, 0, 1)).toBe('none');
+  });
+
+  it('marks the one that was right whether or not they chose it', () => {
+    expect(quizOptionMark(incorrect, 0, 1)).toBe('right');
+    expect(quizOptionMark(correct, 1, 1)).toBe('right');
+  });
+
+  it('keeps their own wrong choice visible, and marks nothing else', () => {
+    expect(quizOptionMark(incorrect, 0, 0)).toBe('wrong');
+    expect(quizOptionMark(incorrect, 0, 2)).toBe('none');
+  });
+
+  it('does not call an unpicked option wrong', () => {
+    expect(quizOptionMark(correct, null, 0)).toBe('none');
   });
 });

@@ -386,6 +386,18 @@ function projectEvent(event: unknown): AgentContextEvent | null {
         payload: answer === undefined ? { taskId } : { taskId, answer },
       } as AgentContextEvent;
     }
+    case 'TASK_ANSWERED': {
+      const taskId = stringField(payload, 'taskId');
+      /*
+       * Required here, unlike the completion's optional answer: an event that exists to carry the
+       * learner's words has nothing else in it, so one without them is a malformed row rather than a
+       * quieter fact. `learnerAnswerField` returns `undefined` only for an absent field, which this
+       * rejects too — the two are one case as far as this projection is concerned.
+       */
+      const text = learnerAnswerField(payload, 'text');
+      if (taskId === null || text === undefined || text === invalidOptional) return null;
+      return { ...common, type, payload: { taskId, text } } as AgentContextEvent;
+    }
     case 'HELP_REQUESTED': {
       const taskId = optionalStringField(payload, 'taskId');
       const reason = optionalStuckReason(payload, 'reason');
@@ -470,7 +482,8 @@ function isLearningEventType(value: unknown): value is LearningEvent['type'] {
     value === 'SESSION_ENDED' ||
     value === 'AGENT_PROPOSAL_EXECUTED' ||
     value === 'AGENT_PROPOSAL_PROPOSED' ||
-    value === 'TASKS_REORDERED'
+    value === 'TASKS_REORDERED' ||
+    value === 'TASK_ANSWERED'
   );
 }
 

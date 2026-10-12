@@ -4,6 +4,7 @@ import {
   type Course,
   type MicroTask,
   type MicroTaskKind,
+  type QuizAnswerResult,
   type QuizView,
 } from '@focusloop/shared-types';
 import type { MessageKey } from './i18n/messages.en';
@@ -86,4 +87,25 @@ export function answerTooLong(answer: string, maxCharacters: number): boolean {
 /** How a verdict reads, as the key the page translates. */
 export function quizVerdictKey(correct: boolean): MessageKey {
   return correct ? 'focus.quiz.correct' : 'focus.quiz.incorrect';
+}
+
+/**
+ * Which mark an option carries once there is a verdict: the one that was right, or the one chosen.
+ *
+ * The two are separate marks because the learner's own choice has to stay visible when it was the wrong
+ * one — and the correct option is marked *whether or not they picked it*, which is the difference
+ * between a correction and a confirmation: "Not this one. The right answer is marked." is a sentence the
+ * screen has to have made true.
+ *
+ * Both surfaces that ask a question share this, because two implementations of "which mark" is one more
+ * than can be kept in step — and the copy is shared too, so the sentence and the marks have to agree.
+ */
+export function quizOptionMark(
+  result: QuizAnswerResult | null,
+  chosen: number | null,
+  index: number,
+): 'right' | 'wrong' | 'none' {
+  if (result === null) return 'none';
+  if (index === result.answerIndex) return 'right';
+  return index === chosen ? 'wrong' : 'none';
 }

@@ -351,6 +351,7 @@ const en = {
   'focus.answer.placeholder.read': 'Say it in your own words…',
   'focus.answer.placeholder.practice': 'Write what you did, or what you got…',
   'focus.answer.placeholder.quiz': 'Write your answer…',
+  'focus.answer.placeholder.recall': 'Say what you still remember…',
   'focus.answer.tooLong': 'Keep it under {count} characters.',
   'focus.answer.check': 'Have the tutor check it',
   'focus.quiz.title': 'This step asks a question',
@@ -366,6 +367,8 @@ const en = {
   'focus.allDone': 'Everything in this course is complete.',
   // The plan states the total so the learner does not have to add up the blocks.
   'focus.plan.remaining': 'about {time} left',
+  'focus.plan.legend':
+    'Each block is one task, and its height is how long it is estimated to take.',
   /*
    * Reordering the plan (#23). The name is the action, because a screen reader announces it out of
    * context in a list: "Reorder Binary search trees" is what the row is for.
@@ -486,6 +489,7 @@ const en = {
   'event.type.AGENT_PROPOSAL_EXECUTED': 'A suggested change was applied',
   'event.type.AGENT_PROPOSAL_PROPOSED': 'Change proposed',
   'event.type.TASKS_REORDERED': 'You changed the order',
+  'event.type.TASK_ANSWERED': 'You wrote an answer',
 
   'event.source.user': 'you',
   'event.source.extension': 'browser extension',
@@ -504,14 +508,18 @@ const en = {
   'resume.nextStep': 'Next step:',
   'resume.minutes': '{minutes} min',
   'resume.continue': 'Continue',
-  'resume.showContext': 'Show context',
   'resume.dismiss': 'Dismiss',
-  'resume.context.checkpoint': 'checkpoint: {id}',
-  'resume.context.shownAt': 'shown at: {at}',
-  'resume.context.completed': 'completed: {items}',
-  'resume.context.unresolved': 'unresolved: {items}',
-  'resume.context.next': 'next: {action}',
-  'resume.context.empty': '—',
+  /*
+   * The check-in on the card.
+   *
+   * "Before you go on" is deliberately not "test": the learner has just come back from being away, and
+   * this asks them to put their own words down — which is what an agent reads later — rather than to
+   * pass anything. The recorded line promises exactly what happened and nothing more.
+   */
+  'resume.recall.title': 'Before you go on',
+  'resume.recall.hint': 'Say what you remember about this step. It is kept with it.',
+  'resume.recall.save': 'Record it',
+  'resume.recall.recorded': 'Recorded. It stays with this step.',
 
   // -------------------------------------------------------- agent panel
   'agent.suggesting': 'Suggestion',

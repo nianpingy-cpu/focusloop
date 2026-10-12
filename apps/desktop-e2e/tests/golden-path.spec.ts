@@ -872,7 +872,11 @@ test('the non-modal resume notice is keyboard reachable and folds without dismis
   const toggle = window.getByTestId('focus-notice-toggle');
   await toggle.focus();
   await window.keyboard.press('Tab');
-  await expect(window.getByTestId('resume-continue')).toBeFocused();
+  /*
+   * The card's first control, which is the check-in's box now that the notice has one. What this pins is
+   * unchanged: Tab from the notice's own toggle reaches the card rather than the page behind it.
+   */
+  await expect(window.getByTestId('recall-input')).toBeFocused();
   await window.keyboard.press('Escape');
   await expect(resume).toBeHidden();
   await expect(toggle).toBeFocused();

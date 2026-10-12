@@ -31,15 +31,16 @@ removed, not footnoted.
 
 ## What FocusLoop stores
 
-| Data                                       | Where                                   | Why                                                                      |
-| ------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------ |
-| Courses, concepts, micro tasks, quizzes    | local SQLite                            | to run a session                                                         |
-| Imported material                          | local SQLite                            | to generate micro tasks                                                  |
-| Sessions, learning events                  | local SQLite                            | to compute the learning state                                            |
-| Checkpoints                                | local SQLite                            | to resume your cognitive position                                        |
-| Interventions and outcomes                 | local SQLite                            | to show whether help actually helped                                     |
-| Resume-card timings                        | local SQLite                            | to measure resume latency                                                |
-| The words you write in a step's answer box | local SQLite, with the completion event | so the agent knows what you produced, not just that you pressed a button |
+| Data                                       | Where                                    | Why                                                                      |
+| ------------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------ |
+| Courses, concepts, micro tasks, quizzes    | local SQLite                             | to run a session                                                         |
+| Imported material                          | local SQLite                             | to generate micro tasks                                                  |
+| Sessions, learning events                  | local SQLite                             | to compute the learning state                                            |
+| Checkpoints                                | local SQLite                             | to resume your cognitive position                                        |
+| Interventions and outcomes                 | local SQLite                             | to show whether help actually helped                                     |
+| Resume-card timings                        | local SQLite                             | to measure resume latency                                                |
+| The words you write in a step's answer box | local SQLite, with the completion event  | so the agent knows what you produced, not just that you pressed a button |
+| The words you write when you come back     | local SQLite, as a `TASK_ANSWERED` event | so what you remembered on the way back in is part of the record          |
 
 The database lives at:
 
@@ -143,7 +144,7 @@ never falls back to a mock success. Neither action enables a model. When a model
   you typed in its box** — the question you asked, or your own answer when you press _Check my
   answer_ from a step. The same goes for a rescue card's generated line. The conversation is kept in
   memory for the session and is never written to the database, so ending the session or deleting your
-  data ends it;
+  data ends it — while the answer itself is written to the event log, as what you produced for that step;
 - your learning events, checkpoints, session history and database are **never** sent;
 - the key is never written to the repository and never persisted to the database. An environment
   variable is read and never stored; a key saved in the app is stored **encrypted by the operating

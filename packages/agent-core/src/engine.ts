@@ -2639,12 +2639,25 @@ function findTask(course: Course | null, taskId: string | null): MicroTask | nul
  * `''`, so "they wrote nothing" keeps being the absence of a field rather than a blank string that a
  * later reader would have to know how to read.
  *
- * Deliberately narrow: it touches `TASK_COMPLETED` and nothing else. Every other event's payload is
- * its builder's business, and a general sanitiser here would quietly become the place where event
- * shapes are decided.
+ * Deliberately narrow: it touches the two events whose payload *is* the learner's prose and nothing
+ * else. Every other event's payload is its builder's business, and a general sanitiser here would
+ * quietly become the place where event shapes are decided.
+ *
+ * `TASK_ANSWERED` loses the field rather than the event, and the difference matters: `text` is why that
+ * event exists, so a payload whose text normalises to nothing is stored without it and then fails the
+ * agent-context projection, which reports it as an invalid event left out rather than showing a model a
+ * row that says "they answered, and the answer was nothing". Only a caller that is not this screen can
+ * reach that state — the box refuses to send an empty answer — which is exactly who should be told.
  */
 function storedPayload(request: DispatchEventRequest): Record<string, unknown> {
   const payload = { ...(request.payload ?? {}) };
+  if (request.type === 'TASK_ANSWERED') {
+    const raw = payload['text'];
+    const text = typeof raw === 'string' ? normaliseLearnerAnswer(raw) : null;
+    if (text === null) delete payload['text'];
+    else payload['text'] = text;
+    return payload;
+  }
   if (request.type !== 'TASK_COMPLETED') return payload;
 
   const raw = payload['answer'];

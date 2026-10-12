@@ -607,6 +607,10 @@ describe('buildAgentContext', () => {
         output: {},
       },
       TASKS_REORDERED: { input: { order: ['t2', 't1'] }, output: { order: ['t2', 't1'] } },
+      TASK_ANSWERED: {
+        input: { taskId: 't1', text: 'A red node may not have a red child.' },
+        output: { taskId: 't1', text: 'A red node may not have a red child.' },
+      },
     };
 
     for (const type of LEARNING_EVENT_TYPES) {
@@ -837,5 +841,62 @@ describe('TASKS_REORDERED projection', () => {
     );
     const report = buildAgentContext(source({ events: [reorderEvent(atLimit)] }));
     expect(report.context?.recentEvents[0]?.payload).toEqual({ order: atLimit });
+  });
+});
+
+/*
+ * What the learner wrote for a step they are still on.
+ *
+ * The budget is the completion's answer budget and not the record's, for the same reason: the record may
+ * hold `LEARNER_ANSWER_CHARACTERS` of prose, and this event is one line among twelve in every prompt that
+ * ever lists the log.
+ */
+describe('TASK_ANSWERED projection', () => {
+  function answerEvent(text: unknown): LearningEvent {
+    return {
+      id: 'e-answered',
+      sessionId: 's1',
+      at: '2026-01-01T00:00:02.000Z',
+      type: 'TASK_ANSWERED',
+      source: 'user',
+      payload: { taskId: 't1', text },
+    } as unknown as LearningEvent;
+  }
+
+  it('carries the words, and the step they are about', () => {
+    const report = buildAgentContext(
+      source({ events: [answerEvent('A red node cannot have a red child.')] }),
+    );
+    expect(report.context?.recentEvents).toEqual([
+      {
+        type: 'TASK_ANSWERED',
+        at: '2026-01-01T00:00:02.000Z',
+        source: 'user',
+        payload: { taskId: 't1', text: 'A red node cannot have a red child.' },
+      },
+    ]);
+    expect(report.omissions.filter((omission) => omission.field === 'events')).toEqual([]);
+  });
+
+  it('cuts a long answer to the context budget, not to the record’s', () => {
+    const report = buildAgentContext(
+      source({ events: [answerEvent('x'.repeat(LEARNER_ANSWER_CHARACTERS))] }),
+    );
+    const payload = report.context?.recentEvents[0]?.payload as { text: string };
+    expect(payload.text).toHaveLength(AGENT_CONTEXT_LIMITS.answerCharacters);
+  });
+
+  it.each([
+    ['no text at all', undefined],
+    ['an empty string', ''],
+    ['something that is not a string', 42],
+    ['more than the record keeps', 'x'.repeat(LEARNER_ANSWER_CHARACTERS + 1)],
+  ])('drops an answer event with %s rather than showing a model an empty one', (_name, text) => {
+    const report = buildAgentContext(source({ events: [answerEvent(text)] }));
+    expect(report.context?.recentEvents).toEqual([]);
+    expect(report.omissions).toContainEqual({
+      field: 'events',
+      detail: '1 invalid event is not included',
+    });
   });
 });

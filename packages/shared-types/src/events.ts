@@ -39,6 +39,21 @@ export const LEARNING_EVENT_TYPES = [
    * kept (#23).
    */
   'TASKS_REORDERED',
+  /**
+   * The learner wrote out an answer for the step in front of them, without finishing it.
+   *
+   * `TASK_COMPLETED.answer` records what they said *when they were done*; this records what they said
+   * *while they were on it* — the recall they wrote before the app would take their word for it, whether
+   * they then completed the step in the same breath or went back to the material instead. It exists
+   * because the two are different facts about a session, and because until it did, prose a learner wrote
+   * on the way into a question lived only in the tutor's in-memory transcript: nothing durable, nothing
+   * an agent could be shown, gone when the question was answered.
+   *
+   * Deliberately not in `STATE_AFFECTING_EVENTS`: writing something down moves nothing. Where the
+   * learner is up to is `TASK_STARTED` and `TASK_COMPLETED`, and a step the learner has answered is
+   * still a step they are on — the same reasoning as `TASKS_REORDERED` below.
+   */
+  'TASK_ANSWERED',
 ] as const;
 
 export type LearningEventType = (typeof LEARNING_EVENT_TYPES)[number];
@@ -139,6 +154,19 @@ export type TasksReorderedEvent = LearningEventBase<
   'TASKS_REORDERED',
   { order: readonly string[] }
 >;
+/**
+ * What the learner wrote for a step they are still on.
+ *
+ * `text` is required where `TASK_COMPLETED.answer` is optional, and the asymmetry is the point: an
+ * event whose whole content is the learner's own words has nothing to say without them, so an empty
+ * one is not a quieter version of this fact — it is a caller that has made a mistake. Bounded by
+ * `LEARNER_ANSWER_CHARACTERS` at the door, like the completion's answer, and projected into an agent
+ * context under the smaller `answerCharacters` budget.
+ */
+export type TaskAnsweredEvent = LearningEventBase<
+  'TASK_ANSWERED',
+  { taskId: string; text: string }
+>;
 
 export type SessionEndReason = 'user' | 'completed' | 'timeout' | 'crashed';
 
@@ -160,7 +188,8 @@ export type LearningEvent =
   | SessionEndedEvent
   | AgentProposalExecutedEvent
   | AgentProposalProposedEvent
-  | TasksReorderedEvent;
+  | TasksReorderedEvent
+  | TaskAnsweredEvent;
 
 export type LearningEventOf<TType extends LearningEventType> = Extract<
   LearningEvent,

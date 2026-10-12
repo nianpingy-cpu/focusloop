@@ -11,12 +11,7 @@ import {
 } from '@angular/core';
 import type { ElementRef, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import type {
-  MicroTask,
-  MicroTaskKind,
-  QuizAnswerResult,
-  StuckReason,
-} from '@focusloop/shared-types';
+import type { MicroTask, MicroTaskKind, StuckReason } from '@focusloop/shared-types';
 import { STUCK_REASONS, applyTaskOrder } from '@focusloop/shared-types';
 import { AppStateService } from '../core/app-state.service';
 import {
@@ -44,6 +39,7 @@ import {
   answerTooLong,
   canCheckAnswer,
   canCheckQuiz,
+  quizOptionMark,
   quizVerdictKey,
   stepAnswerView,
 } from '../core/step-answer';
@@ -442,6 +438,15 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                 @if (plan().blocks.length === 0) {
                   <p class="muted">{{ t('focus.allDone') }}</p>
                 } @else {
+                  <!--
+                    The column's encoding, said in words. Height is the estimate, which is the whole
+                    reason this is a timeline rather than a list — and an encoding nobody has been told
+                    about is read as a layout fault, which is what the empty halves of these blocks
+                    looked like before this line existed.
+                  -->
+                  <p class="focus-plan__legend" data-testid="plan-legend">
+                    {{ t('focus.plan.legend') }}
+                  </p>
                   <ul
                     class="plan focus-plan__timeline"
                     #planTrack
@@ -1036,9 +1041,9 @@ export class FocusPage implements OnDestroy, OnInit {
     stepAnswerView(this.state.currentCourse(), this.task()),
   );
 
-  protected readonly answer = signal('');
-  protected readonly choice = signal<number | null>(null);
-  protected readonly verdict = signal<QuizAnswerResult | null>(null);
+  protected readonly answer = this.state.stepAnswer;
+  protected readonly choice = this.state.stepChoice;
+  protected readonly verdict = this.state.stepVerdict;
 
   protected readonly answerTooLong = computed(() => {
     const view = this.answerView();
@@ -1079,10 +1084,7 @@ export class FocusPage implements OnDestroy, OnInit {
 
   /** Which mark an option carries once there is a verdict: the one that was right, or the one chosen. */
   protected optionMark(index: number): 'right' | 'wrong' | 'none' {
-    const result = this.verdict();
-    if (result === null) return 'none';
-    if (index === result.answerIndex) return 'right';
-    return index === this.choice() ? 'wrong' : 'none';
+    return quizOptionMark(this.verdict(), this.choice(), index);
   }
 
   protected verdictKey(correct: boolean): MessageKey {
@@ -1104,16 +1106,29 @@ export class FocusPage implements OnDestroy, OnInit {
     if (response !== null) this.verdict.set(response.quiz);
   }
 
+  /**
+   * Hands the answer to the tutor, and records it first.
+   *
+   * The write comes first because the tutor's transcript is in memory in the main process and nothing
+   * recovers value from it after the session ends: a learner who wrote a paragraph, asked for it to be
+   * checked and then pressed Continue left the app knowing only that it had been asked. Recording
+   * `TASK_ANSWERED` before the ask means the words are in the log — and in everything the agent is
+   * shown — whether or not the exchange is ever finished or the step is ever marked done.
+   *
+   * Not awaited by the panel: the tutor call is the learner's own action and it should not wait on a
+   * bookkeeping write. `requestTutorCheck` is what opens the box, and it does so in the same frame.
+   */
   protected checkAnswer(): void {
     if (!this.answerCheckable()) return;
-    this.state.requestTutorCheck('CHECK_MY_ANSWER', this.answer().trim());
+    const task = this.task();
+    const text = this.answer().trim();
+    if (task !== null) void this.state.dispatch('TASK_ANSWERED', { taskId: task.id, text });
+    this.state.requestTutorCheck('CHECK_MY_ANSWER', text);
   }
 
   /** The box and its verdict belong to one step: nothing of them survives starting another. */
   private clearStepAnswer(): void {
-    this.answer.set('');
-    this.choice.set(null);
-    this.verdict.set(null);
+    this.state.clearStepAnswer();
   }
   /**
    * The learner's own call, like the material text: the layer is offered rather than assumed, and

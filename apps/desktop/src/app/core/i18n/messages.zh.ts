@@ -307,6 +307,7 @@ export const zh: Record<MessageKey, string> = {
   'focus.answer.placeholder.read': '用你自己的话说一遍…',
   'focus.answer.placeholder.practice': '写下你做了什么，或者卡在哪…',
   'focus.answer.placeholder.quiz': '写下你的答案…',
+  'focus.answer.placeholder.recall': '写下你还记得的…',
   'focus.answer.tooLong': '请控制在 {count} 个字符以内。',
   'focus.answer.check': '让导师看看',
   'focus.quiz.title': '这一步有一道题',
@@ -322,6 +323,8 @@ export const zh: Record<MessageKey, string> = {
   'focus.allDone': '这门课程的所有任务都已完成。',
   // 把总量直接说出来，省得学习者自己去把块加起来。
   'focus.plan.remaining': '还剩约 {time}',
+  // 计划表里方块的高度 = 预计用时，这一行把它说出来；不说，用户只会以为排版出错了。
+  'focus.plan.legend': '每个方块是一个任务，高度就是它的预计用时。',
   'focus.plan.reorder': '重新排序 {title}',
   'focus.plan.gripHelp': '回车或空格键向下移，加 Shift 向上移；也可以用上下方向键，或者直接拖动。',
   'focus.plan.moved': '已把 {title} 移到第 {position} 位，共 {total} 项',
@@ -430,6 +433,7 @@ export const zh: Record<MessageKey, string> = {
   'event.type.AGENT_PROPOSAL_EXECUTED': '应用了一项建议的变更',
   'event.type.AGENT_PROPOSAL_PROPOSED': '提议了变更',
   'event.type.TASKS_REORDERED': '你更改了顺序',
+  'event.type.TASK_ANSWERED': '你写下了答案',
 
   'event.source.user': '你',
   'event.source.extension': '浏览器扩展',
@@ -448,14 +452,12 @@ export const zh: Record<MessageKey, string> = {
   'resume.nextStep': '下一步：',
   'resume.minutes': '{minutes} 分钟',
   'resume.continue': '继续',
-  'resume.showContext': '查看依据',
   'resume.dismiss': '先不用',
-  'resume.context.checkpoint': '检查点：{id}',
-  'resume.context.shownAt': '展示时间：{at}',
-  'resume.context.completed': '已完成：{items}',
-  'resume.context.unresolved': '未解决：{items}',
-  'resume.context.next': '下一步：{action}',
-  'resume.context.empty': '—',
+  // 卡片上的「先对一下」：卡片、通知条与步骤共用同一个输入框状态，见 AppStateService。
+  'resume.recall.title': '继续之前',
+  'resume.recall.hint': '写下你还记得的，它会跟着这一步一起留在记录里。',
+  'resume.recall.save': '记下来',
+  'resume.recall.recorded': '记下了，它会跟着这一步走。',
 
   // -------------------------------------------------------- agent panel
   'agent.suggesting': '建议',

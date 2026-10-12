@@ -100,6 +100,15 @@ export type AgentContextEvent =
       'HELP_REQUESTED',
       { readonly taskId?: string; readonly reason?: StuckReason }
     >
+  /*
+   * What the learner wrote for a step they are still on, at the same budget as `TASK_COMPLETED.answer`.
+   *
+   * Worth an agent's attention precisely because the step is *not* done: this is the closest thing to a
+   * running commentary on whether the learner is following the material, and it arrives before the step
+   * is finished rather than after. Required, not optional — an answer event with no answer is not a fact
+   * about learning, and the builder rejects one rather than passing it on empty.
+   */
+  | AgentContextEventBase<'TASK_ANSWERED', { readonly taskId: string; readonly text: string }>
   | AgentContextEventBase<'QUIZ_CORRECT', { readonly taskId: string; readonly quizId: string }>
   | AgentContextEventBase<'QUIZ_INCORRECT', { readonly taskId: string; readonly quizId: string }>
   | AgentContextEventBase<'TAB_LEFT', EmptyAgentContextPayload>

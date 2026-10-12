@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **Coming back asks what you remember, and keeps it.** The resume card now carries the check-in the
+  product was missing on every route: the step's own question and options when the course holds a quiz,
+  otherwise the same box the step has, whose words are recorded as the learner's answer for that step
+  (`TASK_ANSWERED` — a new event, bounded like the completion's answer and projected into an agent
+  context under the same smaller budget). The box, the chosen option and the verdict are **one piece of
+  state**, so the step, the notice above it and the card on other routes are one field rather than three
+  copies of the same question: writing in the notice is what the step's box holds, and the step's copy is
+  hidden only while the resume notice is open, which is the row #77 reserves and the half of the step it
+  needs. The card's "Show context" button and the raw checkpoint/timestamp dump behind it are gone: it
+  printed a UUID and two ISO timestamps at a learner, and the row it occupied is now the check-in.
+  Completing a step still carries the answer it was written with; the two events are different facts —
+  what they said while they were on the step, and what they said when they finished it.
 - **The step asks what you came up with, and answers back.** A running step now offers the one thing
   the loop was missing: a place to produce something. Every step carries a box for the learner's own
   words — the text travels with the completion, so the checkpoint and every prompt an agent builds know
@@ -37,6 +49,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **The focus screen stopped wasting the row it has.** The type scale is one scale again: the step's
+  title tops out at 36px instead of 46, the instructions and the fine print under the box are 13px
+  rather than inheriting body size (a class-plus-element rule was out-specifying `.muted.small`), and the
+  labels above them are 12px. The stage's own padding is a third of what it was, the row above the box
+  is 12px instead of 18, and the box's explanatory line is still revealed on focus rather than printed
+  under an empty field — which together are what stopped a 1000px-tall window scrolling to reach the
+  buttons.
+- **The plan says what its own shape means.** The blocks were transparent in the sheet, so a
+  proportional block — the encoding that answers "how long will this take" for someone who cannot
+  estimate it — read as a list with gaps in it. They now fill with their kind's colour, carry their kind
+  down the left edge, and a legend line under the summary says what the height is. The reorder grip's
+  dots also stopped floating in the middle of a long block: a `button` centres its content, and this one
+  is stretched to the row's full height.
+- **The clock reads as one instrument at three sizes.** The value and the paused state were two grid rows,
+  so they were centred _as a pair_ — the time sat above the middle of a circle drawn around it, and the two
+  lines crowded each other the shorter the dial got. The time is now on the centre line, the state is
+  pinned inside the lower third, and the type is sized from the dial (`cqw`) rather than the viewport.
+- **The notice is a notice, and it does not fight the plan.** It carries the accent its card already had
+  — accent border, an accent edge, the large shadow — instead of the neutral panel it was drawn as. It also
+  stands down while the plan sheet is open: both live at the bottom of the window and they were painted
+  through each other, and the learner who asked for the plan is looking at the plan. Hidden, not dismissed.
+- **The tutor panel no longer re-opens itself on the next step.** A "check my answer" request left on the
+  signal was remembered inside the panel component — which is created and destroyed with the step it sits
+  in — so the next step's panel found it, opened over the new step and quoted the answer the learner had
+  written for the previous one. The request is cleared when it is consumed, which is what makes "once"
+  mean once.
 - **The long resume names the key idea instead of asking for a recall (#193).** The long card's
   refresher said "Take 30 seconds to recall the key idea before continuing" — a demand on a card
   that showed no idea and let Continue through immediately. It now carries the concept's own idea,

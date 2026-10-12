@@ -1125,6 +1125,11 @@ fl-home {
 .plan__grip {
   flex: 0 0 auto;
   align-self: stretch;
+  /* A button centres its content, which floated the dots into the middle of a 112px block — away from
+     the label they belong to. Top-aligned like the row's own line of text. */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   width: 18px;
   padding: 0;
   border: 0;
@@ -1536,6 +1541,40 @@ textarea:focus {
   font-size: 12px;
   color: var(--text-muted);
   white-space: pre-wrap;
+}
+
+/*
+ * The card's check-in, in the reserved slot above the summary.
+ *
+ * It is the step's own answer block — the same element, so the box, the options, the marks and the
+ * verdict cannot drift apart between the two screens — separated by a rule rather than boxed, because
+ * the card already is a box.
+ *
+ * The three `--focus-warm*` tokens are the focus screen's, named once inside `.focus-workspace`, and
+ * this is the one other surface that shows the block: without them the block's own rules would resolve
+ * to nothing here, which is why they are mapped rather than left to fall back. Mapped to `--accent`
+ * because that is this card's accent — the warm hue belongs to the screen the step lives on.
+ */
+.resume__recall {
+  --focus-warm: var(--accent);
+  --focus-warm-quiet: color-mix(in srgb, var(--accent) 18%, transparent);
+  --focus-warm-faint: color-mix(in srgb, var(--accent) 8%, transparent);
+
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* The same heading treatment as the two beside it, so the card reads as one card. */
+.resume__recall h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.resume__recall .step-answer__question {
+  color: var(--text);
 }
 
 /* ------------------------------------------------------- data controls (#10) */
@@ -2142,7 +2181,7 @@ code {
   width: min(100%, var(--focus-stage-width));
   min-height: 0;
   margin: 0 auto;
-  padding: clamp(28px, 5vh, 54px) 4px clamp(22px, 4vh, 42px);
+  padding: clamp(16px, 3vh, 34px) 4px clamp(14px, 2.5vh, 26px);
 }
 
 .focus-task {
@@ -2298,6 +2337,28 @@ code {
   gap: 8px;
 }
 
+/*
+ * The box and its button, side by side.
+ *
+ * On the card the answer is a sentence or two, and a button on its own row under it costs a row of the
+ * notice — the row #77 reserves and the step needs. The step's own block keeps the button underneath,
+ * where the box is a paragraph and the button is the step's main action.
+ */
+.step-answer__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step-answer__row .step-answer__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.step-answer__row .step-answer__actions {
+  flex: 0 0 auto;
+}
+
 .step-answer__hint,
 .step-answer__verdict {
   margin: 0;
@@ -2336,35 +2397,22 @@ code {
 }
 
 /*
- * In a short window with a notice up, the answer block keeps only the box and the choice.
+ * One place to write: while the resume notice is open, the notice carries the box.
  *
- * #77 reserves the row above the notice: the step ends where the notice begins, and `focus-notice.spec.ts`
- * brings the whole step into that row at 800x700. What the block gives up there is chrome the box does not
- * need to be usable — the label above it (its own text already says what it is for) and the line explaining
- * what happens to what you write (which the step has no room for and the box does not need) — while keeping
- * the box tall enough to type into and the control beside it the size of a control.
+ * The resume notice renders the card, whose check-in *is* the step's box — the same state
+ * (`AppStateService`), the same question, one element. Showing both would be the same field printed
+ * twice, and the step's copy is the taller half of the step: the half #77 measures at 800x700 as having
+ * to fit above the notice.
+ *
+ * Only the resume notice, and precisely because it is the one that has the box: a help or time-up notice
+ * arrives while the learner is *working*, and taking their field away mid-sentence would be the opposite
+ * of helpful. Folded on purpose means they have put the notice away, so the step's box comes back for
+ * that as well — with whatever was typed still in it.
  */
-.focus-workspace:has(.focus-notice) .step-answer {
-  gap: 8px;
-  margin-top: 0;
-  max-height: 96px;
-  overflow: auto;
-}
-
-.focus-workspace:has(.focus-notice) .step-answer .eyebrow,
-.focus-workspace:has(.focus-notice) .step-answer__hint {
+.focus-workspace:has(.focus-notice[data-notice='resume'][data-folded='false'])
+  .focus-task--active
+  .step-answer {
   display: none;
-}
-
-.focus-workspace:has(.focus-notice) .step-answer__input {
-  height: 44px;
-  min-height: 44px;
-  padding: 6px 10px;
-}
-
-.focus-workspace:has(.focus-notice) .step-answer .btn {
-  padding-block: 4px;
-  font-size: 13px;
 }
 
 .focus-task__action-row {
@@ -2402,29 +2450,52 @@ code {
 }
 
 .focus-task .eyebrow {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   color: var(--focus-warm);
+  font-size: 12px;
+  letter-spacing: 0.04em;
 }
 
 .focus-task h2,
 .focus-task h1 {
-  max-width: 18ch;
-  margin-bottom: 16px;
+  max-width: 20ch;
+  margin-bottom: 10px;
   color: var(--text);
-  font-size: clamp(28px, 4vw, 46px);
+  font-size: clamp(24px, 3vw, 36px);
   font-weight: 600;
-  letter-spacing: -0.035em;
-  line-height: 1.08;
+  letter-spacing: -0.03em;
+  line-height: 1.12;
   text-wrap: balance;
 }
 
 .focus-task p:not(.eyebrow):not(.row) {
-  max-width: 48ch;
-  margin-bottom: 22px;
+  max-width: 52ch;
+  margin-bottom: 14px;
   color: var(--focus-ink-quiet);
-  font-size: clamp(15px, 1.5vw, 18px);
-  line-height: 1.6;
+  font-size: clamp(15px, 1.2vw, 17px);
+  line-height: 1.55;
   text-wrap: pretty;
+}
+
+/*
+ * Fine print stays fine print.
+ *
+ * `.focus-task p` above is a two-class-plus-element rule and `:not()` counts as a class, so it was
+ * beating `.muted.small` on the lines that ride under a box — the answer's own explanation and its
+ * verdict came out at body size, which is what made one screen carry four different text sizes and none
+ * of them obviously related. Matching that specificity here is the only way to say it.
+ */
+.focus-task p:not(.eyebrow):not(.row).muted,
+.focus-task p:not(.eyebrow):not(.row).small {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* The line under the box is fine print by definition: it is about the box, not part of the step. */
+.focus-task .step-answer__hint,
+.focus-task .step-answer__verdict {
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .focus-task .chip {
@@ -2442,6 +2513,9 @@ code {
   aspect-ratio: 1;
   justify-self: end;
   isolation: isolate;
+  /* The one dial, three sizes — the number is sized from the dial rather than from the viewport, so a
+     160px clock in the notice row and a 276px one on an idle screen both read as the same instrument. */
+  container-type: inline-size;
 }
 
 .focus-clock::before {
@@ -2480,25 +2554,39 @@ code {
     stroke 180ms ease;
 }
 
+/*
+ * The reading, and the state under it, in the dial's own centre line.
+ *
+ * Both in the same grid cell: as two auto-placed rows they were centred *as a pair*, which lifted the
+ * time above the middle of a circle drawn around it and left the two lines closer together the shorter
+ * the dial got. The time now sits on the centre and the state is pinned to the dial's lower third,
+ * where the ring's own inner edge gives it a line to sit on.
+ */
 .focus-clock__value {
   position: relative;
   z-index: 1;
+  grid-area: 1 / 1;
+  align-self: center;
+  justify-self: center;
   display: block;
   color: var(--text);
-  font-size: clamp(32px, 5vw, 48px);
+  font-size: clamp(20px, 17cqw, 44px);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.04em;
   line-height: 1;
 }
 
 .focus-clock__status {
   position: relative;
   z-index: 1;
+  grid-area: 1 / 1;
+  align-self: end;
+  justify-self: center;
   display: block;
-  margin-top: 9px;
+  margin-bottom: 19%;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: clamp(9px, 4cqw, 11px);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -2685,11 +2773,41 @@ code {
   margin-top: 14px;
 }
 
+/*
+ * In the sheet the blocks fill with their own kind's colour instead of being outlined.
+ *
+ * The height is the information — a task twice as long occupies twice the column — and the sheet used to
+ * draw that height as empty space with one line of text at the top of it, which reads as a list with
+ * gaps in it rather than as a plan. A fill makes the block a block: taller means longer, at a glance, and
+ * the border carries the kind for the colour-blind reader the same way the glyph does.
+ */
 .focus-plan .plan__block {
-  border-width: 0 0 1px;
-  border-left-width: 0;
-  border-radius: 0;
-  background: transparent;
+  border-width: 0 0 1px 4px;
+  border-left-style: solid;
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--kind-read) 8%, transparent);
+}
+
+.focus-plan .plan__block[data-kind='read'] {
+  border-left-color: var(--kind-read);
+  background: color-mix(in srgb, var(--kind-read) 8%, transparent);
+}
+
+.focus-plan .plan__block[data-kind='practice'] {
+  border-left-color: var(--kind-practice);
+  background: color-mix(in srgb, var(--kind-practice) 8%, transparent);
+}
+
+.focus-plan .plan__block[data-kind='quiz'] {
+  border-left-color: var(--kind-quiz);
+  background: color-mix(in srgb, var(--kind-quiz) 8%, transparent);
+}
+
+/* Saying what the column is, in one line, because a proportion nobody has been told about is a bug. */
+.focus-plan__legend {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 /* The imported text, shown as the author wrote it. The parser keeps the blank lines between
@@ -2981,13 +3099,26 @@ fl-focus-notice {
   margin-inline: auto;
 }
 
+/*
+ * While the plan sheet is up, the notice stands down.
+ *
+ * Both live at the bottom of the window: the notice in the row #77 reserves for it, the sheet anchored to
+ * the bottom edge over everything. They were painted through each other, and the learner who asked for
+ * the plan is looking at the plan. Hidden rather than dismissed — nothing has been answered, and it comes
+ * back exactly as it was, still unfolded, the moment the sheet closes.
+ */
+.focus-workspace:has(.focus-plan[data-open]) fl-focus-notice {
+  display: none;
+}
+
 .focus-notice {
   position: relative;
   z-index: 30;
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent-border);
+  border-left: 4px solid var(--accent);
   border-radius: 14px;
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-md);
+  background: var(--accent-surface);
+  box-shadow: var(--shadow-lg);
   animation: plan-rise 220ms ease-out;
 }
 
@@ -3022,9 +3153,9 @@ fl-focus-notice {
  * rise inside the card's rise replays on every unfold and reads as a stutter rather than arrival.
  */
 .focus-notice__body {
-  max-height: min(calc((100dvh - 48px) * 0.32), 420px);
+  max-height: min(calc((100dvh - 48px) * 0.46), 440px);
   overflow: auto;
-  padding: 0 16px 16px;
+  padding: 0 16px 12px;
 }
 
 .focus-notice__choices {
@@ -3045,6 +3176,20 @@ fl-focus-notice {
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
+}
+
+/* The check-in, sized for a notice rather than for a page: the box is one line to start writing in (it
+   still drags open), and the line explaining what happens to what you write is left out — the heading and
+   the box's own prompt already say it, and this is the surface with the least room and the most competing
+   content. */
+.focus-notice .resume__recall .muted {
+  display: none;
+}
+
+.focus-notice .resume__recall .step-answer__input {
+  height: 46px;
+  min-height: 46px;
+  padding: 6px 10px;
 }
 
 .focus-notice .agent h3,
@@ -3078,15 +3223,17 @@ fl-focus-notice {
   display: none;
 }
 
+/* The notice is a notice: where you were, and the check. Its own spacing is what tightens when the window
+   does, so that the row #77 reserves for the step goes on holding the step. */
 .focus-notice .resume__next {
-  padding: 6px 8px;
+  padding: 5px 8px;
 }
 
 .focus-notice .resume__actions {
   position: sticky;
   bottom: 0;
   flex-wrap: wrap;
-  margin-top: 4px;
+  margin-top: 10px;
   padding-block: 4px;
   background: var(--bg-elevated);
 }
@@ -3189,17 +3336,12 @@ fl-focus-notice {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 0 0 22px;
+  margin: 0 0 18px;
 }
 
-/* The running step's metas sit between its instructions and its answer box, so the row above the box
-   is the one place the step has to breathe: the chips say what kind of work this is and how long it
-   takes, and the box they introduce is what the learner is being asked to produce. */
+/* The running step's rows are read in one pass — kind, estimate, instructions, box — so the gap above
+   the box is the tighter one: the chips introduce it rather than preceding it. */
 .focus-task--active .focus-task__meta {
-  margin-bottom: 18px;
-}
-
-.focus-workspace:has(.focus-notice) .focus-task--active .focus-task__meta {
   margin-bottom: 12px;
 }
 

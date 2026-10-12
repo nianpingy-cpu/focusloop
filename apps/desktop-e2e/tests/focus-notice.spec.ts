@@ -179,7 +179,13 @@ test('one bottom slot preserves pending choices, priority, keyboard access and t
 
     await toggle.focus();
     await page.keyboard.press('Tab');
-    await expect(page.getByTestId('resume-continue')).toBeFocused();
+    /*
+     * The card's first control. It used to be Continue, and the check-in now sits above the actions —
+     * the box is what the notice is asking for, and the footer's decision comes after it in reading
+     * order as well as in the DOM. What this asserts is unchanged: Tab inside the notice reaches the
+     * card rather than escaping to the page behind it.
+     */
+    await expect(page.getByTestId('recall-input')).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(toggle).toBeFocused();
     // Going to another route and back does not forget the session's presentation choice.

@@ -257,6 +257,51 @@ describe('the answer a completion carries', () => {
   });
 });
 
+/*
+ * The answer a learner writes for a step they are still on.
+ *
+ * Read rather than carried, and strictly: this event has nothing but the learner's prose, so a payload
+ * missing it is not a thinner event — it is one that would be stored without its own subject and then
+ * dropped from every agent context. A refusal at the door is what keeps that from being a silent loss.
+ */
+describe('the words a step answer carries', () => {
+  const valid = {
+    sessionId: 's1',
+    type: 'TASK_ANSWERED',
+    source: 'user',
+    payload: { taskId: 't1', text: 'A BST keeps its order.' },
+  };
+
+  it('accepts words within the record\u2019s bound', () => {
+    expect(parseDispatchRequest(CHANNEL, valid).payload).toEqual({
+      taskId: 't1',
+      text: 'A BST keeps its order.',
+    });
+  });
+
+  it('accepts exactly the bound', () => {
+    const text = 'x'.repeat(LEARNER_ANSWER_CHARACTERS);
+    expect(
+      parseDispatchRequest(CHANNEL, { ...valid, payload: { taskId: 't1', text } }).payload,
+    ).toEqual({ taskId: 't1', text });
+  });
+
+  it.each([
+    ['no words at all', { taskId: 't1' }],
+    ['an empty string', { taskId: 't1', text: '' }],
+    ['only whitespace', { taskId: 't1', text: '   \n ' }],
+    ['words that are not a string', { taskId: 't1', text: 42 }],
+    [
+      'more than the record keeps',
+      { taskId: 't1', text: 'x'.repeat(LEARNER_ANSWER_CHARACTERS + 1) },
+    ],
+    ['no step to attach them to', { text: 'a sentence' }],
+    ['an empty step id', { taskId: '', text: 'a sentence' }],
+  ])('rejects %s', (_name, payload) => {
+    expectFailure(() => parseDispatchRequest(CHANNEL, { ...valid, payload }));
+  });
+});
+
 describe('parseAnswerQuiz', () => {
   const valid = { sessionId: 's1', taskId: 't4', choiceIndex: 1 };
 

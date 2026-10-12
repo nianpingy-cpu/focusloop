@@ -34,6 +34,7 @@ import type {
   DiscoverModelsRequest,
   DiscoverModelsResult,
   QuizAnswerResponse,
+  QuizAnswerResult,
   ResumeCardView,
   RescueView,
   TutorAnswer,
@@ -181,13 +182,34 @@ export class AppStateService {
   /**
    * A request from a step's answer box to the tutor panel: this text, in this mode, opened.
    *
-   * The signal's *identity* is the message — every request is a fresh object and the panel consumes
-   * each one once. A boolean or a counter would need clearing, and clearing it is a second place that
-   * knows whether the request has been handled, which is the shape of bug this avoids.
+   * The panel consumes it by setting it back to `null`, so each request is acted on exactly once. It is
+   * deliberately still a signal rather than a callback: the panel is created and destroyed with the step
+   * it sits in, and a request that is never consumed must not be lost when its consumer is.
+   *
+   * The alternative — remembering the last request inside the panel — was tried and failed, because the
+   * panel does not outlive the step: the next step's panel remembered nothing, found this signal still
+   * set, and opened over the new step quoting the answer from the previous one.
    */
   readonly tutorCheckRequest = signal<{ readonly mode: TutorMode; readonly text: string } | null>(
     null,
   );
+  /**
+   * The step's answer box, its chosen option and its verdict, as one piece of state.
+   *
+   * One, rather than one per surface, because three surfaces can show that box: the step itself, the
+   * resume notice above it, and the resume card on every other route. Two copies of "what the learner
+   * wrote" would mean an answer written in the notice vanishing the moment the notice was continued —
+   * and the learner's own words are the one thing in this app that must not be lost between two places
+   * that look like the same field.
+   *
+   * Held here rather than in the page for the same reason the tutor's request is: the state outlives
+   * the component that shows it. It is cleared when a step starts and when one is finished, never when
+   * a route changes — a half-written answer that survives a trip to the dashboard is a feature, not a
+   * leak.
+   */
+  readonly stepAnswer = signal('');
+  readonly stepChoice = signal<number | null>(null);
+  readonly stepVerdict = signal<QuizAnswerResult | null>(null);
   readonly locale = signal<Locale>(DEFAULT_LOCALE);
   readonly theme = signal<ThemePreference>(DEFAULT_THEME);
   /**
@@ -553,6 +575,19 @@ export class AppStateService {
    */
   requestTutorCheck(mode: TutorMode, text: string): void {
     this.tutorCheckRequest.set({ mode, text });
+  }
+
+  /**
+   * The box and its verdict belong to one step: nothing of them survives starting another.
+   *
+   * Called when a step starts and when one is finished, and by the notice when it is showing a
+   * *different* step's box than the one on screen — the rule is "one answer, for the step in front of
+   * you", and every caller is a moment where that step has changed.
+   */
+  clearStepAnswer(): void {
+    this.stepAnswer.set('');
+    this.stepChoice.set(null);
+    this.stepVerdict.set(null);
   }
 
   /**

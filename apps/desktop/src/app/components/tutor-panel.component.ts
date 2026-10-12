@@ -257,14 +257,19 @@ export class TutorPanelComponent implements OnDestroy {
 
     /*
      * What the step's answer box asked for: the panel opens, on the mode that checks an answer, with the
-     * learner's own words already in the box. Consumed by identity — each request is a new object, so the
-     * last one handled is remembered here rather than by writing back to the signal that carried it.
+     * learner's own words already in the box.
+     *
+     * Consumed by clearing it, which is what makes "once" mean once. Remembering the last request inside
+     * this component was not enough: the component is created and destroyed with the step (`fl-tutor-panel`
+     * lives in the running step's control row), so a request left on the signal was re-consumed by the
+     * next step's panel — which opened itself over the new step, quoting the answer the learner had
+     * written for the one before it. The signal is the message and the consumer is the only one who knows
+     * it has arrived; leaving it set was a second, weaker copy of that knowledge.
      */
-    let handled: { readonly mode: TutorMode; readonly text: string } | null = null;
     effect(() => {
       const request = this.state.tutorCheckRequest();
-      if (request === null || request === handled) return;
-      handled = request;
+      if (request === null) return;
+      this.state.tutorCheckRequest.set(null);
       this.openState.set(true);
       this.chosen.set(request.mode);
       this.question.set(request.text);

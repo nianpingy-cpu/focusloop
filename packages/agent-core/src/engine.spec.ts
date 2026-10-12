@@ -410,6 +410,20 @@ describe('FocusLoopEngine', () => {
     const completedEvent = (sessionId: string): LearningEvent | undefined =>
       ctx.store.listEvents(sessionId).find((event) => event.type === 'TASK_COMPLETED');
 
+    /*
+     * The answer, narrowed out of the event union.
+     *
+     * Reading `payload['answer']` off a `LearningEvent` was an implicit `any` the moment a second event
+     * type carried the learner's prose: the union's payload is whatever each member says it is, and only
+     * `TASK_COMPLETED` has this field. Narrowing on the discriminant keeps the read typed, and returns
+     * `undefined` for the absent case so a missing answer fails as a missing answer rather than as
+     * arithmetic on `"undefined"`.
+     */
+    const completedAnswer = (sessionId: string): string | undefined => {
+      const event = completedEvent(sessionId);
+      return event?.type === 'TASK_COMPLETED' ? event.payload.answer : undefined;
+    };
+
     it('stores the learner’s answer with the step they finished', () => {
       const session = ctx.engine.startSession(DEMO_COURSE_ID).session;
       ctx.engine.dispatch({
@@ -461,9 +475,7 @@ describe('FocusLoopEngine', () => {
         payload: { taskId: 'rbt-t1', answer: 'x'.repeat(LEARNER_ANSWER_CHARACTERS + 500) },
       });
 
-      expect(String(completedEvent(session.id)?.payload['answer'])).toHaveLength(
-        LEARNER_ANSWER_CHARACTERS,
-      );
+      expect(completedAnswer(session.id)).toBe('x'.repeat(LEARNER_ANSWER_CHARACTERS));
     });
   });
 

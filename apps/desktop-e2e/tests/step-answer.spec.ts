@@ -135,7 +135,7 @@ test('a step records what the learner wrote, and answers a quiz it asks', async 
 /** The session's whole event log, read through the bridge the renderer uses. */
 async function sessionEvents(page: {
   evaluate: <T>(fn: () => Promise<T>) => Promise<T>;
-}): Promise<{ type: string; payload: Record<string, unknown> }[]> {
+}): Promise<readonly { readonly type: string; readonly payload: Record<string, unknown> }[]> {
   return page.evaluate(async () => {
     const snapshot = await globalThis.focusloop.getCurrentSession();
     if (snapshot === null) return [];
