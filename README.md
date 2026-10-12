@@ -107,6 +107,8 @@ configured. Both are optional, and both are described in [docs/privacy.md](./doc
 ### Configure an LLM provider
 
 Open **Settings** in the sidebar and select **Models**, or use the model-status shortcut.
+**⌘,** on macOS or **Ctrl+,** on Windows/Linux opens General, even with the sidebar folded;
+this shortcut works only inside the app. Pressing it again preserves the current tab and edits.
 Settings opens a small window with **General** and **Models** sections; language, appearance,
 original-material preferences and local data management live under General. Choose DeepSeek or
 OpenAI, or add an OpenAI-compatible provider with your own Base URL and API Key. **Fetch models**

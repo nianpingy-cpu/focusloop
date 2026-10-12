@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, HostListener, NgZone, computed, effect, inject, signal } from '@angular/core';
 import type { OnDestroy, OnInit } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import type { Subscription } from 'rxjs';
@@ -19,6 +19,8 @@ import { applyLanguage } from './core/language';
 import { STATE_COLORS, percentLabel, formatSpan, visibleShares } from './core/insights-view';
 import { applyTheme, resolveTheme } from './core/theme';
 import { isFocusRoute } from './core/focus-notice';
+import { isSettingsShortcut } from './core/settings-shortcut';
+import { installScrollSpeed } from './core/scroll-speed';
 import { ResumeCardComponent } from './components/resume-card.component';
 import { ProposalConfirmComponent } from './components/proposal-confirm.component';
 import { AgentPanelComponent } from './components/agent-panel.component';
@@ -162,6 +164,9 @@ const PEEK_CLOSE_DELAY_MS = 150;
             data-testid="nav-settings"
             aria-haspopup="dialog"
             [attr.aria-expanded]="settingsOpen()"
+            [attr.aria-label]="t('settings.title')"
+            [attr.aria-keyshortcuts]="settingsPlatform() === 'darwin' ? 'Meta+,' : 'Control+,'"
+            [title]="t('settings.title') + ' (' + settingsShortcutLabel() + ')'"
             (click)="openSettings('general', $event)"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -169,7 +174,16 @@ const PEEK_CLOSE_DELAY_MS = 150;
                 d="m9 3-.6 2-1.8 1-2-.5-2 3.5 1.4 1.5v2l-1.4 1.5 2 3.5 2-.5 1.8 1 .6 2h4l.6-2 1.8-1 2 .5 2-3.5-1.4-1.5v-2l1.4-1.5-2-3.5-2 .5-1.8-1L13 3Z"
               />
               <circle cx="11" cy="11" r="3" /></svg
-            >{{ t('settings.title') }}
+            >{{ t('settings.title')
+            }}<span
+              class="sidebar-settings__shortcut"
+              [class.is-joined]="settingsPlatform() !== 'darwin'"
+              aria-hidden="true"
+            >
+              @for (key of settingsShortcutKeys(); track $index) {
+                <kbd>{{ key }}</kbd>
+              }
+            </span>
           </button>
         </div>
       </aside>
@@ -205,6 +219,8 @@ export class AppComponent implements OnInit, OnDestroy {
   private readonly stateService = inject(AppStateService);
   private readonly i18n = inject(I18nService);
   private readonly router = inject(Router);
+  private readonly zone = inject(NgZone);
+  private uninstallScrollSpeed: (() => void) | null = null;
   protected readonly currentUrl = signal(this.router.url);
   protected readonly onFocusRoute = computed(() => isFocusRoute(this.currentUrl()));
   protected readonly settingsOpen = signal(false);
@@ -215,6 +231,18 @@ export class AppComponent implements OnInit, OnDestroy {
   private peekTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly state = this.stateService.state;
   protected readonly runtime = this.stateService.runtime;
+  protected readonly settingsPlatform = computed(() => {
+    const platform = this.runtime()?.platform;
+    if (platform !== undefined && platform.length > 0) return platform;
+    const userAgent = navigator.userAgent;
+    if (/Mac|iPhone|iPad/.test(userAgent)) return 'darwin';
+    if (/Windows/.test(userAgent)) return 'win32';
+    return 'linux';
+  });
+  protected readonly settingsShortcutKeys = computed<readonly string[]>(() =>
+    this.settingsPlatform() === 'darwin' ? ['⌘', ','] : ['Ctrl', '+', ','],
+  );
+  protected readonly settingsShortcutLabel = computed(() => this.settingsShortcutKeys().join(''));
   protected readonly lastError = this.stateService.lastError;
   protected readonly locale = this.stateService.locale;
   protected readonly theme = this.stateService.theme;
@@ -263,6 +291,7 @@ export class AppComponent implements OnInit, OnDestroy {
     query.addEventListener('change', (event) => this.prefersLight.set(event.matches));
   }
   ngOnInit(): void {
+    this.uninstallScrollSpeed = this.zone.runOutsideAngular(() => installScrollSpeed(document));
     void this.stateService.loadSettings().then((settings) => {
       this.stateService.locale.set(settings.locale);
       this.stateService.theme.set(settings.theme);
@@ -281,14 +310,29 @@ export class AppComponent implements OnInit, OnDestroy {
       });
   }
   ngOnDestroy(): void {
+    this.uninstallScrollSpeed?.();
     this.unsubscribe?.();
     this.routerSubscription?.unsubscribe();
     this.clearPeekTimer();
     this.syncLocale.destroy();
     this.syncTheme.destroy();
   }
-  protected openSettings(section: SettingsSection, event: Event): void {
-    this.settingsOpener = event.currentTarget as HTMLElement;
+  @HostListener('document:keydown', ['$event'])
+  protected settingsKeydown(event: KeyboardEvent): void {
+    if (!isSettingsShortcut(event, this.settingsPlatform())) return;
+    event.preventDefault();
+    // Repeated requests keep the selected tab, unsaved draft and nested confirmation intact.
+    // Never put settings over another modal or steal that modal's keyboard focus.
+    if (
+      this.settingsOpen() ||
+      document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]')
+    )
+      return;
+    this.openSettings('general');
+  }
+  protected openSettings(section: SettingsSection, event?: Event): void {
+    const opener = event?.currentTarget ?? document.activeElement;
+    this.settingsOpener = opener instanceof HTMLElement ? opener : null;
     this.settingsInitialSection.set(section);
     this.settingsOpen.set(true);
   }
