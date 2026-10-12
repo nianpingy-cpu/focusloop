@@ -437,14 +437,17 @@ grid. The button itself stays visible during the peek, lifted above the
 panel and hidden in favour of the panel's own mark: the peek opens on the button's `mouseenter` and
 closes on its `mouseleave`, so an anchor that vanished under the pointer would hand the hover to
 another element mid-gesture and fold the panel shut under the cursor. Peek state is pure pointer
-state: never stored, and cancelled by navigation. On the focus screen the fold
-also leaves the workspace's column in place — `padding-left: 256px`, the open grid's 232px track plus
-the base padding — so the stage never reflows into the freed space and the peeked panel can only ever
-cover the empty gutter: the countdown neither moves nor disappears behind the glass. The panel's own
-header control is a toggle rather than a collapse button: its label and what a press does both follow
-the mode, while its icon stays the sidebar glyph — a panel outline with its own edge drawn in, the
-shape every editor uses for this — and the focus-folded layout hides it, where the shell is not what
-folded and the floating button is the way back.
+state: never stored, and cancelled by navigation. On the focus screen the fold hands the column back
+to the workspace — the only thing left reserved is the floating button's own 62px corner, the same one
+every other screen keeps — so the one screen the learner is meant to be looking at is not two thirds
+width with a band of nothing down its left. The peeked panel therefore does cover the stage's left edge
+on a window narrower than about 1370px, which is what a drawer over a page does, and it covers nothing
+else: the countdown lives in the stage's right-hand column, so it is never under the panel and never
+moves, because the peek still lifts the panel out of the grid instead of reflowing the page. The
+panel's own header control is a toggle rather than a collapse button: its label and what a press does
+both follow the mode, while its icon stays the sidebar glyph — a panel outline with its own edge drawn
+in, the shape every editor uses for this — and the focus-folded layout hides it, where the shell is not
+what folded and the floating button is the way back.
 
 **The content column is capped.** `.content > *` carries `--measure` (1120px) plus
 `margin-inline: auto`. Putting it on the children rather than on the scroller keeps the scrollbar on

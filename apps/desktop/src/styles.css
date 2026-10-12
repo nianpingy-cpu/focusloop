@@ -810,14 +810,20 @@ body:has(fl-focus .focus-workspace[data-rail])
 }
 
 /*
- * On focus, reserve the whole column the open sidebar occupied — its 232px track plus
- * the base 24px padding. The fold hides the sidebar's chrome, not the workspace's
- * place: the stage never reflows into the freed space, so the peeked panel can only
- * ever slide over the empty gutter, and the countdown stays exactly where it was —
- * through the peek, and through pinning the panel back open.
+ * On focus, the fold leaves nothing behind: the workspace takes the window, and the only reservation
+ * is the floating recall button's own corner — the same 62px every other screen keeps when the sidebar
+ * is folded.
+ *
+ * It used to keep the open sidebar's whole column instead, 232px plus the base padding, so that the
+ * peeked panel could only ever slide over an empty gutter. That was 256px of nothing down the left of
+ * the one screen the learner is meant to be looking at, paid on every frame to spare a hover its
+ * overlap. The panel now covers the stage's left edge on a window narrower than about 1370px, which is
+ * what a drawer over a page does; the countdown sits in the stage's right-hand column and is never
+ * under it. Nothing moves when the pointer rests on the button — the peek is still a look, not a
+ * reflow — because the space it would have been given is no longer reserved.
  */
 body:has(fl-focus .focus-workspace[data-rail]) .shell:not(.is-forced-open) .content {
-  padding-left: 256px;
+  padding-left: 62px;
 }
 
 /*

@@ -294,6 +294,48 @@ async function contentBox(): Promise<{ left: number; width: number }> {
   });
 }
 
+/**
+ * The focus screen's columns, measured from the page: where the workspace starts and how wide it is,
+ * the content's own padding, the width left for it to centre in, and the two boxes that decide whether
+ * it has room — the floating recall button and the sidebar panel itself.
+ *
+ * `clientWidth` rather than the bounding box for the content: a bounding box includes the scrollbar,
+ * which lives inside the padding box, and half of that 15px would land in the centring term the
+ * assertions below compute.
+ */
+async function focusColumns(): Promise<{
+  readonly workspaceLeft: number | null;
+  readonly workspaceWidth: number | null;
+  readonly clockLeft: number | null;
+  readonly paddingLeft: number;
+  readonly inner: number;
+  readonly fabRight: number;
+  readonly panelRight: number;
+  readonly windowWidth: number;
+}> {
+  return window.locator('.content').evaluate((el) => {
+    const style = getComputedStyle(el);
+    const paddingLeft = Number.parseFloat(style.paddingLeft);
+    const paddingRight = Number.parseFloat(style.paddingRight);
+    const box = (selector: string): DOMRect | null =>
+      document.querySelector(selector)?.getBoundingClientRect() ?? null;
+    const workspace = box('.focus-workspace');
+    const fab = box('.sidebar-fab');
+    return {
+      workspaceLeft: workspace ? workspace.left : null,
+      workspaceWidth: workspace ? workspace.width : null,
+      clockLeft: box('.focus-clock')?.left ?? null,
+      paddingLeft,
+      inner: el.clientWidth - paddingLeft - paddingRight,
+      // A `display: none` button measures as a zero box at the origin, which is not "clear of it".
+      fabRight: fab && fab.width > 0 ? fab.right : 0,
+      panelRight: box('.sidebar')?.right ?? 0,
+      // `globalThis`, not `window`: inside this callback `window` is the Playwright page object.
+      windowWidth: globalThis.innerWidth,
+    };
+  });
+}
+
 /*
  * The plan is closed until a press opens it, and the toggle is a toggle: pressing it while the
  * panel is open closes the very thing the caller is about to look at. Every entry point that needs
@@ -1020,13 +1062,27 @@ test('the sidebar folds on click, and focus folds it fully, with a floating reca
     .evaluate((el) => el.getBoundingClientRect().left);
   expect(contentLeft).toBeLessThan(2);
 
-  // But on focus the fold hides the chrome, not the layout: the workspace keeps the
-  // column the open sidebar occupied, so the countdown never reflows to where the
-  // peeked panel will appear.
-  const workspaceLeft = await window
-    .locator('.focus-workspace')
-    .evaluate((el) => el.getBoundingClientRect().left);
-  expect(workspaceLeft).toBeGreaterThanOrEqual(232);
+  /*
+   * And the focus screen is the place the fold has to pay off, not the one place it does not: the
+   * workspace takes the window. It used to keep the open sidebar's whole column — 232px plus the base
+   * padding — so the peeked panel below could only ever slide over an empty gutter, at the price of a
+   * 256px band of nothing down the left of the one screen the learner is meant to be looking at.
+   *
+   * What is left is the floating recall button's own column plus the centring the content measure adds,
+   * and nothing else — asserted as an equality rather than a maximum, because "there is no reservation
+   * left" is the claim and any reserved column is exactly the failure. The button's clearance is checked
+   * separately: a stage shoved back under it is a different regression with the same cause.
+   */
+  const fold = await focusColumns();
+  expect(fold.workspaceLeft).not.toBeNull();
+  const workspaceLeft = fold.workspaceLeft ?? 0;
+  const workspaceWidth = fold.workspaceWidth ?? 0;
+  const centred = (fold.inner - workspaceWidth) / 2;
+  expect(Math.abs(workspaceLeft - fold.paddingLeft - centred)).toBeLessThan(1);
+  expect(fold.fabRight).toBeGreaterThan(0);
+  expect(workspaceLeft).toBeGreaterThan(fold.fabRight);
+  // The space it took back is the sidebar's, so the width has to be the window's, less two paddings.
+  expect(workspaceWidth).toBeGreaterThan(fold.windowWidth - 260);
 
   // 1b. Finishing the step is a shell-narrowing phase too — `keepsRail` in
   //     `core/focus-phase.ts`, which the canvas publishes as `data-rail` — so the fold must
@@ -1077,12 +1133,18 @@ test('the sidebar folds on click, and focus folds it fully, with a floating reca
   expect(panel.backdropFilter).toBe('none');
   expect(panel.boxShadow).not.toBe('none');
 
-  //    And the workspace itself stays where the fold left it: the panel slides over
-  //    the gutter it vacated, never over the countdown.
-  const workspaceLeftDuringPeek = await window
-    .locator('.focus-workspace')
-    .evaluate((el) => el.getBoundingClientRect().left);
-  expect(workspaceLeftDuringPeek).toBeGreaterThanOrEqual(232);
+  /*
+   *    And the workspace itself stays where the fold left it. That is the half of "a peek is a look,
+   *    not a reflow" that can still break now: the reservation the panel used to be handed is gone, so a
+   *    peek that changed the content's padding — or a grid that handed the content the folded track —
+   *    would move the stage out from under the pointer that opened the panel. The panel covers the
+   *    stage's left edge on a window this narrow, which is what a drawer over a page does; the countdown
+   *    is in the stage's right-hand column and must never be under it.
+   */
+  const duringPeek = await focusColumns();
+  expect(duringPeek.workspaceLeft).toBe(workspaceLeft);
+  expect(duringPeek.clockLeft).not.toBeNull();
+  expect(duringPeek.clockLeft ?? 0).toBeGreaterThanOrEqual(duringPeek.panelRight);
 
   // 3. Moving the pointer away folds it straight back.
   await window.mouse.move(640, 400);
@@ -1093,9 +1155,16 @@ test('the sidebar folds on click, and focus folds it fully, with a floating reca
   await pinThroughPeek();
   await expect(window.locator('.sidebar')).toBeVisible();
 
-  // 5. ...and its own toggle folds it away again for the rest of the commitment.
+  // 5. ...and its own toggle folds it away again for the rest of the commitment. This is where the
+  //    fold's promise is measurable: pinned open, the sidebar's column is a column and the workspace
+  //    is narrower for it; folded, that width is the workspace's, not a band of empty page.
+  const pinned = await focusColumns();
   await window.getByTestId('sidebar-toggle').click();
   await expect(window.locator('.sidebar')).toBeHidden();
+  const reFolded = await focusColumns();
+  expect(pinned.workspaceWidth).not.toBeNull();
+  expect(reFolded.workspaceWidth ?? 0).toBeGreaterThan((pinned.workspaceWidth ?? 0) + 190);
+  expect(reFolded.workspaceLeft ?? 0).toBeLessThan(pinned.workspaceLeft ?? 0);
 
   // 6. Focus over. The fold was deliberate, so it survives the session ending.
   await window.getByTestId('end-session').click();

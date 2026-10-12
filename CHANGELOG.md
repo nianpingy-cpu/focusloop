@@ -64,6 +64,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **The folded sidebar hands its column back on the focus screen.** With the sidebar away, the focus
+  workspace used to keep the open sidebar's whole column — `padding-left: 256px`, the 232px track plus
+  the base padding — so that the hover-peeked panel could only ever slide over an empty gutter, and the
+  stage never reflowed into the space it had just been given. The price was a 256px band of nothing down
+  the left of the one screen the learner is meant to be looking at: at a 1140-wide window the stage was
+  822px wide, and now it is 1016px with the floating recall button's own 62px corner as the only
+  reservation — the same corner every other screen keeps. Nothing moves when the pointer rests on that
+  button, because the peek still lifts the panel out of the grid rather than reflowing the page; what
+  changed is what it covers. The panel now covers the stage's left edge on a window narrower than about
+  1370px, which is what a drawer over a page does, and it never covers the countdown, which sits in the
+  stage's right-hand column.
 - **The focus screen stopped wasting the row it has.** The type scale is one scale again: the step's
   title tops out at 36px instead of 46, the instructions and the fine print under the box are 13px
   rather than inheriting body size (a class-plus-element rule was out-specifying `.muted.small`), and the
