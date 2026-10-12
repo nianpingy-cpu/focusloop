@@ -92,6 +92,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   workspace's column in place, so the peeked panel only ever slides over the gutter it vacated and
   the countdown never reflows under it.
 
+### Fixed
+
+- **The courses the app writes itself are written in the learner's language, not in English.** A
+  Chinese window around a course generated from Chinese notes still read `Read: 模拟调制` and
+  `Explain "模拟调制" using a concrete example you invent yourself.`, and the built-in course was
+  English end to end — the app's own sentences, in the two places the "the renderer owns the wording"
+  rule had not reached. `agent-core` now takes the wording as an argument (`TaskCopy`, `DemoCopy`) and
+  the shell supplies it from the locale the store already holds, so a heading or a sentence from the
+  learner's own notes is still theirs and everything around it follows the interface. Switching
+  language re-writes both the built-in course and every course the app generated, straight away rather
+  than at the next restart — the ids those rows are keyed by come from the material, so a running
+  session, its completions and its checkpoints still point at the same step, and the order the learner
+  dragged their steps into belongs to the session rather than to the course. Four Chinese strings that
+  had kept the English word `Agent` now say 智能体.
+- **A button that cannot be pressed now looks like one.** The tutor's Ask is disabled until a mode and
+  a question are both there, and nothing in the stylesheet made a disabled control look disabled: it
+  kept its full contrast and its pointer cursor, so a press that could not happen read as a press that
+  did nothing. Disabled controls are dimmed, take a `not-allowed` cursor and no longer light up on
+  hover, and the tutor panel names the half of the request that is still missing rather than leaving
+  the learner to guess which one it is.
+
 ## [0.1.0-demo] — 2026-09-17
 
 The first demonstrable end-to-end slice. FocusLoop does not diagnose ADHD; it tracks the learning

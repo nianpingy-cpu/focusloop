@@ -238,7 +238,18 @@ export function createHandlers(service: FocusLoopService, router: EventRouter) {
     defineHandler({
       channel: IPC_CHANNELS.setLocale,
       parse: parseSetLocale,
-      handle: (request) => engine.setLocale(request.locale),
+      handle: (request) => {
+        const settings = engine.setLocale(request.locale);
+        /*
+         * The built-in course is written in the learner's language (#2), and `saveCourse` replaces a
+         * course's concepts, tasks and quizzes in place — the ids do not move, so a session that is
+         * already running keeps pointing at the same step. Without this the catalogue would keep the
+         * language it was first seeded in until the next restart, which is the mixing this exists to
+         * remove.
+         */
+        engine.refreshAuthoredCourses();
+        return settings;
+      },
     }),
     defineHandler({
       channel: IPC_CHANNELS.setTheme,

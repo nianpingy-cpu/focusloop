@@ -301,6 +301,13 @@ export class AppStateService {
       const settings = await this.api.setLocale({ locale });
       // The store is the authority; reflect what it actually kept.
       this.locale.set(settings.locale);
+      /*
+       * The built-in course is written in the language the learner just chose and the main process
+       * re-seeds it here, so the catalogue is re-read rather than left showing the language it was
+       * seeded in. A course that is already running is unaffected: the ids do not move, only their
+       * words.
+       */
+      await this.refresh();
     });
   }
 

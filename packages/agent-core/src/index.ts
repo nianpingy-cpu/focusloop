@@ -7,6 +7,7 @@
  */
 
 export * from './demo-course';
+export * from './course-copy';
 export * from './micro-task-generator';
 export * from './agent-context';
 export * from './tutor';

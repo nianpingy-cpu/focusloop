@@ -5,10 +5,12 @@ import {
   TUTOR_LIMITS,
   type AIProvider,
   type CompletionRequest,
+  type Course,
   type RescueOutcomeSummary,
 } from '@focusloop/shared-types';
 import { EngineError, FocusLoopEngine } from './engine';
 import { DEMO_COURSE_ID } from './demo-course';
+import { DEFAULT_DEMO_COPY, DEFAULT_TASK_COPY, type CourseCopy } from './course-copy';
 import { createTestEngine, type TestEngine } from './test-helpers';
 
 function failingProvider(): AIProvider & { readonly requests: CompletionRequest[] } {
@@ -217,6 +219,99 @@ describe('FocusLoopEngine', () => {
     it('propagates parser warnings', () => {
       const result = ctx.engine.importMaterial('empty.txt', '   ');
       expect(result.warnings.length).toBeGreaterThan(0);
+    });
+  });
+
+  /*
+   * The wording of a course the app writes itself follows the language the learner chose, and the two
+   * paths that write one — the built-in seed and an import — have to consult the same bundle. A copy
+   * that is not wired through shows up here as an English course inside a Chinese window.
+   */
+  describe('the wording courses are written in', () => {
+    const markingCopy = (tag: string): CourseCopy => ({
+      task: { ...DEFAULT_TASK_COPY, readTitle: (heading) => `${tag} ${heading}` },
+      demo: { ...DEFAULT_DEMO_COPY, title: `${tag} course` },
+    });
+
+    const NOTES = '# Sorting\n\n' + 'a'.repeat(200) + '\n\n## Merge sort\n\n' + 'b'.repeat(200);
+
+    const localEngine = (): TestEngine =>
+      createTestEngine({ courseCopy: (locale) => markingCopy(locale) });
+
+    const importedCourse = (local: TestEngine): Course | undefined =>
+      local.engine.listCourses().find((course) => course.id !== DEMO_COURSE_ID);
+
+    it('seeds the built-in course in the copy for the locale in force', () => {
+      const local = localEngine();
+      try {
+        expect(local.engine.getCourse(DEMO_COURSE_ID)?.title).toBe('en course');
+
+        local.engine.setLocale('zh');
+        local.engine.refreshAuthoredCourses();
+        expect(local.engine.getCourse(DEMO_COURSE_ID)?.title).toBe('zh course');
+
+        // Switching back is the same path, and the ids never move.
+        local.engine.setLocale('en');
+        local.engine.refreshAuthoredCourses();
+        expect(local.engine.getCourse(DEMO_COURSE_ID)?.title).toBe('en course');
+        expect(local.engine.getCourse(DEMO_COURSE_ID)?.microTasks).toHaveLength(5);
+      } finally {
+        local.close();
+      }
+    });
+
+    it('generates an imported course in the copy for the locale in force', () => {
+      const local = localEngine();
+      try {
+        local.engine.setLocale('zh');
+        local.engine.importMaterial('notes.md', NOTES);
+        expect(importedCourse(local)?.microTasks[0]?.title).toBe('zh Merge sort');
+      } finally {
+        local.close();
+      }
+    });
+
+    it('re-words a course that was generated in the other language', () => {
+      const local = localEngine();
+      try {
+        local.engine.importMaterial('notes.md', NOTES);
+        const before = importedCourse(local);
+        expect(before?.microTasks[0]?.title).toBe('en Merge sort');
+
+        /*
+         * The learner's own rows are not what moved. This is the whole reason regenerating is safe:
+         * every id is a function of the material, so the session, its completions and its checkpoints
+         * still point at the step they were about, and only the words around them changed.
+         */
+        local.engine.setLocale('zh');
+        local.engine.refreshAuthoredCourses();
+        const after = importedCourse(local);
+        expect(after?.microTasks.map((task) => task.id)).toEqual(
+          before?.microTasks.map((task) => task.id),
+        );
+        expect(after?.concepts.map((concept) => concept.id)).toEqual(
+          before?.concepts.map((concept) => concept.id),
+        );
+        expect(after?.microTasks[0]?.title).toBe('zh Merge sort');
+      } finally {
+        local.close();
+      }
+    });
+
+    it('re-writes an imported course in place rather than adding a second one', () => {
+      const local = localEngine();
+      try {
+        local.engine.importMaterial('notes.md', NOTES);
+        local.engine.refreshAuthoredCourses();
+        local.engine.setLocale('zh');
+        local.engine.refreshAuthoredCourses();
+
+        expect(
+          local.engine.listCourses().filter((course) => course.id !== DEMO_COURSE_ID),
+        ).toHaveLength(1);
+      } finally {
+        local.close();
+      }
     });
   });
 

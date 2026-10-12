@@ -521,6 +521,8 @@ export const zh: Record<MessageKey, string> = {
   'tutor.placeholder.answer': '写下或粘贴你的答案，导师会帮你看看。',
   'tutor.ask': '提问',
   'tutor.asking': '正在提问…',
+  'tutor.hint.mode': '先在上面六项里选一个，再点「提问」。',
+  'tutor.hint.question': '先在上面的输入框里写下你的问题，再点「提问」。',
   'tutor.mode.EXPLAIN': '解释一下',
   'tutor.mode.HINT': '给点提示',
   'tutor.mode.EXAMPLE': '举个例子',
@@ -580,12 +582,12 @@ export const zh: Record<MessageKey, string> = {
   // Agent 记忆检查（AG7.5）：拒绝是有理由的；其余全是元数据，绝不是内容。
   'memory.refusal.wrong-session': '那是另一个会话的记忆。',
   'memory.refusal.no-session': '当前没有进行中的会话，没有可查看的记忆。',
-  'app.data.memory.title': 'Agent 记住的内容',
+  'app.data.memory.title': '智能体记住的内容',
   'app.data.memory.empty': '本会话没有留下任何记忆。',
   'app.data.memory.clear': '清除会话记忆',
-  'app.data.memory.confirm.title': '清除 Agent 记住的内容？',
+  'app.data.memory.confirm.title': '清除智能体记住的内容？',
   'app.data.memory.confirm.lose':
-    '这会删除 Agent 对本会话的记忆——对话、事件与检查点。不会动你的课程、任务或学习结果。',
+    '这会删除智能体对本会话的记忆——对话、事件与检查点。不会动你的课程、任务或学习结果。',
   'app.data.memory.confirm.action': '清除记忆',
   'app.data.memory.cleared': '已于 {at} 清除 · 操作方 {actor}',
   'app.data.memory.clearedNotice': '会话记忆已清除。',
@@ -601,7 +603,7 @@ export const zh: Record<MessageKey, string> = {
   // 周复盘（AG6.5）：每一行都是一个计数，且带着它数过的行。
   'app.reflection.title': '本周',
   'app.reflection.stats': '本周发生的事',
-  'app.reflection.claims': 'Agent 记下的偏好',
+  'app.reflection.claims': '智能体记下的偏好',
   'app.reflection.suggestions': '值得确认的建议',
   'app.reflection.confirm': '查看并确认',
   'app.reflection.declined': '已婉拒建议，没有保存偏好。',

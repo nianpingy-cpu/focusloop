@@ -94,6 +94,17 @@ action forces someone to decide how it reads in both languages.
 Interpolated values that are _content_ rather than _chrome_ — a concept title, a task title, a
 learner's own note — are never translated, because they are the learner's material and not ours.
 
+The two courses the app writes itself are chrome around the learner's material, so they follow the
+same rule. `agent-core` takes their wording as an argument — `TaskCopy` and `DemoCopy` in
+`packages/agent-core/src/course-copy.ts` — and the shell supplies the bundle for the locale the store
+holds (`apps/desktop/electron/course-copy.ts`). A section heading, a sentence from the learner's
+notes, stays exactly as written; the `Read:` in front of it and the built-in course's own prose
+follow the interface. The wording is re-written when the language changes, for the built-in course
+and for every course generated from a stored document — safe because the ids are a function of the
+material, so nothing the learner did points at anything else afterwards. English is not written
+twice: the domain's default bundle _is_ the English one, so a locale with no bundle of its own gets
+the wording the app shipped before this was configurable.
+
 The locale itself is persisted by the store (`app_meta.locale`), not by the renderer, and the store
 is reached through the same validated IPC bridge as everything else (`settings:get`,
 `settings:set-locale`). The renderer holds no durable state, so switching language survives a

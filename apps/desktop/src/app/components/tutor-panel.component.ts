@@ -2,7 +2,7 @@ import { Component, computed, effect, inject, signal, viewChild } from '@angular
 import type { ElementRef, OnDestroy } from '@angular/core';
 import type { TutorMode } from '@focusloop/shared-types';
 import { AppStateService } from '../core/app-state.service';
-import { I18nService } from '../core/i18n/i18n.service';
+import { I18nService, type MessageKey } from '../core/i18n/i18n.service';
 import { resolvePanelPlacement, type PanelPlacement } from '../core/panel-placement';
 import {
   TUTOR_MODE_KEYS,
@@ -100,6 +100,14 @@ const PANEL_GAP_PX = 8;
                 {{ t('tutor.close') }}
               </button>
             </div>
+
+            <!--
+              Ask is inert until both halves of a request are there, and an inert button says nothing
+              about which half is missing. This is that half, named.
+            -->
+            @if (askHintKey(); as hint) {
+              <p class="tutor__hint muted small" data-testid="tutor-hint">{{ t(hint) }}</p>
+            }
 
             @if (view(); as result) {
               <div class="tutor__result" role="status" data-testid="tutor-result">
@@ -286,6 +294,19 @@ export class TutorPanelComponent implements OnDestroy {
   protected readonly canAsk = computed(
     () => this.chosen() !== null && this.question().trim().length > 0 && !this.asking(),
   );
+
+  /**
+   * What the panel says while Ask is inert: which of the two it is still waiting for, or nothing.
+   *
+   * The button is disabled for a reason the learner cannot see — six mode buttons and an empty box look
+   * like a form that is ready. Reported as a key rather than a sentence because this is the renderer and
+   * the words are its own; `null` while Ask can be pressed, so the line never sits under a button that
+   * works.
+   */
+  protected readonly askHintKey = computed<MessageKey | null>(() => {
+    if (this.chosen() === null) return 'tutor.hint.mode';
+    return this.question().trim().length === 0 ? 'tutor.hint.question' : null;
+  });
 
   /** The button's words, from the map the contract's vocabulary is keyed by. */
   protected modeKey(mode: TutorMode): string {

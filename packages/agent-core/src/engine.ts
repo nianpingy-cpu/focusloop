@@ -135,6 +135,7 @@ import {
   type InsightsSessionSource,
 } from './insights';
 import { demoCourse, demoInterruption } from './demo-course';
+import { DEFAULT_COURSE_COPY, type CourseCopy } from './course-copy';
 import { generateCourse } from './micro-task-generator';
 import { buildTutorPrompt, buildTutorRetryPrompt, isRetryable, readTutorReply } from './tutor';
 import {
@@ -197,6 +198,14 @@ export interface FocusLoopEngineOptions {
   readonly stateConfig?: Partial<StateEngineConfig>;
   readonly policyConfig?: Partial<InterventionPolicyConfig>;
   readonly simulatorEnabled?: boolean;
+  /**
+   * The wording the built-in course and a generated course are written in, by locale.
+   *
+   * The engine knows the locale the learner chose — it stores it — but not the words, so the shell
+   * that owns the interface's copy supplies both. Defaults to the English wording the app shipped
+   * before this was configurable, which is what a test that constructs an engine gets.
+   */
+  readonly courseCopy?: (locale: Locale) => CourseCopy;
 }
 
 /**
@@ -232,6 +241,7 @@ export class FocusLoopEngine {
   private readonly simulatorEnabled: boolean;
   private readonly stateConfig: Partial<StateEngineConfig>;
   private readonly policyConfig: Partial<InterventionPolicyConfig>;
+  private readonly courseCopy: (locale: Locale) => CourseCopy;
   /**
    * The tutor's conversations, keyed by session, in memory.
    *
@@ -251,6 +261,12 @@ export class FocusLoopEngine {
     this.stateConfig = options.stateConfig ?? {};
     this.policyConfig = options.policyConfig ?? {};
     this.simulatorEnabled = options.simulatorEnabled ?? true;
+    this.courseCopy = options.courseCopy ?? (() => DEFAULT_COURSE_COPY);
+  }
+
+  /** The wording in force, which follows the language the learner chose. */
+  private copy(): CourseCopy {
+    return this.courseCopy(this.getSettings().locale);
   }
 
   initialize(): void {
@@ -272,7 +288,31 @@ export class FocusLoopEngine {
 
   /** Idempotent: safe on every boot. */
   seedBuiltInCourses(): void {
-    this.store.saveCourse(demoCourse(), { source: 'builtin' });
+    this.store.saveCourse(demoCourse(this.copy().demo), { source: 'builtin' });
+  }
+
+  /**
+   * Re-writes the wording of every course the app authored, in the language in force (#2).
+   *
+   * The generated course is derived from a stored document, deterministically, so its rows are the
+   * app's own sentences wrapped around the learner's material — and a course imported while the app
+   * was in English would otherwise keep that English for as long as the learner kept it. Regenerating
+   * is safe because nothing the learner did lives in those rows: the ids are a function of the
+   * material, so every session, checkpoint and completion still points at the same step, and the order
+   * the learner dragged their steps into belongs to the session, not to the course.
+   *
+   * A material whose course is gone is left alone: deleting a course the learner can still see in
+   * their material list is not this method's business.
+   */
+  refreshAuthoredCourses(): void {
+    this.seedBuiltInCourses();
+
+    const copy = this.copy().task;
+    for (const material of this.store.listMaterials()) {
+      const generated = generateCourse(material, { copy });
+      if (this.store.getCourse(generated.course.id) === null) continue;
+      this.store.saveCourse(generated.course, { source: 'imported', materialId: material.id });
+    }
   }
 
   /**
@@ -351,7 +391,7 @@ export class FocusLoopEngine {
     const material: MaterialDocument = existing ?? document;
     if (existing === null) this.store.saveMaterial(material);
 
-    const generated = generateCourse(material);
+    const generated = generateCourse(material, { copy: this.copy().task });
     const courseExists = this.store.getCourse(generated.course.id) !== null;
     if (!courseExists) {
       this.store.saveCourse(generated.course, { source: 'imported', materialId: material.id });

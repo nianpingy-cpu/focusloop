@@ -1699,6 +1699,11 @@ textarea:focus {
   gap: 8px;
 }
 
+/* Which half of a request is still missing, under the button that is waiting for it. */
+.tutor__hint {
+  margin: 8px 0 0;
+}
+
 .tutor__result {
   margin-top: 12px;
   padding-top: 10px;
@@ -2387,6 +2392,27 @@ code {
 
 .focus-controls .btn--ghost {
   color: var(--focus-ink-quiet);
+}
+
+/*
+ * A control that cannot be pressed has to look like one.
+ *
+ * The tutor's Ask is disabled until a mode and something in the box are both there, and nothing made a
+ * disabled control look disabled: it kept its full contrast and its pointer cursor, so a press that could
+ * not happen read as a press that did nothing. It is stated here rather than beside `.btn` because the
+ * focus controls repaint `.btn--primary` with the same specificity, and a rule that loses the cascade is a
+ * rule that is not there — hence the four selectors and the position, both of which are load-bearing.
+ * `:hover` is caught too: a disabled control that lights up under the pointer promises an action.
+ */
+.btn:disabled,
+.btn:disabled:hover,
+.focus-controls .btn:disabled,
+.focus-controls .btn:disabled:hover {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: var(--border);
+  background: var(--bg-soft);
+  color: var(--text-muted);
 }
 
 /*

@@ -572,6 +572,8 @@ const en = {
   'tutor.placeholder.answer': 'Write or paste your answer, and the tutor will check it.',
   'tutor.ask': 'Ask',
   'tutor.asking': 'Asking…',
+  'tutor.hint.mode': 'Pick one of the six above first, then press Ask.',
+  'tutor.hint.question': 'Write your question in the box above, then press Ask.',
   'tutor.mode.EXPLAIN': 'Explain it',
   'tutor.mode.HINT': 'A hint',
   'tutor.mode.EXAMPLE': 'An example',
