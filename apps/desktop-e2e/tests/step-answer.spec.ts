@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
@@ -122,6 +122,53 @@ test('a step records what the learner wrote, and answers a quiz it asks', async 
      */
     expect((await allEvents(page, 'QUIZ_INCORRECT')).length).toBe(1);
     expect((await allEvents(page, 'QUIZ_CORRECT')).length).toBe(1);
+
+    /*
+     * 5. And an answer can arrive as a file instead of as typing.
+     *
+     * The claim is that the window can hand the main process a path and get text back. Each of the three
+     * readers that load a library is exercised here rather than only in the unit spec, because the main
+     * process is a bundle and the library is `require`d from `node_modules` beside it at runtime: that
+     * resolution, and the OCR engine's worker under Electron, is something only the running app can show.
+     *
+     * The picker itself is not exercised: it is a native dialog, and the operating system's file picker is
+     * not something a test can click through. That is why the path-taking channel exists and why this goes
+     * through it.
+     */
+    const readFrom = async (path: string) =>
+      page.evaluate(
+        async (target) => globalThis.focusloop.extractAnswerSource({ path: target }),
+        path,
+      );
+
+    const written = join(profile, 'answer.txt');
+    writeFileSync(written, 'The invariant is that every path has the same black height.\n', 'utf8');
+    const read = await readFrom(written);
+    expect(read.refusal).toBeNull();
+    expect(read.source).toMatchObject({
+      name: 'answer.txt',
+      method: 'text',
+      text: 'The invariant is that every path has the same black height.',
+    });
+
+    const fixtures = resolve(__dirname, '..', '..', 'desktop', 'electron', 'fixtures');
+    const pdf = await readFrom(join(fixtures, 'notes.pdf'));
+    expect(pdf.source?.method).toBe('pdf');
+    expect(pdf.source?.text).toContain('FocusLoop reads this PDF sentence.');
+
+    const docx = await readFrom(join(fixtures, 'notes.docx'));
+    expect(docx.source?.method).toBe('docx');
+    expect(docx.source?.text).toContain('FocusLoop docx fixture sentence.');
+
+    const image = await readFrom(join(fixtures, 'whiteboard.png'));
+    expect(image.source?.method).toBe('ocr');
+    expect(image.source?.text.toLowerCase()).toContain('focusloop');
+
+    const unsupported = join(profile, 'answer.xlsx');
+    writeFileSync(unsupported, 'not a document this reads', 'utf8');
+    const refused = await readFrom(unsupported);
+    expect(refused.source).toBeNull();
+    expect(refused.refusal).toEqual({ reason: 'unsupported', name: 'answer.xlsx' });
 
     await expect(page.locator('.banner--error')).toHaveCount(0);
   } finally {

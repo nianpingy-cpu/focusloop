@@ -18,6 +18,7 @@ export * from './material';
 export * from './material-link';
 export * from './course';
 export * from './quiz';
+export * from './answer-source';
 export * from './adaptive-task';
 export * from './agent-context';
 export * from './tutor';

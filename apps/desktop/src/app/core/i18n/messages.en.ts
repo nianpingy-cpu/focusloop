@@ -281,7 +281,7 @@ const en = {
   'map.hint': 'What this course is made of, in the order you will meet it.',
   'map.recall.title': 'Draw it again from memory',
   'map.recall.hint':
-    'Write the concepts you remember, in your own words. The order does not matter, and you can dictate instead of typing.',
+    'Write the concepts you remember, in your own words. The order does not matter.',
   'map.recall.label': 'Your map',
   'map.recall.score': 'You recalled {recalled} of {total}.',
   'map.recall.done': 'That is the whole map. It stuck.',
@@ -354,6 +354,22 @@ const en = {
   'focus.answer.placeholder.recall': 'Say what you still remember…',
   'focus.answer.tooLong': 'Keep it under {count} characters.',
   'focus.answer.check': 'Have the tutor check it',
+  /*
+   * Bringing the words with you.
+   *
+   * One button rather than two: the picker offers documents and images side by side, and the learner
+   * knows what is in the file they are about to choose. The lines after it name the file and say which
+   * reader produced the text — the OCR one also says to check it, because a recognised character can be
+   * wrong and only the learner can tell.
+   */
+  'focus.answer.attach': 'Attach a file',
+  'focus.answer.source.read': 'Read from {name}. Edit it as you like.',
+  'focus.answer.source.ocr': 'Recognised from {name} — check the words before you use them.',
+  'focus.answer.source.cut': 'The box holds the beginning of {name} only.',
+  'focus.answer.source.unsupported': '{name} is not a file this can read.',
+  'focus.answer.source.tooBig': '{name} is too large to read.',
+  'focus.answer.source.unreadable': '{name} could not be read.',
+  'focus.answer.source.empty': 'There was no text in {name}.',
   'focus.quiz.title': 'This step asks a question',
   'focus.quiz.options': 'Answers to choose from',
   'focus.quiz.check': 'Check my answer',

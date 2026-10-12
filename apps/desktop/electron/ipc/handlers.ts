@@ -1,14 +1,18 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { ipcMain, dialog, type IpcMainInvokeEvent } from 'electron';
 import {
+  ANSWER_SOURCE_EXTENSIONS,
   IPC_CHANNELS,
   BRIDGE_PROTOCOL_VERSION,
+  type AnswerSourceResponse,
   type DispatchEventResponse,
 } from '@focusloop/shared-types';
 import type { FocusLoopService } from '../service';
 import type { EventRouter } from '../event-router';
+import { extractAnswerSource } from '../answer-source';
 import {
   parseConfirmProposal,
   parseAnswerQuiz,
+  parseAnswerSourcePath,
   parseCourseId,
   parseDeleteAllData,
   parseDispatchRequest,
@@ -154,6 +158,21 @@ export function createHandlers(service: FocusLoopService, router: EventRouter) {
         router.publish(response);
         return response;
       },
+    }),
+    /*
+     * Reading an answer out of a file. The dialog is here because a file can only be opened here; the
+     * reading itself is `extractAnswerSource`, which the second handler also uses for a path the window
+     * already has (a drop).
+     */
+    defineHandler({
+      channel: IPC_CHANNELS.pickAnswerSource,
+      parse: parseNoArgs,
+      handle: () => pickAndExtract(),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.extractAnswerSource,
+      parse: parseAnswerSourcePath,
+      handle: (request) => extractAnswerSource(request.path),
     }),
     defineHandler({
       channel: IPC_CHANNELS.listEvents,
@@ -441,6 +460,35 @@ export function createHandlers(service: FocusLoopService, router: EventRouter) {
       handle: (request) => engine.askTutor(request),
     }),
   ] as const;
+}
+
+/**
+ * The file dialog, then the reader.
+ *
+ * One file, because an answer is one thing the learner produced — and the two filters are the two kinds
+ * this can actually read, taken from `ANSWER_SOURCE_EXTENSIONS` rather than restated, so a format added to
+ * the vocabulary cannot end up unofferable in the picker that is supposed to offer it.
+ *
+ * Cancelling returns a response with neither half set: it is not a refusal, and putting a warning on
+ * screen for pressing Cancel would be reporting the learner's own decision back to them as a failure.
+ */
+async function pickAndExtract(): Promise<AnswerSourceResponse> {
+  const picked = await dialog.showOpenDialog({
+    title: 'Choose a file to read',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Documents', extensions: extensionsFor('document') },
+      { name: 'Images', extensions: extensionsFor('image') },
+    ],
+  });
+  const chosen = picked.canceled ? undefined : picked.filePaths[0];
+  if (chosen === undefined) return { source: null, refusal: null };
+  return extractAnswerSource(chosen);
+}
+
+/** The dialog's extension list, without the leading dot it does not take. */
+function extensionsFor(kind: 'document' | 'image'): string[] {
+  return ANSWER_SOURCE_EXTENSIONS[kind].map((extension) => extension.replace(/^\./, ''));
 }
 
 export function registerIpcHandlers(service: FocusLoopService, router: EventRouter): () => void {

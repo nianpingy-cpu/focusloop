@@ -2334,6 +2334,7 @@ code {
 
 .step-answer__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -2379,6 +2380,16 @@ code {
 }
 
 .step-answer:focus-within .step-answer__hint {
+  visibility: visible;
+  opacity: 1;
+}
+
+/*
+ * A line about the file that was just read is not the explanation that waits for the caret: it is the
+ * answer to a button the learner pressed, so it is visible whether or not the box has focus. It takes the
+ * same slot, so reading a file cannot move the box or the buttons under it.
+ */
+.step-answer__source {
   visibility: visible;
   opacity: 1;
 }

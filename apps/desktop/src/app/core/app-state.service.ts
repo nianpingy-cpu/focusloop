@@ -8,6 +8,7 @@ import {
 } from '@focusloop/shared-types';
 import type {
   AppSettings,
+  AnswerSourceResponse,
   BridgeInfo,
   Course,
   DashboardSummary,
@@ -48,10 +49,11 @@ import type {
   PreferenceDeleteResult,
   WeeklyReflection,
 } from '@focusloop/shared-types';
-
 import type { FocusNoticeFold } from './focus-notice';
 import type { MessageKey } from './i18n/messages.en';
+import { answerSourceNote, insertAnswerText } from './step-answer';
 import { shouldSuggestRescueText } from './rescue-suggestion';
+import { LEARNER_ANSWER_CHARACTERS } from '@focusloop/shared-types';
 
 declare global {
   interface Window {
@@ -210,6 +212,16 @@ export class AppStateService {
   readonly stepAnswer = signal('');
   readonly stepChoice = signal<number | null>(null);
   readonly stepVerdict = signal<QuizAnswerResult | null>(null);
+  /**
+   * What to say about the last file attached to the box, or `null` when there is nothing to say.
+   *
+   * A key and a file name rather than a sentence: the wording is the shell's, in both languages, and the
+   * name is the learner's own file. Cleared with the step, like the box it is about.
+   */
+  readonly answerSourceNote = signal<{
+    readonly key: MessageKey;
+    readonly params: { readonly name: string };
+  } | null>(null);
   readonly locale = signal<Locale>(DEFAULT_LOCALE);
   readonly theme = signal<ThemePreference>(DEFAULT_THEME);
   /**
@@ -588,6 +600,41 @@ export class AppStateService {
     this.stepAnswer.set('');
     this.stepChoice.set(null);
     this.stepVerdict.set(null);
+    this.answerSourceNote.set(null);
+  }
+
+  /**
+   * Asks for a file and puts what is in it into the box.
+   *
+   * The reading happens in the main process — a PDF, a Word document and a photograph are three readers
+   * that need a file system — and this is the shell's half: the picker, then the text, then the line that
+   * says where the text came from. A refusal is a value rather than an exception, because it is about the
+   * learner's own document (the wrong kind, too large, a scan with no words on it) and a red banner about
+   * an internal error is the wrong way to say any of those.
+   */
+  async attachAnswerSource(): Promise<void> {
+    const response = await this.pickAnswerSource();
+    if (response === null) return;
+
+    this.answerSourceNote.set(answerSourceNote(response));
+    if (response.source === null) return;
+    const { text } = response.source;
+    this.stepAnswer.update((current) => insertAnswerText(current, text, LEARNER_ANSWER_CHARACTERS));
+  }
+
+  /**
+   * The picker, which is a call of its own so the caller gets a value rather than a closure.
+   *
+   * `run` reports a failed call in the banner and returns nothing, which is right for every other channel
+   * here — and wrong for this one, whose result is the whole point. So the request is raised through it
+   * and its answer is handed back, exactly as `answerQuiz` does for the same reason.
+   */
+  private async pickAnswerSource(): Promise<AnswerSourceResponse | null> {
+    let response: AnswerSourceResponse | null = null;
+    await this.run(async () => {
+      response = await this.api.pickAnswerSource();
+    });
+    return response;
   }
 
   /**

@@ -42,6 +42,7 @@ import {
   type TutorAskRequest,
   type AgentMemoryScope,
   type AgentMemoryWindow,
+  type AnswerSourceRequest,
   AGENT_MEMORY_SCOPES,
 } from '@focusloop/shared-types';
 
@@ -442,6 +443,22 @@ export function parseResolveRescue(channel: string, value: unknown): ResolveResc
  * them. What is refused here is the shape: a negative index, a fraction, or a number larger than any
  * quiz the product will render is not a choice that came from a screen.
  */
+/**
+ * The path of a file to read an answer out of.
+ *
+ * A path and nothing else: no text comes in with it, because the reading happens on the other side of this
+ * boundary. The length bound is not a security measure — it is the same "a value this size means the
+ * caller is not our screens" rule the answer box uses, and a path is far shorter than any real file name.
+ */
+export function parseAnswerSourcePath(channel: string, value: unknown): AnswerSourceRequest {
+  const record = asRecord(channel, value);
+  const path = asString(channel, record, 'path');
+  if (path.length === 0 || path.length > 4096) {
+    fail(channel, '"path" must be a non-empty path of at most 4096 characters');
+  }
+  return { path };
+}
+
 export function parseAnswerQuiz(channel: string, value: unknown): QuizAnswerRequest {
   const record = asRecord(channel, value);
   const choiceIndex = record['choiceIndex'];

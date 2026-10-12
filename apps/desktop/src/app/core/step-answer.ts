@@ -1,6 +1,8 @@
 import {
   LEARNER_ANSWER_CHARACTERS,
   quizViewFor,
+  type AnswerSourceRefusalReason,
+  type AnswerSourceResponse,
   type Course,
   type MicroTask,
   type MicroTaskKind,
@@ -109,3 +111,51 @@ export function quizOptionMark(
   if (index === result.answerIndex) return 'right';
   return index === chosen ? 'wrong' : 'none';
 }
+
+/**
+ * What an attached file becomes in the box.
+ *
+ * Appended rather than replacing, on its own line, because the learner's own sentence is the thing they
+ * wrote and a file is something they brought: the two are both about this step, and silently discarding
+ * one of them to make room for the other would be the app deciding which of their work matters. Anything
+ * that does not fit is left out here — the box cannot hold it, and the caller has already been told the
+ * text was cut (`truncated`).
+ */
+export function insertAnswerText(current: string, text: string, limit: number): string {
+  const existing = current.trim();
+  const room = limit - existing.length - (existing === '' ? 0 : 1);
+  const addition = text.trim();
+  if (room <= 0 || addition === '') return current;
+  const inserted = addition.slice(0, room);
+  return existing === '' ? inserted : `${existing}\n${inserted}`;
+}
+
+/**
+ * What to say about an attachment, as a key and the file it names.
+ *
+ * `null` for a cancelled dialog: the learner pressed Cancel, which is not news. A refusal and a
+ * mis-recognition are news, and they are different sentences — OCR is the one that gets the words wrong,
+ * so the line that says the text came from a picture also says to check it.
+ */
+export function answerSourceNote(
+  response: AnswerSourceResponse,
+): { readonly key: MessageKey; readonly params: { readonly name: string } } | null {
+  if (response.refusal !== null) {
+    return { key: REFUSAL_KEYS[response.refusal.reason], params: { name: response.refusal.name } };
+  }
+  const source = response.source;
+  if (source === null) return null;
+  const key: MessageKey = source.truncated
+    ? 'focus.answer.source.cut'
+    : source.method === 'ocr'
+      ? 'focus.answer.source.ocr'
+      : 'focus.answer.source.read';
+  return { key, params: { name: source.name } };
+}
+
+const REFUSAL_KEYS: Record<AnswerSourceRefusalReason, MessageKey> = {
+  unsupported: 'focus.answer.source.unsupported',
+  'too-big': 'focus.answer.source.tooBig',
+  unreadable: 'focus.answer.source.unreadable',
+  'no-text': 'focus.answer.source.empty',
+};

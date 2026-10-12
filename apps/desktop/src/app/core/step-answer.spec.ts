@@ -6,9 +6,11 @@ import {
   type MicroTaskKind,
 } from '@focusloop/shared-types';
 import {
+  answerSourceNote,
   answerTooLong,
   canCheckAnswer,
   canCheckQuiz,
+  insertAnswerText,
   quizOptionMark,
   quizVerdictKey,
   stepAnswerView,
@@ -149,5 +151,92 @@ describe('quizOptionMark', () => {
 
   it('does not call an unpicked option wrong', () => {
     expect(quizOptionMark(correct, null, 0)).toBe('none');
+  });
+});
+
+describe('insertAnswerText', () => {
+  it('fills an empty box with what was read', () => {
+    expect(insertAnswerText('', '  A BST keeps order.  ', 100)).toBe('A BST keeps order.');
+    expect(insertAnswerText('   \n ', 'A BST keeps order.', 100)).toBe('A BST keeps order.');
+  });
+
+  /*
+   * Appended on its own line rather than replacing: the learner's own sentence is what they wrote, and a
+   * file is what they brought. Quietly discarding one for the other is the app deciding which of their
+   * work matters.
+   */
+  it('keeps what they wrote and puts the file under it', () => {
+    expect(insertAnswerText('My own sentence.', 'From the PDF.', 100)).toBe(
+      'My own sentence.\nFrom the PDF.',
+    );
+  });
+
+  it('fills exactly the room that is left, and not a character more', () => {
+    const text = 'abcdefghij';
+    expect(insertAnswerText('12345', text, 8)).toBe('12345\nab');
+    expect(insertAnswerText('12345678', text, 8)).toBe('12345678');
+  });
+
+  it('leaves the box alone when there is no room at all', () => {
+    expect(insertAnswerText('12345678', 'more', 8)).toBe('12345678');
+  });
+
+  it('leaves the box alone when there is nothing to add', () => {
+    expect(insertAnswerText('kept', '   ', 100)).toBe('kept');
+  });
+});
+
+/*
+ * The line under the box says where the text came from, or why nothing came — and the two cases it must
+ * not confuse are the cancelled dialog (nothing to report) and a mis-recognised photograph (something the
+ * learner has to check).
+ */
+describe('answerSourceNote', () => {
+  const source = {
+    path: '/tmp/notes.pdf',
+    name: 'notes.pdf',
+    kind: 'document' as const,
+    method: 'pdf' as const,
+    text: 'text',
+    truncated: false,
+  };
+
+  it('says nothing about a dialog that was cancelled', () => {
+    expect(answerSourceNote({ source: null, refusal: null })).toBeNull();
+  });
+
+  it('names the file it read', () => {
+    expect(answerSourceNote({ source, refusal: null })).toEqual({
+      key: 'focus.answer.source.read',
+      params: { name: 'notes.pdf' },
+    });
+  });
+
+  it('asks them to check text that came out of a picture', () => {
+    expect(
+      answerSourceNote({
+        source: { ...source, kind: 'image', method: 'ocr', name: 'whiteboard.png' },
+        refusal: null,
+      }),
+    ).toEqual({ key: 'focus.answer.source.ocr', params: { name: 'whiteboard.png' } });
+  });
+
+  it('says the end was left out when the box could not hold it all', () => {
+    expect(answerSourceNote({ source: { ...source, truncated: true }, refusal: null })).toEqual({
+      key: 'focus.answer.source.cut',
+      params: { name: 'notes.pdf' },
+    });
+  });
+
+  it.each([
+    ['unsupported', 'focus.answer.source.unsupported'],
+    ['too-big', 'focus.answer.source.tooBig'],
+    ['unreadable', 'focus.answer.source.unreadable'],
+    ['no-text', 'focus.answer.source.empty'],
+  ] as const)('has its own sentence for %s', (reason, key) => {
+    expect(answerSourceNote({ source: null, refusal: { reason, name: 'thing.x' } })).toEqual({
+      key,
+      params: { name: 'thing.x' },
+    });
   });
 });

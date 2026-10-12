@@ -8,6 +8,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **An answer can be a file, and the app reads it here.** A step's answer box, and the same box on a
+  resume card, now carry an attach button beside the one that asks the tutor. Plain text, Markdown,
+  PDF, Word (`.docx`) and photographs of notes are all accepted, and all four readers run inside the
+  app with no network request: `pdf-parse` for PDF text, `mammoth` for Word, the file's own bytes for
+  text, and `tesseract.js` for pictures, with its English and Chinese language data taken from the
+  app's own dependency tree rather than a CDN. Only the file picked in the operating system's dialog
+  is read — nothing walks a folder — and the path is handed to the app's main process, so the sandboxed
+  window still cannot touch the filesystem itself. What comes back is **text in the box**, visible and
+  editable, then treated exactly like typing: it reaches a model only if a key is configured _and_ the
+  learner presses Check my answer, Ask my tutor or completes the step, and a cancelled dialog, a
+  refusal (unsupported type, past the 25 MB limit, unreadable, nothing legible) and a truncated read
+  each have their own sentence under the box rather than a silent failure. Text from a picture is
+  labelled as a recogniser's guess, because an answer should be judged on what the learner meant.
+  There is deliberately no microphone button: offline speech needs a downloaded model or a native
+  build, the app ships neither, and a control that did nothing would be worse than its absence.
 - **Coming back asks what you remember, and keeps it.** The resume card now carries the check-in the
   product was missing on every route: the step's own question and options when the course holds a quiz,
   otherwise the same box the step has, whose words are recorded as the learner's answer for that step

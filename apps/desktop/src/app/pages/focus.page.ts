@@ -279,9 +279,23 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                         [value]="answer()"
                         (input)="onAnswerInput($event)"
                       ></textarea>
-                      <p class="muted small step-answer__hint">
-                        {{ t('focus.answer.hint') }}
-                      </p>
+                      <!--
+                        One line, always reserved: the explanation until a file has been read, then what was
+                        read. Reading a file cannot move the box or the buttons under it.
+                      -->
+                      @if (sourceNote(); as note) {
+                        <p
+                          class="muted small step-answer__hint step-answer__source"
+                          role="status"
+                          data-testid="answer-source-note"
+                        >
+                          {{ t(note.key, note.params) }}
+                        </p>
+                      } @else {
+                        <p class="muted small step-answer__hint">
+                          {{ t('focus.answer.hint') }}
+                        </p>
+                      }
                       @if (answerTooLong()) {
                         <p class="step-answer__error" role="alert" data-testid="answer-too-long">
                           {{ t('focus.answer.tooLong', { count: answerLimit() }) }}
@@ -296,6 +310,19 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                           (click)="checkAnswer()"
                         >
                           {{ t('focus.answer.check') }}
+                        </button>
+                        <!--
+                          Bring your own words with you. A learner who wrote the answer in Word, has the
+                          PDF of their notes, or photographed a whiteboard should not retype any of it —
+                          and all four readers run on this machine, with no model and no network.
+                        -->
+                        <button
+                          type="button"
+                          class="btn btn--small btn--quiet"
+                          data-testid="answer-attach"
+                          (click)="attachAnswer()"
+                        >
+                          {{ t('focus.answer.attach') }}
                         </button>
                       </div>
                     }
@@ -1044,6 +1071,8 @@ export class FocusPage implements OnDestroy, OnInit {
   protected readonly answer = this.state.stepAnswer;
   protected readonly choice = this.state.stepChoice;
   protected readonly verdict = this.state.stepVerdict;
+  /** Where the last attached file's text came from, or why nothing came. */
+  protected readonly sourceNote = this.state.answerSourceNote;
 
   protected readonly answerTooLong = computed(() => {
     const view = this.answerView();
@@ -1124,6 +1153,17 @@ export class FocusPage implements OnDestroy, OnInit {
     const text = this.answer().trim();
     if (task !== null) void this.state.dispatch('TASK_ANSWERED', { taskId: task.id, text });
     this.state.requestTutorCheck('CHECK_MY_ANSWER', text);
+  }
+
+  /**
+   * Asks for a file and puts its text in the box, for the learner to edit and then send.
+   *
+   * The words land in the same box the keyboard writes into, rather than being sent anywhere directly: a
+   * photograph is recognised by an engine that can be wrong, and the only way for the learner to notice
+   * is to see the text before it is used.
+   */
+  protected attachAnswer(): void {
+    void this.state.attachAnswerSource();
   }
 
   /** The box and its verdict belong to one step: nothing of them survives starting another. */

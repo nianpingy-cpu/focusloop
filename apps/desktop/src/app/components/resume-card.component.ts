@@ -122,7 +122,6 @@ import {
                 }
               } @else {
                 <h3>{{ t('resume.recall.title') }}</h3>
-                <p class="muted">{{ t('resume.recall.hint') }}</p>
                 <!-- The box and its button on one line: on the card the box is a sentence or two, and a
                      button on its own row below it costs a row of the notice for nothing. -->
                 <div class="step-answer__row">
@@ -146,8 +145,25 @@ import {
                     >
                       {{ t('resume.recall.save') }}
                     </button>
+                    <button
+                      type="button"
+                      class="btn btn--small btn--quiet"
+                      data-testid="recall-attach"
+                      (click)="attach()"
+                    >
+                      {{ t('focus.answer.attach') }}
+                    </button>
                   </div>
                 </div>
+                @if (sourceNote(); as note) {
+                  <!-- One slot, one line: the hint says what to do until a file has been read, and then
+                       the note says what was read. -->
+                  <p class="muted" role="status" data-testid="recall-source-note">
+                    {{ t(note.key, note.params) }}
+                  </p>
+                } @else {
+                  <p class="muted">{{ t('resume.recall.hint') }}</p>
+                }
                 @if (answerTooLong()) {
                   <p class="step-answer__error" role="alert" data-testid="recall-too-long">
                     {{ t('focus.answer.tooLong', { count: answerLimit() }) }}
@@ -251,6 +267,8 @@ export class ResumeCardComponent implements OnDestroy {
   protected readonly verdict = this.state.stepVerdict;
   /** Set once the learner's own words have landed in the log, which is what the line under the box says. */
   protected readonly recorded = signal(false);
+  /** Where the last attached file's text came from, or why nothing came. */
+  protected readonly sourceNote = this.state.answerSourceNote;
 
   protected readonly answerLimit = computed(() => {
     const view = this.recall();
@@ -393,6 +411,11 @@ export class ResumeCardComponent implements OnDestroy {
 
   protected quizVerdictKey(correct: boolean): MessageKey {
     return quizVerdictKey(correct);
+  }
+
+  /** Asks for a file and puts its text in the box, which is the same box the step below writes into. */
+  protected attach(): void {
+    void this.state.attachAnswerSource();
   }
 
   /**

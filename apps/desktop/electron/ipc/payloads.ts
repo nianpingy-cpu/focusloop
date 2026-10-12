@@ -5,6 +5,7 @@ import type {
   EndSessionRequest,
   ExecuteProposalRequest,
   ImportMaterialRequest,
+  AnswerSourceRequest,
   InsightRange,
   InsightsRequest,
   Locale,
@@ -108,6 +109,7 @@ export const payload = {
   askTutor: (request: TutorAskRequest): TutorAskRequest => request,
   dispatchEvent: (request: DispatchEventRequest): DispatchEventRequest => request,
   answerQuiz: (request: QuizAnswerRequest): QuizAnswerRequest => request,
+  answerSourcePath: (path: string): AnswerSourceRequest => ({ path }),
   proposeStructuralChange: (
     request: ProposeStructuralChangeRequest,
   ): ProposeStructuralChangeRequest => request,
