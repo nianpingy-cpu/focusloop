@@ -70,8 +70,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   4px left border and the row's glyph. The rows alternate now: the odd ones keep the row's own surface
   and the even ones take the accent blue at 10% over it, which measures `#ecf2fe` against `#ffffff` in
   the light theme and `#1f2837` against `#161a21` in the dark one. The banding follows a row's position
-  rather than the task, so reordering keeps it a regular stripe, and the kind's colour is untouched on
-  the left border.
+  rather than the task, so reordering keeps it a regular stripe, and the 4px edge takes the same accent
+  blue on every row instead of the task kind's colour — the glyph is what still carries the kind.
+- **The answer box and its two buttons share one line.** The button that asks the tutor and the one that
+  brings a file in sat in a strip of their own under the box, which cost the task card a whole row for two
+  controls that fit beside it. They are on the box's line now, bottom-aligned with it, and the reserved
+  note line under them is untouched — reading a file still cannot move the box or the buttons beside it. A
+  window narrow enough that the two cannot share the line drops them below the box instead of shrinking it
+  to a sliver, which is the trade the notice's own answer row already makes.
 - **Every page has the same vertical rhythm now, not just home.** `fl-home` was given a 22px column gap
   and the other three page elements were left as plain blocks, so the gap `.content` puts between pages
   stopped at the page boundary and the sections inside them sat flush: measured at 1280, the record

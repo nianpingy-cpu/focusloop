@@ -2443,6 +2443,15 @@ code {
   flex: 0 0 auto;
 }
 
+/*
+ * In the task card the box is three rows tall, so its buttons line up with its bottom edge instead of
+ * floating halfway up it. Scoped to the task card: the notice's box is one row tall, and the centre
+ * alignment above is what lines that one up.
+ */
+.focus-task .step-answer__row {
+  align-items: flex-end;
+}
+
 .step-answer__hint,
 .step-answer__verdict {
   margin: 0;
@@ -2943,6 +2952,12 @@ code {
 .focus-plan .plan__block {
   border-width: 0 0 1px 4px;
   border-left-style: solid;
+  /*
+   * The 4px edge is the accent blue on every row, like the stripe: the column is blue and white, and a
+   * spine that took its colour from the task kind put a third and fourth hue back into it. The glyph
+   * still carries the kind.
+   */
+  border-left-color: var(--accent);
   border-radius: 0 6px 6px 0;
 }
 
@@ -3613,5 +3628,12 @@ fl-focus-notice {
 
   .focus-notice .resume__recall .step-answer__row .step-answer__actions {
     flex-wrap: wrap;
+  }
+
+  /* The task card's box and its two buttons cannot share a line this narrow either, and shrinking the
+     box to a sliver to keep them there costs more than the row the buttons take. */
+  .focus-task .step-answer__row {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

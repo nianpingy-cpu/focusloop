@@ -283,19 +283,50 @@ const NOTICE_GAP = 16;
                       <label class="eyebrow" for="step-answer">
                         {{ t('focus.answer.title') }}
                       </label>
-                      <textarea
-                        id="step-answer"
-                        class="step-answer__input"
-                        rows="3"
-                        [attr.maxlength]="step.maxCharacters"
-                        [placeholder]="t(step.placeholderKey)"
-                        data-testid="step-answer-input"
-                        [value]="answer()"
-                        (input)="onAnswerInput($event)"
-                      ></textarea>
+                      <!--
+                        The box and its two buttons on one line: the button that asks the tutor and the one
+                        that brings a file in both belong to the box, and a strip of its own under the box
+                        cost a row of the task card for two controls that fit beside it.
+                      -->
+                      <div class="step-answer__row">
+                        <textarea
+                          id="step-answer"
+                          class="step-answer__input"
+                          rows="3"
+                          [attr.maxlength]="step.maxCharacters"
+                          [placeholder]="t(step.placeholderKey)"
+                          data-testid="step-answer-input"
+                          [value]="answer()"
+                          (input)="onAnswerInput($event)"
+                        ></textarea>
+                        <div class="step-answer__actions">
+                          <button
+                            type="button"
+                            class="btn btn--small"
+                            data-testid="answer-check"
+                            [disabled]="!answerCheckable()"
+                            (click)="checkAnswer()"
+                          >
+                            {{ t('focus.answer.check') }}
+                          </button>
+                          <!--
+                            Bring your own words with you. A learner who wrote the answer in Word, has the
+                            PDF of their notes, or photographed a whiteboard should not retype any of it —
+                            and all four readers run on this machine, with no model and no network.
+                          -->
+                          <button
+                            type="button"
+                            class="btn btn--small btn--quiet"
+                            data-testid="answer-attach"
+                            (click)="attachAnswer()"
+                          >
+                            {{ t('focus.answer.attach') }}
+                          </button>
+                        </div>
+                      </div>
                       <!--
                         One line, always reserved: the explanation until a file has been read, then what was
-                        read. Reading a file cannot move the box or the buttons under it.
+                        read. Reading a file cannot move the box or the buttons beside it.
                       -->
                       @if (sourceNote(); as note) {
                         <p
@@ -315,30 +346,6 @@ const NOTICE_GAP = 16;
                           {{ t('focus.answer.tooLong', { count: answerLimit() }) }}
                         </p>
                       }
-                      <div class="step-answer__actions">
-                        <button
-                          type="button"
-                          class="btn btn--small"
-                          data-testid="answer-check"
-                          [disabled]="!answerCheckable()"
-                          (click)="checkAnswer()"
-                        >
-                          {{ t('focus.answer.check') }}
-                        </button>
-                        <!--
-                          Bring your own words with you. A learner who wrote the answer in Word, has the
-                          PDF of their notes, or photographed a whiteboard should not retype any of it —
-                          and all four readers run on this machine, with no model and no network.
-                        -->
-                        <button
-                          type="button"
-                          class="btn btn--small btn--quiet"
-                          data-testid="answer-attach"
-                          (click)="attachAnswer()"
-                        >
-                          {{ t('focus.answer.attach') }}
-                        </button>
-                      </div>
                     }
                   </div>
                 }
