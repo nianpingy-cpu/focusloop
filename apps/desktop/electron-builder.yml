@@ -37,6 +37,30 @@ extraResources:
 
 mac:
   icon: resources/icon.icns
+  # Ad-hoc signing (`-`), not `null`. There is no Apple Developer account behind
+  # this project yet, so the app cannot carry a Developer ID signature and a
+  # downloaded copy still needs right-click → Open. What ad-hoc signing buys is
+  # a *complete* bundle signature. `identity: null` left the bundle with only
+  # the linker's signature on the executable and no `CodeResources` at all, so
+  # `codesign --verify --strict` failed and macOS reported the app as damaged
+  # rather than merely unidentified — and "damaged" is not something a learner
+  # can clear with right-click. Measured on the arm64 dmg: before, the bundle
+  # had `Sealed Resources=none`; after, strict verification passes and
+  # `Contents/_CodeSignature/CodeResources` is written.
+  #
+  # `hardenedRuntime` is off because the hardened runtime with an ad-hoc
+  # signature enforces library validation, which stops an Electron app launching
+  # unless it also carries `com.apple.security.cs.disable-library-validation`.
+  # Notarization will need the hardened runtime back on with a real entitlements
+  # file — a change for the day a certificate exists, not for today.
+  identity: '-'
+  hardenedRuntime: false
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  artifactName: FocusLoop-Setup-${arch}.${ext}
 
 linux:
   icon: resources/icon.png
@@ -46,8 +70,15 @@ win:
     - target: nsis
       arch:
         - x64
+        # Windows on ARM has no x64 emulation guarantee for every host, and an
+        # arm64 build is the only way to serve those machines natively. It is a
+        # separate installer, so the two cannot overwrite each other.
+        - arm64
   icon: resources/icon.ico
-  artifactName: FocusLoop-Setup.${ext}
+  # `${arch}` keeps the two installers apart: `FocusLoop-Setup-x64.exe` and
+  # `FocusLoop-Setup-arm64.exe`. The unqualified `FocusLoop-Setup.exe` name is
+  # gone; the README, publishing guide and execution plan name the new files.
+  artifactName: FocusLoop-Setup-${arch}.${ext}
   # The v0.1 demo installer is unsigned. `signAndEditExecutable: false`
   # skips executable editing too, leaving Electron's icon and metadata.
   # That step requires winCodeSign, whose symlinks need admin rights on Windows.

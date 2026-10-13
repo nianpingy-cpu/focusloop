@@ -4,99 +4,381 @@ on:
   push:
     tags:
       - 'v*'
-  # A rehearsal path. Without this, the only way to find out whether the packaging and checksum
-  # steps still work was to push a tag, which is the moment the answer is most expensive.
+  # A rehearsal path. Without this, the only way to find out whether the
+  # packaging and checksum steps still work was to push a tag, which is the
+  # moment the answer is most expensive.
   workflow_dispatch:
 
+# Read by default, like every other workflow here. Only the publishing job
+# writes, and it asks for `contents: write` on itself rather than granting it to
+# the ten jobs that only read.
 permissions:
-  contents: write
+  contents: read
 
 env:
   NODE_VERSION: '22.13.0'
   PNPM_VERSION: '11.4.0'
 
 jobs:
-  release:
-    name: package windows + extension
+  # ---------------------------------------------------------- the CI gates
+  #
+  # Release calls the CI workflow instead of restating its steps. It used to
+  # restate four of them and silently miss the other seven plus the whole
+  # golden-path suite — nothing failed, the gates were simply absent. A gate
+  # added to CI is now part of every release by construction.
+  ci:
+    name: CI gates
+    uses: ./.github/workflows/ci.yml
+
+  # The deep gates live in their own workflow because the same ones run nightly.
+  # Restating them here is how this file once drifted seven gates behind CI
+  # without anything failing.
+  deep:
+    name: deep checks
+    uses: ./.github/workflows/deep-checks.yml
+    secrets: inherit
+
+  # -------------------------------------------------------------- packaging
+  package-windows:
+    name: package windows
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version-file: .nvmrc
           cache: pnpm
 
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # These must stay separate steps. On Windows the default shell is pwsh, and a
-      # multi-line `run:` block reports only the exit code of its LAST command — so
-      # `pnpm test` could fail and the step would still go green as long as
-      # `pnpm verify:scaffolding` passed. That is how a release was once packaged from
-      # a commit whose tests were failing. Separate steps make each gate able to fail
-      # the job, and show which one did.
-      - name: Lint
-        run: pnpm lint
+      # Separate steps, for the reason the release file has always stated: on
+      # Windows the default shell is pwsh, and a `;`-joined block reports only
+      # the last command's exit code — a failed build could still leave the step
+      # green.
+      - name: Build the desktop renderer and main
+        run: pnpm --filter @focusloop/desktop run build
 
-      - name: Typecheck
-        run: pnpm typecheck
+      # Both architectures in one pass. The x64 installer serves the bulk of
+      # machines; arm64 serves Windows on ARM, which has no reliable x64
+      # emulation and cannot be reached any other way.
+      - name: Package both architectures
+        run: >-
+          pnpm --filter @focusloop/desktop exec electron-builder --win
+          --x64 --arm64 --config electron-builder.yml
 
-      - name: Test
-        run: pnpm test
+      - name: Check the artefacts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($f in @('FocusLoop-Setup-x64.exe',
+                           'FocusLoop-Setup-arm64.exe')) {
+            $p = Join-Path 'apps/desktop/release' $f
+            if (-not (Test-Path $p)) { throw "missing $p" }
+            Get-Item $p | Select-Object Name, Length
+          }
 
-      - name: Release hygiene
-        run: pnpm verify:scaffolding
+      # Each payload is checked for the machine type it claims. An arm64
+      # installer built from an x64 payload would look right everywhere else —
+      # same name, same size class, same installer structure — so the executable
+      # itself is the only place the difference shows.
+      #
+      # This lives in the packaging job rather than the install smoke because
+      # the unpacked directories are here. The arm64 installer cannot be run on
+      # an x64 runner at all: its NSIS script picks the payload with
+      # `${IsNativeARM64}`, so on an x64 host it extracts nothing and still
+      # exits 0.
+      - name: Assert each payload is the architecture it claims
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $metadataAssembly = 'System.Reflection.Metadata'
+          Add-Type -AssemblyName $metadataAssembly -ErrorAction SilentlyContinue
 
-      - name: Package the desktop installer
-        run: pnpm --filter @focusloop/desktop run package
+          function Get-PeMachine([string]$Path) {
+            $peReaderType = [System.Reflection.PortableExecutable.PEReader]
+            $stream = [System.IO.File]::OpenRead($Path)
+            try {
+              $reader = $peReaderType::new($stream)
+              try { return $reader.PEHeaders.CoffHeader.Machine }
+              finally { $reader.Dispose() }
+            } finally { $stream.Dispose() }
+          }
+
+          $expected = @{
+            'win-unpacked/FocusLoop.exe'       = 'Amd64'
+            'win-arm64-unpacked/FocusLoop.exe' = 'Arm64'
+          }
+          foreach ($relative in $expected.Keys) {
+            $path = Join-Path 'apps/desktop/release' $relative
+            if (-not (Test-Path $path)) { throw "missing $path" }
+            $machine = Get-PeMachine $path
+            if ("$machine" -ne $expected[$relative]) {
+              throw "$relative is $machine, expected $($expected[$relative])"
+            }
+            Write-Host "$relative -> $machine"
+          }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-installers
+          path: apps/desktop/release/FocusLoop-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+  package-macos:
+    name: package macos
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the desktop renderer and main
+        run: pnpm --filter @focusloop/desktop run build
+
+      # Arch flags are mandatory: without them electron-builder builds only the
+      # runner's own architecture, and the x64 dmg would silently disappear from
+      # the release.
+      - name: Package both architectures
+        run: >-
+          pnpm --filter @focusloop/desktop exec electron-builder --mac dmg
+          --arm64 --x64 --config electron-builder.yml
+
+      - name: Check the artefacts
+        run: |
+          set -euo pipefail
+          ls -lh \
+            apps/desktop/release/FocusLoop-Setup-arm64.dmg \
+            apps/desktop/release/FocusLoop-Setup-x64.dmg
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-installers
+          path: apps/desktop/release/FocusLoop-Setup-*.dmg
+          if-no-files-found: error
+          retention-days: 7
+
+  package-extension:
+    name: package extension
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
 
       - name: Package the extension
         run: pnpm --filter @focusloop/extension run build:zip
 
-      - name: Checksums
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: extension-zip
+          path: apps/extension/release/focusloop-extension.zip
+          if-no-files-found: error
+          retention-days: 7
+
+  # ---------------------------------------------------------- install smoke
+  #
+  # Building an installer proves the toolchain ran. Installing it proves the
+  # learner can. These run on the artefacts the release attaches, not on a build
+  # directory.
+  smoke-windows:
+    name: install smoke (windows)
+    runs-on: windows-latest
+    needs: package-windows
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: windows-installers
+          path: installers
+
+      # `/S` is NSIS's silent switch, and `perMachine: false` keeps the install
+      # inside the user profile, so no elevation is involved.
+      #
+      # Only x64 can be exercised here, and not for want of trying: the arm64
+      # installer chooses its payload with `${IsNativeARM64}`
+      # (electron-builder's `extractAppPackage.nsh`), so on an x64 host it
+      # extracts nothing, installs nothing, and still exits 0. Run 38363388266
+      # failed exactly that way. The arm64 payload's machine type is asserted in
+      # the packaging job instead, beside the directory it was just built into.
+      - name: Install, verify and uninstall the x64 build
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $files = @(
-            'apps/desktop/release/FocusLoop-Setup.exe',
-            'apps/extension/release/focusloop-extension.zip'
-          )
-          $lines = foreach ($file in $files) {
-            $hash = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLower()
-            "$hash  $(Split-Path -Leaf $file)"
+          $root = Join-Path $env:LOCALAPPDATA 'Programs/FocusLoop'
+
+          $setup = Resolve-Path 'installers/FocusLoop-Setup-x64.exe'
+          $install = Start-Process -FilePath $setup -ArgumentList '/S' `
+            -PassThru -Wait
+          if ($install.ExitCode -ne 0) {
+            throw "installer exited $($install.ExitCode)"
           }
-          $lines | Set-Content -Encoding utf8 SHA256SUMS.txt
-          Get-Content SHA256SUMS.txt
+
+          foreach ($f in @('FocusLoop.exe', 'resources/app.asar')) {
+            if (-not (Test-Path (Join-Path $root $f))) {
+              throw "missing after install: $f"
+            }
+          }
+          Write-Host "installed and complete: $root"
+
+          $uninstaller = Join-Path $root 'Uninstall FocusLoop.exe'
+          if (Test-Path $uninstaller) {
+            $remove = Start-Process -FilePath $uninstaller `
+              -ArgumentList '/S' -PassThru -Wait
+            if ($remove.ExitCode -ne 0) {
+              throw "uninstaller exited $($remove.ExitCode)"
+            }
+            Write-Host "uninstalled: exit $($remove.ExitCode)"
+          }
+
+  smoke-macos:
+    name: install smoke (macos)
+    runs-on: macos-latest
+    needs: package-macos
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macos-installers
+          path: installers
+
+      # Mount each dmg, check the bundle is complete, confirm the binary is the
+      # architecture it claims, then detach. A read-only attach needs no
+      # privileges.
+      #
+      # `case` rather than an associative array: the runner's `/bin/bash` is
+      # 3.2, where `declare -A` does not exist — run 38363388266 died with
+      # `arm64: unbound variable` on that line.
+      - name: Mount and inspect each dmg
+        shell: bash
+        run: |
+          set -euo pipefail
+          for arch in arm64 x64; do
+            case "$arch" in
+              arm64) want='Mach-O 64-bit executable arm64' ;;
+              x64) want='Mach-O 64-bit executable x86_64' ;;
+            esac
+            echo "::group::mount $arch"
+            mnt=$(mktemp -d)
+            hdiutil attach -nobrowse -readonly \
+              -mountpoint "$mnt" "installers/FocusLoop-Setup-$arch.dmg"
+            app="$mnt/FocusLoop.app"
+            test -d "$app"
+            test -f "$app/Contents/MacOS/FocusLoop"
+            test -f "$app/Contents/Resources/app.asar"
+            file "$app/Contents/MacOS/FocusLoop" | grep -F "$want"
+            hdiutil detach "$mnt" -quiet
+            rmdir "$mnt"
+            echo "verified $arch"
+            echo "::endgroup::"
+          done
+
+  # -------------------------------------------------------------- publish
+  #
+  # Only a tag may create a release. A dispatched rehearsal runs everything
+  # above and stops here, because a release cannot be attached to a branch — but
+  # it still uploads every artefact so they can be inspected.
+  publish:
+    name: checksums and release
+    runs-on: ubuntu-24.04
+    # The one job that publishes, and the only one that needs to write.
+    permissions:
+      contents: write
+    timeout-minutes: 20
+    needs:
+      - ci
+      - deep
+      - package-windows
+      - package-macos
+      - package-extension
+      - smoke-windows
+      - smoke-macos
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: artefacts
+          merge-multiple: true
+
+      - name: Collect the release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp artefacts/FocusLoop-Setup-*.exe dist/
+          cp artefacts/FocusLoop-Setup-*.dmg dist/
+          cp artefacts/focusloop-extension.zip dist/
+          ls -lh dist
+
+      - name: Checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum FocusLoop-Setup-x64.exe FocusLoop-Setup-arm64.exe \
+                   FocusLoop-Setup-arm64.dmg FocusLoop-Setup-x64.dmg \
+                   focusloop-extension.zip > ../SHA256SUMS.txt
+          cd ..
+          cat SHA256SUMS.txt
 
       - name: Publish the release
-        # Only a tag may create a release. A dispatched rehearsal runs everything above and stops
-        # here, because a release cannot be attached to a branch.
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           draft: true
           generate_release_notes: true
-          body_path: CHANGELOG.md
           files: |
-            apps/desktop/release/FocusLoop-Setup.exe
-            apps/extension/release/focusloop-extension.zip
+            dist/FocusLoop-Setup-x64.exe
+            dist/FocusLoop-Setup-arm64.exe
+            dist/FocusLoop-Setup-arm64.dmg
+            dist/FocusLoop-Setup-x64.dmg
+            dist/focusloop-extension.zip
             SHA256SUMS.txt
 
-      # What a rehearsal produces, so the artefacts and their checksums can be inspected without
-      # publishing them anywhere.
       - name: Upload the rehearsed artefacts
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: focusloop-release
           path: |
-            apps/desktop/release/FocusLoop-Setup.exe
-            apps/extension/release/focusloop-extension.zip
+            dist/FocusLoop-Setup-x64.exe
+            dist/FocusLoop-Setup-arm64.exe
+            dist/FocusLoop-Setup-arm64.dmg
+            dist/FocusLoop-Setup-x64.dmg
+            dist/focusloop-extension.zip
             SHA256SUMS.txt
           retention-days: 7
