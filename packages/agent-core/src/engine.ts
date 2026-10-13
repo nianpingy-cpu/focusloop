@@ -645,6 +645,8 @@ export class FocusLoopEngine {
       context,
       question: request.question,
       turns: this.transcript.list(request.sessionId),
+      // The answer is shown beside the interface, so the interface's language decides it.
+      locale: this.getSettings().locale,
     });
 
     if (built.status === 'refused') {
@@ -1478,7 +1480,11 @@ export class FocusLoopEngine {
     if (this.providers.primary.offline) return null;
     const record = this.store.getSession(sessionId);
     if (record === null) return null;
-    const built = buildRescueSuggestionPrompt(view.plan.action, this.contextFor(record).context);
+    const built = buildRescueSuggestionPrompt(
+      view.plan.action,
+      this.contextFor(record).context,
+      this.getSettings().locale,
+    );
     if (built === null) return null;
     // Through the runtime's finite default budgets — the same door `enrich` has always used.
     const completion = await this.enrich(built.prompt, built.system);

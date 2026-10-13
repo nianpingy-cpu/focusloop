@@ -105,6 +105,13 @@ material, so nothing the learner did points at anything else afterwards. English
 twice: the domain's default bundle _is_ the English one, so a locale with no bundle of its own gets
 the wording the app shipped before this was configurable.
 
+The same rule reaches the model. The tutor's system prompt and the rescue suggestion's carry the
+interface's language (`replyLanguageInstruction` in `packages/agent-core/src/model-language.ts`), so
+an answer is written in the language it will be read next to. Imported material, a learner's question
+and a task's own words stay exactly as written; the answer does not follow them. The sentence is part
+of the system prompt the prompt builders measure, so it is charged against the same character ceiling
+as the rest of the prompt rather than appended after the budget was computed.
+
 The locale itself is persisted by the store (`app_meta.locale`), not by the renderer, and the store
 is reached through the same validated IPC bridge as everything else (`settings:get`,
 `settings:set-locale`). The renderer holds no durable state, so switching language survives a

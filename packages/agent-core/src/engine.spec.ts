@@ -1823,16 +1823,19 @@ describe('FocusLoopEngine', () => {
     function scriptedProvider(
       replies: readonly string[],
       options: { offline?: boolean } = {},
-    ): AIProvider & { readonly prompts: string[] } {
+    ): AIProvider & { readonly prompts: string[]; readonly systems: string[] } {
       const prompts: string[] = [];
+      const systems: string[] = [];
       let index = 0;
       return {
         id: 'scripted',
         model: 'scripted-1',
         offline: options.offline ?? false,
         prompts,
+        systems,
         complete: async (request) => {
           prompts.push(request.prompt);
+          systems.push(request.system ?? '');
           const text = replies[Math.min(index, replies.length - 1)] ?? '';
           index += 1;
           return { text, providerId: 'scripted', model: 'scripted-1', latencyMs: 1 };
@@ -1847,6 +1850,22 @@ describe('FocusLoopEngine', () => {
       const { session } = scripted.engine.startSession(DEMO_COURSE_ID);
       return { scripted, provider, sessionId: session.id };
     }
+
+    it('asks for the answer in the interface language, and follows the learner changing it', async () => {
+      const { scripted, provider, sessionId } = withProvider([
+        '[hint]\nWrite the invariant down.',
+        '[hint]\n写下不变式。',
+      ]);
+      try {
+        await scripted.engine.askTutor({ sessionId, mode: 'HINT', question: 'why?' });
+        expect(provider.systems[0]).toContain('English');
+        scripted.engine.setLocale('zh');
+        await scripted.engine.askTutor({ sessionId, mode: 'HINT', question: 'why?' });
+        expect(provider.systems[1]).toContain('Simplified Chinese');
+      } finally {
+        scripted.close();
+      }
+    });
 
     it('does not call an offline provider, and says so rather than paying for two calls with no answer', async () => {
       const { scripted, provider, sessionId } = withProvider(['[hint]\nunused'], true);

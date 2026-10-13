@@ -61,6 +61,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   sidecars and returns the app to a first-run state without a restart. A file another program has open is
   reported as not deleted rather than shown as a success, and a file that could not be removed is named. See
   `docs/privacy.md`.
+- **The model answers in the interface's language.** The tutor and the rescue suggestion now carry the
+  language the learner chose in their system prompt, so a Simplified-Chinese interface is answered in
+  Simplified Chinese and an English one in English — including when the material, the task or the question
+  is in the other language, which is what decided the language before. The instruction is part of the
+  system prompt the prompt builders measure, so it is charged against the same character ceiling as the rest
+  of the prompt rather than appended after the budget was computed; that is why the tutor's boundary test
+  now finds its refusal size 139 characters lower. `replyLanguageInstruction` in
+  `packages/agent-core/src/model-language.ts` is the single wording, keyed by `Locale` so a locale added
+  without one fails the typecheck instead of answering in whatever the material happened to be written in.
 
 ### Changed
 
