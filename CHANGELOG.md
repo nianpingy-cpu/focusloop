@@ -226,6 +226,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **The return card no longer lands on the plan.** The notice's row and the plan share the bottom of the
+  focus screen, and the lift that keeps the step clear of the card measured only the step. At 1280x800
+  with the card up the plan's trigger sat 26px behind the notice's top edge, and opening the sheet put
+  every one of its four rows behind the card, so the press looked like it had done nothing. The stage's
+  floor is the plan now — the open sheet when there is one, the trigger otherwise — so the lift clears it
+  with a 16px gap, and the sheet's own open and close are watched as well as the card's height, because
+  opening the sheet moves the floor without resizing the card. Closing the sheet scrolls back to the step,
+  whose title the closed case still protects: on a window shorter than the app's own minimum the title is
+  what keeps its place and the trigger waits a scroll. Measured with the card up: the trigger clears at
+  1280x800, 1157x732 and 1024x768, and the open sheet's rows are all above the card at every one of them.
 - **The wiki publishes without a secret, because it never needed one.** `wiki-sync.yml` required a
   `WIKI_SYNC_TOKEN` repository secret and, without it, did nothing but print a notice on every change
   under `docs/wiki/`. The premise — "the default token cannot push to the wiki repository" — came from

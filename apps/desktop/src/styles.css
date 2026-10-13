@@ -2932,32 +2932,22 @@ code {
 }
 
 /*
- * In the plan the blocks fill with their own kind's colour instead of being outlined.
+ * Every row is the same height, so the banding is what makes one task a block rather than a line of text
+ * in a column — the plan still has to read as a stack of tasks.
  *
- * Every row is the same height, so the fill is what makes one task a block rather than a line of text in
- * a column — the plan still has to read as a stack of tasks — and the border carries the kind for the
- * colour-blind reader the same way the glyph does.
+ * The bands alternate blue and white down the column rather than filling each row with its own kind's
+ * colour: the left border and the glyph already carry the kind, and a stack whose every row was tinted
+ * differently was harder to scan than a regular stripe is. The stripe is the accent blue over the row's
+ * own surface, so it follows the theme instead of needing a colour of its own.
  */
 .focus-plan .plan__block {
   border-width: 0 0 1px 4px;
   border-left-style: solid;
   border-radius: 0 6px 6px 0;
-  background: color-mix(in srgb, var(--kind-read) 8%, transparent);
 }
 
-.focus-plan .plan__block[data-kind='read'] {
-  border-left-color: var(--kind-read);
-  background: color-mix(in srgb, var(--kind-read) 8%, transparent);
-}
-
-.focus-plan .plan__block[data-kind='practice'] {
-  border-left-color: var(--kind-practice);
-  background: color-mix(in srgb, var(--kind-practice) 8%, transparent);
-}
-
-.focus-plan .plan__block[data-kind='quiz'] {
-  border-left-color: var(--kind-quiz);
-  background: color-mix(in srgb, var(--kind-quiz) 8%, transparent);
+.focus-plan .plan__block:nth-child(even) {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
 }
 
 /* Saying what a block and the number on its right are, in one line. */
@@ -3197,9 +3187,17 @@ body:has(fl-focus .focus-workspace[data-rail]) .focus-plan {
   min-height: 0;
 }
 
+/*
+ * The stage is the one scroller once the notice is present, and it now has to be able to bring the
+ * plan clear of the notice as well as the step.
+ *
+ * The bottom padding is what gives it somewhere to scroll to: without it the last row is pinned to the
+ * stage's bottom edge, and the lift has no room left to put the gap under it. The top pads the other
+ * direction, so scrolling to the plan does not start with the step's title already against the edge.
+ */
 .focus-workspace:has(.focus-notice) .focus-stage {
   overflow: auto;
-  padding-block: 12px;
+  padding-block: 12px 24px;
   scrollbar-gutter: stable;
 }
 

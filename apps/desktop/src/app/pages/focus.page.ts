@@ -52,6 +52,15 @@ import { AgentPanelComponent } from '../components/agent-panel.component';
 const CLOCK_RADIUS = 86;
 const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
 
+/**
+ * The clearance the notice keeps from whatever sits at the bottom of the stage.
+ *
+ * The plan trigger and its open sheet are controls the learner pressed, so the notice's top edge
+ * cutting into a row of them reads as a broken control rather than as a cramped one. This is the
+ * distance between the two boxes once the stage has been scrolled to lift the lower one clear.
+ */
+const NOTICE_GAP = 16;
+
 /** Screen 3 of 5: a quiet, single-task focus workspace. */
 @Component({
   selector: 'fl-focus',
@@ -144,11 +153,7 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
 
           @if (phase() === 'ready') {
             @if (nextTask(); as upcoming) {
-              <section
-                class="focus-task focus-task--ready"
-                #taskAnchor
-                aria-labelledby="focus-ready-title"
-              >
+              <section class="focus-task focus-task--ready" aria-labelledby="focus-ready-title">
                 <p class="eyebrow">{{ t('focus.nextTask') }}</p>
                 <h2 id="focus-ready-title" data-testid="task-title">{{ upcoming.title }}</h2>
                 <p class="focus-task__instructions">{{ upcoming.instructions }}</p>
@@ -176,18 +181,14 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                 <fl-agent-panel />
               </section>
             } @else {
-              <section class="focus-task focus-task--empty" #taskAnchor>
+              <section class="focus-task focus-task--empty">
                 <p class="muted">{{ t('focus.allDone') }}</p>
                 <!-- Every phase's box carries the card, including the one with nothing left to start. -->
                 <fl-agent-panel />
               </section>
             }
           } @else if (phase() === 'complete') {
-            <section
-              class="focus-task focus-task--complete"
-              #taskAnchor
-              aria-labelledby="focus-complete-title"
-            >
+            <section class="focus-task focus-task--complete" aria-labelledby="focus-complete-title">
               <p class="eyebrow">{{ t('focus.completeEyebrow') }}</p>
               <h2 id="focus-complete-title">{{ t('focus.completedTitle') }}</h2>
               @if (nextTask(); as upcoming) {
@@ -209,11 +210,7 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
               <fl-agent-panel />
             </section>
           } @else if (task(); as currentTask) {
-            <section
-              class="focus-task focus-task--active"
-              #taskAnchor
-              aria-labelledby="focus-task-title"
-            >
+            <section class="focus-task focus-task--active" aria-labelledby="focus-task-title">
               <div class="focus-task__copy">
                 <p class="eyebrow">{{ t('focus.currentTask') }}</p>
                 <h2 id="focus-task-title" data-testid="task-title">{{ currentTask.title }}</h2>
@@ -600,8 +597,6 @@ export class FocusPage implements OnDestroy, OnInit {
   private readonly gripRefs = viewChildren<ElementRef<HTMLButtonElement>>('planGrip');
   private readonly stuckTrigger = viewChild<ElementRef<HTMLButtonElement>>('stuckTrigger');
   private readonly stuckGroup = viewChild<ElementRef<HTMLElement>>('stuckGroup');
-  /** The step whose area scrolls when the fixed-height notice row is present. */
-  private readonly taskAnchor = viewChild<ElementRef<HTMLElement>>('taskAnchor');
   /**
    * The bottom slot, which the stage has to stop short of.
    *
@@ -1063,18 +1058,80 @@ export class FocusPage implements OnDestroy, OnInit {
   });
 
   /**
-   * Lifts the step by the intersection the notice creates, and by nothing else — so a tall window, where
-   * the step already clears it, is not thrown up the screen for nothing, and a run that finds nothing
-   * covered changes nothing. It cannot chase the learner either: once the step is clear the intersection
-   * is zero, so the next frame's measurement moves nothing.
+   * Lifts the stage's floor clear of the notice row, scrolling only the stage when that row is present.
+   *
+   * The floor is the plan — its open sheet when the learner has it open, its trigger otherwise — rather
+   * than the step. The step is above the plan, so clearing the plan clears the step too; measuring only the
+   * step was true while the plan never shared the screen with the notice, and opening the sheet under one
+   * put every row of it behind the notice, so the tap looked like it had done nothing.
+   *
+   * It stays put when the floor already clears with `NOTICE_GAP`: a tall window is not thrown up the screen
+   * for nothing, a run that finds nothing covered changes nothing, and once the floor is clear the
+   * intersection is negative, so the next frame's measurement moves nothing.
    */
   private liftStepClearOfNotice(): void {
     const notice = this.noticeRoot()?.nativeElement;
-    const task = this.taskAnchor()?.nativeElement;
-    const stage = task?.closest<HTMLElement>('.focus-stage') ?? null;
-    if (notice === undefined || task === undefined || stage === null) return;
-    const covered = task.getBoundingClientRect().bottom - notice.getBoundingClientRect().top;
-    if (covered > 0) stage.scrollTop += covered;
+    const stage = this.stage()?.nativeElement ?? null;
+    const plan = this.planRoot()?.nativeElement;
+    if (notice === undefined || stage === null || plan === undefined) return;
+    const panel = plan.querySelector<HTMLElement>('.focus-plan__panel');
+    const floor = panel ?? plan;
+    const covered =
+      floor.getBoundingClientRect().bottom + NOTICE_GAP - notice.getBoundingClientRect().top;
+    if (covered <= 0) return;
+    /*
+     * With the sheet closed the plan trigger is the floor, and the step's title is what must not be spent
+     * to clear it: on a window shorter than the app's own minimum the two cannot both have the room, and a
+     * control the learner has not asked for yet can wait for a scroll while the title cannot. With the sheet
+     * open the learner *did* ask for the plan, so the cap comes off and the step is free to leave the screen.
+     */
+    const step = panel === null ? stage.querySelector<HTMLElement>('.focus-task') : null;
+    const title = step?.querySelector<HTMLElement>('[data-testid="task-title"]') ?? null;
+    const headroom =
+      title === null
+        ? covered
+        : title.getBoundingClientRect().top - stage.getBoundingClientRect().top;
+    const lift = Math.min(covered, Math.max(0, headroom));
+    if (lift > 0) stage.scrollTop += lift;
+  }
+
+  /**
+   * Opening or closing the plan moves the stage's floor, and the notice's own height does not change.
+   *
+   * The resize observer above only watches the notice's box, so it cannot see the sheet arrive underneath
+   * it; without this the rows landed behind the notice and the learner had to scroll a scroller they did
+   * not know was there to read what they had just opened. Only while a notice is up: with the bottom row
+   * empty there is nothing to clear and the plan lays itself out as it always did.
+   */
+  private readonly watchPlanForNotice = afterRenderEffect(() => {
+    // Tracked: the open/closed state is the change this effect exists for.
+    const open = this.planOpen();
+    untracked(() => {
+      if (this.noticeRoot()?.nativeElement === undefined) return;
+      if (open) {
+        this.liftStepClearOfNotice();
+      } else {
+        this.revealStepAfterPlan();
+      }
+    });
+  });
+
+  /**
+   * Goes back to the step when the sheet closes over a notice.
+   *
+   * Opening the sheet scrolls the stage to bring its rows out from under the notice, which on a short
+   * window is a long way up; staying there would leave the learner looking at the bottom of a step whose
+   * title they cannot see. The step's top is where they were reading, so that is what the close puts back.
+   * The lift runs afterwards because a step taller than the stage is one the step itself still has to
+   * yield on, and the plan's own floor is what decides how far.
+   */
+  private revealStepAfterPlan(): void {
+    const stage = this.stage()?.nativeElement;
+    if (stage === undefined) return;
+    const step = stage.querySelector<HTMLElement>('.focus-task');
+    if (step === null) return;
+    stage.scrollTop += step.getBoundingClientRect().top - stage.getBoundingClientRect().top;
+    this.liftStepClearOfNotice();
   }
 
   protected async startQuick(taskId: string): Promise<void> {

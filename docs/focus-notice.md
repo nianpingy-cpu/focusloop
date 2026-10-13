@@ -91,12 +91,16 @@ replaced a `height: calc(100dvh - 48px)`, which knew none of those numbers: the 
 its box, so the _page_ scrolled as well as the stage. The column finishes inside the window now, which
 leaves one scroller — the stage — and the page never moves under the learner.
 
-Two consequences are worth stating. The step's own controls are lifted clear of the notice when the row
-arrives and whenever its height changes (`focus.page.ts` measures the intersection through a resize
-observer, and there is no scrolling by anyone else involved in the test that pins it), because the row
-takes that space from the stage. And the notice's row is allowed to end inside the 96px the column
-reserves below for the plan sheet, since the two never share the screen: without that, a closed sheet
-would park 72px of empty page under the notice.
+Two consequences are worth stating. The stage's floor — the plan, which is its open sheet when the learner
+has one and its trigger otherwise — is lifted clear of the notice when the row arrives, whenever its height
+changes, and whenever the sheet opens or closes (`focus.page.ts` measures the intersection through a resize
+observer and an effect on the plan's own state), because the row takes that space from the stage. The step
+is above the plan, so clearing the plan clears the step; measuring only the step was true while the plan
+never shared the screen with the notice, and opening the sheet under one put its rows behind the card. The
+step's title is what the closed case does not spend, so a window shorter than the app's own minimum keeps
+the title and lets the trigger wait for a scroll. And the notice's row is allowed to end inside the 96px
+the column reserves below the plan, since that padding is what the row is laid into: without it, a closed
+sheet would park 72px of empty page under the notice.
 
 ## Verification
 
@@ -105,7 +109,8 @@ would park 72px of empty page under the notice.
 - `apps/desktop-e2e/tests/focus-notice.spec.ts` drives the real offline Electron app: that an expired
   commitment takes the control row instead of the slot and that "+1 minute" answers it, that a
   suggestion appears inside the step's control row and leaves the row's own controls on screen and in
-  view, that neither an evaluation nor a resume consumes it, fold without dismissal across a route
+  view, that neither an evaluation nor a resume consumes it, that the plan trigger and its opened sheet
+  clear the notice, fold without dismissal across a route
   remount, the keyboard hand-back when the card's decision unmounts the slot, the whole offered →
   accepted → plan → continue lifecycle including BREAK's pause of the live clock, new-session reset,
   reduced motion, and geometry at 1280×900, 1024×768 and 800×700. The small-window cases explicitly

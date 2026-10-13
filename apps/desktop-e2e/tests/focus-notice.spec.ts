@@ -92,6 +92,24 @@ async function taskIsUnobstructed(page: Page): Promise<void> {
   await expect(page.getByTestId('complete-task')).toBeInViewport();
 }
 
+/**
+ * The plan is the bottom of the stage too, and the card used to be measured only against the step.
+ *
+ * With the sheet open its rows are the lowest thing on the screen, so they are what has to clear the
+ * notice; with it closed the trigger is. `plan.y + plan.height` is whichever of the two is lower,
+ * because the panel is inside the section, so one measurement covers both states.
+ */
+async function planIsClearOfNotice(page: Page): Promise<void> {
+  await expect
+    .poll(async () => {
+      const plan = await page.locator('.focus-plan').boundingBox();
+      const notice = await page.getByTestId('focus-notice').boundingBox();
+      if (plan === null || notice === null) return Number.POSITIVE_INFINITY;
+      return Math.round(plan.y + plan.height - notice.y);
+    })
+    .toBeLessThanOrEqual(TOUCH_TOLERANCE);
+}
+
 test('the bottom slot carries the return card and nothing else, and the step clears it', async ({
   browserName: _browserName,
 }, info) => {
@@ -223,6 +241,24 @@ test('the bottom slot carries the return card and nothing else, and the step cle
       .getByRole('button', { name: 'Not now', exact: true })
       .click();
     await expect(page.getByTestId('agent-offered')).toHaveCount(0);
+    /*
+     * The plan is the bottom of the stage too, and the card used to be measured only against the step:
+     * the trigger sat behind the notice and opening the sheet put every row of it under the card, so the
+     * press looked like it had done nothing. Measured with the suggestion dismissed, because with it in
+     * the control row the step alone is taller than the stage and it is the step that keeps the room.
+     *
+     * Opening the sheet moves the stage's floor without resizing the card, so the lift has to follow the
+     * press as well as the card's height.
+     */
+    await taskIsUnobstructed(page);
+    await planIsClearOfNotice(page);
+    await page.getByTestId('focus-plan-toggle').click();
+    await expect(page.getByTestId('plan-block').first()).toBeVisible();
+    await planIsClearOfNotice(page);
+    await page.getByTestId('focus-plan-toggle').click();
+    await expect(page.getByTestId('plan-block')).toHaveCount(0);
+    await taskIsUnobstructed(page);
+
     // CI macOS uses space-consuming scrollbars, unlike this developer machine's
     // overlay scrollbars. Exercise that width loss explicitly, not only by OS label.
     const classicScrollbars = await page.addStyleTag({
@@ -409,6 +445,8 @@ test('other routes keep the modal resume card, trap and all', async () => {
     await expect(page.locator('.banner--error')).toHaveCount(0);
   } finally {
     await closeElectronApp(app);
-    rmSync(profile, { recursive: true, force: true });
+    // The same patience the first test's cleanup keeps: Windows holds the profile open for a moment
+    // after the window closes, and a plain `rmSync` there is an EPERM that fails a passing test.
+    rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   }
 });
