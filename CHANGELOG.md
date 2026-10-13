@@ -176,6 +176,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **The wiki publishes without a secret, because it never needed one.** `wiki-sync.yml` required a
+  `WIKI_SYNC_TOKEN` repository secret and, without it, did nothing but print a notice on every change
+  under `docs/wiki/`. The premise — "the default token cannot push to the wiki repository" — came from
+  passing `$GITHUB_TOKEN` out of the _ambient_ environment, where it is empty (its length in a `run:`
+  step is 0); an empty credential produces exactly the rejection that was read as "no permission".
+  `secrets.GITHUB_TOKEN` is populated, and with `permissions: contents: write` it pushes to
+  `<repo>.wiki.git` — measured by pushing a scratch branch of this wiki with that token (exit 0) and
+  deleting it in the same run. So the secret, the guard and the notice are gone, the job asks for
+  `contents: write` (no wiki-only permission exists to ask for, and the PAT it used to want had the
+  same reach, plus rotation), and the pages publish on every change. Also in this release: the sync
+  script itself was broken (`#271`) and the three ADRs already linked from the sidebar were never
+  published; both are fixed and the wiki now carries all ten pages.
 - **The notice no longer lands on the step's own controls, and the focus screen has one scroller.** With a
   notice up, the frame around it was sized by `height: calc(100dvh - 48px)` while the column it stood in
   carried 18px of padding at the top, 96px at the bottom and a 22px gap before it — so the frame was taller
