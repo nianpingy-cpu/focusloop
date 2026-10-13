@@ -70,7 +70,7 @@ The frame the row belongs to is laid out rather than calculated: `fl-focus` is t
 and is allowed to be shorter than its content, and `.focus-workspace` fills it, so the frame is the
 window whatever the column's padding, its gaps and the empty `router-outlet` beside it add up to. That
 replaced a `height: calc(100dvh - 48px)`, which knew none of those numbers: the frame stood taller than
-its box, so the *page* scrolled as well as the stage. The column finishes inside the window now, which
+its box, so the _page_ scrolled as well as the stage. The column finishes inside the window now, which
 leaves one scroller — the stage — and the page never moves under the learner.
 
 Two consequences are worth stating. The step's own controls are lifted clear of the notice when the row
