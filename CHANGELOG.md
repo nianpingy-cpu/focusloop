@@ -64,6 +64,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **The plan's rows are banded blue and white instead of tinted by task kind.** Every row carried its
+  own kind's colour — the read blue, the practice purple or the quiz orange at 8% over the sheet — so a
+  stack of tasks read as three washes interleaved, while the kind was already carried twice over by the
+  4px left border and the row's glyph. The rows alternate now: the odd ones keep the row's own surface
+  and the even ones take the accent blue at 10% over it, which measures `#ecf2fe` against `#ffffff` in
+  the light theme and `#1f2837` against `#161a21` in the dark one. The banding follows a row's position
+  rather than the task, so reordering keeps it a regular stripe, and the kind's colour is untouched on
+  the left border.
 - **Every page has the same vertical rhythm now, not just home.** `fl-home` was given a 22px column gap
   and the other three page elements were left as plain blocks, so the gap `.content` puts between pages
   stopped at the page boundary and the sections inside them sat flush: measured at 1280, the record
