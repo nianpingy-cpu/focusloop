@@ -30,16 +30,48 @@ const MAIN = resolve(__dirname, '..', '..', 'desktop', 'dist', 'main', 'main.cjs
  */
 const TOUCH_TOLERANCE = 1;
 
-/** The actual task and its action, not merely the notice, must remain usable. */
+/**
+ * The actual task and its action, not merely the notice, must remain usable.
+ *
+ * Nothing here scrolls first, and that is the whole point of the check. It used to call
+ * `scrollIntoViewIfNeeded` on the step and on its action before measuring, which scrolled the step out
+ * from under the notice and then asserted that it was not under the notice — so the app could stop doing
+ * its own lifting and this test would still be green, which is exactly what happened: with a notice up,
+ * the stage's last row sat 48px behind the notice's top edge on a 1140x767 window, and the only thing that
+ * ever agreed otherwise was the assertion's own scrolling.
+ *
+ * What the learner's app now has to guarantee on its own is that the step's own controls are clear of the
+ * notice the moment it arrives, wherever the stage happened to be scrolled.
+ */
 async function taskIsUnobstructed(page: Page): Promise<void> {
-  await page.locator('.focus-task--active').scrollIntoViewIfNeeded();
-  await page.getByTestId('complete-task').scrollIntoViewIfNeeded();
   /*
    * Named before it is measured. A null box below would otherwise surface as arithmetic on null,
    * which says nothing about what was wrong; a task that is not on screen now fails saying so, and
    * the geometry assertions keep their meaning because they still run against real boxes.
    */
   await expect(page.locator('.focus-task--active')).toBeVisible();
+  /*
+   * Polled, not read once: the lift happens in a resize observer callback, so the geometry settles a frame
+   * after the notice arrives, and the notice itself animates in whenever its slot changes — a box measured
+   * mid-arrival is up to 12px below the one the learner ends up looking at. All three bounds are polled
+   * together, so this waits for the geometry to settle rather than for a number of milliseconds, and the
+   * assertions below then state what settled.
+   */
+  await expect
+    .poll(async () => {
+      const task = await page.locator('.focus-task--active').boundingBox();
+      const action = await page.getByTestId('complete-task').boundingBox();
+      const notice = await page.getByTestId('focus-notice').boundingBox();
+      if (task === null || action === null || notice === null) return Number.POSITIVE_INFINITY;
+      return Math.round(
+        Math.max(
+          task.y + task.height - notice.y,
+          action.y + action.height - notice.y,
+          notice.y + notice.height - page.viewportSize()!.height,
+        ),
+      );
+    })
+    .toBeLessThanOrEqual(TOUCH_TOLERANCE);
   const task = await page.locator('.focus-task--active').boundingBox();
   const action = await page.getByTestId('complete-task').boundingBox();
   const notice = await page.getByTestId('focus-notice').boundingBox();

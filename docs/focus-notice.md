@@ -62,10 +62,23 @@ the learner nothing; that matches how the existing stuck picker already behaves 
 ## Layout and motion
 
 The surface occupies a reserved last row in the focus workspace, not a fixed overlay over the
-current task. It is anchored above the simulator's 56px reservation and uses z-index 30. The task
-area and notice contents scroll independently on short windows. Resume actions remain reachable at
-the notice's bottom edge. The sheet reuses `plan-rise`; both sheet and contents disable motion
-under `prefers-reduced-motion: reduce`. Colours reuse existing theme tokens.
+current task. It is anchored above the simulator's 56px reservation and uses z-index 30. Resume
+actions remain reachable at the notice's bottom edge. The sheet reuses `plan-rise`; both sheet and
+contents disable motion under `prefers-reduced-motion: reduce`. Colours reuse existing theme tokens.
+
+The frame the row belongs to is laid out rather than calculated: `fl-focus` is the column's flex item
+and is allowed to be shorter than its content, and `.focus-workspace` fills it, so the frame is the
+window whatever the column's padding, its gaps and the empty `router-outlet` beside it add up to. That
+replaced a `height: calc(100dvh - 48px)`, which knew none of those numbers: the frame stood taller than
+its box, so the *page* scrolled as well as the stage. The column finishes inside the window now, which
+leaves one scroller — the stage — and the page never moves under the learner.
+
+Two consequences are worth stating. The step's own controls are lifted clear of the notice when the row
+arrives and whenever its height changes (`focus.page.ts` measures the intersection through a resize
+observer, and there is no scrolling by anyone else involved in the test that pins it), because the row
+takes that space from the stage. And the notice's row is allowed to end inside the 96px the column
+reserves below for the plan sheet, since the two never share the screen: without that, a closed sheet
+would park 72px of empty page under the notice.
 
 ## Verification
 
@@ -76,6 +89,10 @@ under `prefers-reduced-motion: reduce`. Colours reuse existing theme tokens.
   folding/reopening, all three help choices, new-session reset, reduced motion, and geometry at
   1280×900, 1024×768 and 800×700. The small-window cases explicitly force 15px classic scrollbars
   to cover the width loss seen on macOS CI, independently of the developer's OS scrollbar preference.
+  The geometry assertions no longer scroll the step into view before measuring it: that scrolling was
+  what hid the defect they were meant to catch — the step's control row sat 48px behind the notice's
+  top edge on a 1140x767 window while the assertion, having scrolled it out itself, agreed with the app
+  that all was well.
   It also checks the CSS branch with the simulator element absent
   (not a claim of testing a packaged production build).
 - The existing golden-path tests now assert the focus resume's non-modal contract instead of a

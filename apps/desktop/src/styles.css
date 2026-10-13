@@ -810,20 +810,22 @@ body:has(fl-focus .focus-workspace[data-rail])
 }
 
 /*
- * On focus, the fold leaves nothing behind: the workspace takes the window, and the only reservation
- * is the floating recall button's own corner — the same 62px every other screen keeps when the sidebar
- * is folded.
+ * On focus the fold leaves nothing behind: the workspace takes the window, and the inset that remains is
+ * the floating recall button's own column — `clamp(62px, 5vw, 68px)`, which floors above the button's
+ * 56px right edge and is the *same on both sides*.
  *
- * It used to keep the open sidebar's whole column instead, 232px plus the base padding, so that the
- * peeked panel could only ever slide over an empty gutter. That was 256px of nothing down the left of
- * the one screen the learner is meant to be looking at, paid on every frame to spare a hover its
- * overlap. The panel now covers the stage's left edge on a window narrower than about 1370px, which is
- * what a drawer over a page does; the countdown sits in the stage's right-hand column and is never
- * under it. Nothing moves when the pointer rests on the button — the peek is still a look, not a
- * reflow — because the space it would have been given is no longer reserved.
+ * Both numbers are deliberate. The left inset used to be a leftover of the fold: it kept the 232px the
+ * open sidebar occupied, so the workspace sat off-centre with a band of nothing down its left, and on a
+ * 1140-wide window the stage was 822px wide beside 256px of empty page. And a fixed 62 on the left with
+ * a `5vw` right made the two sides differ by a few pixels at every width in between — enough to see on a
+ * wide window, where the content's own measure caps it and the centring is all that is left.
+ *
+ * The peek pays for it instead: the panel slides over the stage's left edge on a window narrower than
+ * about 1370px, which is what a drawer over a page does. It never covers the countdown, which sits in the
+ * stage's right-hand column.
  */
-body:has(fl-focus .focus-workspace[data-rail]) .shell:not(.is-forced-open) .content {
-  padding-left: 62px;
+body:has(fl-focus .focus-workspace[data-rail]) .content {
+  padding: 18px clamp(62px, 5vw, 68px) 96px;
 }
 
 /*
@@ -2179,6 +2181,31 @@ code {
   margin-bottom: 1px;
 }
 
+/*
+ * The session's own row: one state label and two controls.
+ *
+ * It had no rule at all, so it was three inline things in a plain block — the space between them was
+ * whatever the whitespace happened to make, and the type was three sizes: the label and the end button
+ * inherited the body's 14px while the ambient toggle carried `btn--small` at 12px in a smaller box. The
+ * row is where the learner glances to see where the session stands, so it reads as one row now: one size
+ * for all three, and real space between them.
+ *
+ * The size is pinned here rather than left to inheritance because `btn--small` outranks nothing: a button
+ * in this row wearing it would shrink back out of line without a word.
+ */
+.focus-stage__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+}
+
+.focus-stage__actions .btn,
+.focus-stage__actions .focus-stage__state {
+  font-size: 14px;
+}
+
 .focus-stage {
   display: flex;
   flex: 1 1 auto;
@@ -2898,7 +2925,7 @@ code {
  */
 
 body:has(fl-focus .focus-workspace[data-rail]) .content {
-  padding: 18px clamp(20px, 5vw, 68px) 96px;
+  padding: 18px clamp(62px, 5vw, 68px) 96px;
 }
 
 /*
@@ -2967,6 +2994,28 @@ body:has(fl-focus .focus-workspace[data-rail]) .focus-plan:not([data-open]) {
  */
 body:has(fl-focus .focus-plan[data-open]) .content {
   padding-bottom: calc(var(--plan-sheet-max) + 40px);
+}
+
+/*
+ * ...and the frame gives way to the sheet's, which is the opposite trade: with the sheet up the reserve
+ * below is *scroll room* rather than a row, so the column is allowed to exceed the window again and
+ * `focus.page.ts` scrolls the step through the room it now has.
+ *
+ * Both of these outrank the notice's frame (three classes against two), so the frame never has to be told
+ * about the sheet and the two can sit apart in this file. Stating it the other way round — "the notice's
+ * frame, unless the sheet is open" — needs `:not(:has(...))`, and Chromium will not parse that: it drops
+ * the whole rule without a word, which is how an earlier attempt at this left the notice's frame in force
+ * while the sheet was up.
+ */
+body:has(fl-focus .focus-plan[data-open]) .content > fl-focus {
+  display: block;
+  flex: 0 0 auto;
+  margin-bottom: 0;
+}
+
+body:has(fl-focus .focus-plan[data-open]) .focus-workspace {
+  height: calc(100dvh - 48px);
+  min-height: 0;
 }
 
 @keyframes plan-rise {
@@ -3071,8 +3120,39 @@ body:has(fl-focus .focus-plan[data-open]) .content {
 
 /* #77: a reserved bottom row, not an overlay over the learner's task. The task
    area scrolls independently in short windows; the notice never covers its action. */
+
+/*
+ * The frame the notice is the bottom row of, laid out rather than calculated.
+ *
+ * It used to be `height: calc(100dvh - 48px)`, which knows nothing about the column around it: that column
+ * carries 18px of padding at the top, 96px at the bottom and a 22px gap between its children, so the frame
+ * came out taller than the box it stood in and the *page* scrolled as well as the stage. At 1140x767 that
+ * put the frame 15px above the window's top edge with the notice stopping 62px short of the bottom: two
+ * nested scrollers, in a frame whose whole point is that nothing moves under the learner's task. It is
+ * worth naming what the arithmetic missed, because it is not a number anybody would guess: the column's
+ * first child is the empty `router-outlet`, and its 22px gap counts even at zero height.
+ *
+ * So `fl-focus` (the flex item) is told it may be shorter than its content, and `.focus-workspace` fills
+ * it. The one number left is the negative margin, and it is the sheet's, not the notice's: the column
+ * reserves 96px below for the plan sheet, and the notice is not the sheet — they never share the screen,
+ * the notice standing down the moment the sheet opens — so 72 of that reserve becomes the frame's instead
+ * of empty page under a closed sheet. The column still finishes inside the window, so nothing scrolls.
+ *
+ * The selector is `.content:has(...) > fl-focus` rather than `body:has(fl-focus ...:has(...))`, and that is
+ * not tidiness: `:has()` may not be nested inside another `:has()` either — Chromium rejects the selector
+ * and drops the whole rule, which is how the first two attempts at this did nothing at all, silently. One
+ * `:has()` per selector, and its argument a plain descendant chain.
+ */
+.content:has(.focus-notice) > fl-focus {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-bottom: -72px;
+}
+
 .focus-workspace:has(.focus-notice) {
-  height: calc(100dvh - 48px);
+  flex: 1 1 auto;
   min-height: 0;
 }
 

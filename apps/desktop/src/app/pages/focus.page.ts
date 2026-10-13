@@ -1,5 +1,6 @@
 import {
   Component,
+  ElementRef,
   afterRenderEffect,
   computed,
   effect,
@@ -9,7 +10,7 @@ import {
   viewChild,
   viewChildren,
 } from '@angular/core';
-import type { ElementRef, OnDestroy, OnInit } from '@angular/core';
+import type { OnDestroy, OnInit, Signal } from '@angular/core';
 import { Router } from '@angular/router';
 import type { MicroTask, MicroTaskKind, StuckReason } from '@focusloop/shared-types';
 import { STUCK_REASONS, applyTaskOrder } from '@focusloop/shared-types';
@@ -90,7 +91,7 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
             -->
             <button
               type="button"
-              class="btn btn--small btn--quiet ambient-toggle"
+              class="btn btn--quiet ambient-toggle"
               data-testid="ambient-toggle"
               [title]="t('focus.ambient.hint')"
               [class.is-active]="ambientSound()"
@@ -540,7 +541,7 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
             }
           </section>
         </main>
-        <fl-focus-notice [expired]="phase() === 'expired'" (continueTimer)="resume()" />
+        <fl-focus-notice #noticeRoot [expired]="phase() === 'expired'" (continueTimer)="resume()" />
       </div>
     } @else {
       <div class="focus-workspace" data-phase="ready">
@@ -576,6 +577,20 @@ export class FocusPage implements OnDestroy, OnInit {
   private readonly stuckGroup = viewChild<ElementRef<HTMLElement>>('stuckGroup');
   /** Whatever step is on screen, whichever phase it is in — the thing the plan sheet must not cover. */
   private readonly taskAnchor = viewChild<ElementRef<HTMLElement>>('taskAnchor');
+  /**
+   * The bottom slot, which the stage has to stop short of.
+   *
+   * `read: ElementRef` rather than the plain template reference: on a component element the reference is
+   * the component instance, so `nativeElement` was undefined and every measurement below returned without
+   * doing anything — this slot is a component, where the plan's is a `<section>`. `read` is what decides
+   * the type Angular hands back, hence the annotation rather than a type argument.
+   */
+  private readonly noticeRoot: Signal<ElementRef<HTMLElement> | undefined> = viewChild(
+    'noticeRoot',
+    { read: ElementRef },
+  );
+  /** Watching the bottom row's box, not its state: see `watchNoticeSize`. */
+  private noticeObserver: ResizeObserver | null = null;
 
   protected readonly t = this.i18n.t;
   protected readonly snapshot = this.state.snapshot;
@@ -973,6 +988,9 @@ export class FocusPage implements OnDestroy, OnInit {
 
   private readonly onWindowResize = (): void => {
     if (this.planOpen()) this.uncoverTaskFromSheet();
+    // The notice's own height does not change with the window, but the room it takes from the stage
+    // does, so the same check runs again.
+    this.liftStepClearOfNotice();
   };
 
   private uncoverTaskFromSheet(): void {
@@ -982,6 +1000,46 @@ export class FocusPage implements OnDestroy, OnInit {
     if (sheet === undefined || task === undefined || scroller === null) return;
     const covered = task.getBoundingClientRect().bottom - (sheet.getBoundingClientRect().top - 8);
     if (covered > 0) scroller.scrollTop += covered;
+  }
+
+  /**
+   * Keeps the step clear of the notice, which is the sheet's job with one difference: the sheet floats
+   * over the window, so the *page* can scroll under it, while the notice is a real row of the frame and
+   * the frame is the window — so the stage moves, and the stage is the frame's only scroller
+   * (see `styles.css`).
+   *
+   * Observed rather than run on the slot's own changes, because what matters is the row's *height*, and
+   * the row is filled in passes: the decision, its sentence, its buttons and its fold each arrive on their
+   * own, so the first frame that has a notice in it is usually a notice that is still zero pixels tall.
+   * Measured then, the intersection is negative, nothing moves, and the height the learner actually ends
+   * up looking at is never measured at all. A resize observer is the version of this that cannot miss it.
+   */
+  private readonly watchNoticeSize = afterRenderEffect(() => {
+    const element = this.noticeRoot()?.nativeElement ?? null;
+    if (element === null) return;
+    untracked(() => {
+      if (this.noticeObserver === null) {
+        this.noticeObserver = new ResizeObserver(() => this.liftStepClearOfNotice());
+      }
+      this.noticeObserver.disconnect();
+      this.noticeObserver.observe(element);
+      this.liftStepClearOfNotice();
+    });
+  });
+
+  /**
+   * Lifts the step by the intersection the notice creates, and by nothing else — so a tall window, where
+   * the step already clears it, is not thrown up the screen for nothing, and a run that finds nothing
+   * covered changes nothing. It cannot chase the learner either: once the step is clear the intersection
+   * is zero, so the next frame's measurement moves nothing.
+   */
+  private liftStepClearOfNotice(): void {
+    const notice = this.noticeRoot()?.nativeElement;
+    const task = this.taskAnchor()?.nativeElement;
+    const stage = task?.closest<HTMLElement>('.focus-stage') ?? null;
+    if (notice === undefined || task === undefined || stage === null) return;
+    const covered = task.getBoundingClientRect().bottom - notice.getBoundingClientRect().top;
+    if (covered > 0) stage.scrollTop += covered;
   }
 
   protected async startQuick(taskId: string): Promise<void> {
@@ -1229,6 +1287,8 @@ export class FocusPage implements OnDestroy, OnInit {
     this.manageStuckFocus.destroy();
     this.restoreGripFocus.destroy();
     this.uncoverTask.destroy();
+    this.watchNoticeSize.destroy();
+    this.noticeObserver?.disconnect();
     window.removeEventListener('resize', this.onWindowResize);
   }
 

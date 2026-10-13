@@ -64,17 +64,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
-- **The folded sidebar hands its column back on the focus screen.** With the sidebar away, the focus
-  workspace used to keep the open sidebar's whole column — `padding-left: 256px`, the 232px track plus
-  the base padding — so that the hover-peeked panel could only ever slide over an empty gutter, and the
-  stage never reflowed into the space it had just been given. The price was a 256px band of nothing down
-  the left of the one screen the learner is meant to be looking at: at a 1140-wide window the stage was
-  822px wide, and now it is 1016px with the floating recall button's own 62px corner as the only
-  reservation — the same corner every other screen keeps. Nothing moves when the pointer rests on that
-  button, because the peek still lifts the panel out of the grid rather than reflowing the page; what
-  changed is what it covers. The panel now covers the stage's left edge on a window narrower than about
-  1370px, which is what a drawer over a page does, and it never covers the countdown, which sits in the
-  stage's right-hand column.
+- **The folded sidebar hands its column back on the focus screen, symmetrically.** With the sidebar away,
+  the focus workspace used to keep the open sidebar's whole column — `padding-left: 256px`, the 232px track
+  plus the base padding — so that the hover-peeked panel could only ever slide over an empty gutter, and the
+  stage never reflowed into the space it had just been given. The price was a 256px band of nothing down the
+  left of the one screen the learner is meant to be looking at: at a 1140-wide window the stage was 822px
+  wide. Now the column's inset is `clamp(62px, 5vw, 68px)` on **both** sides — the floor clears the floating
+  recall button, and the equality is what centres the stage at every width (the old shape was a fixed 62 on
+  the left against a `5vw` right, which differed by a few pixels at most widths). Nothing moves when the
+  pointer rests on that button, because the peek still lifts the panel out of the grid rather than reflowing
+  the page; what changed is what it covers. The panel now covers the stage's left edge on a window narrower
+  than about 1370px, which is what a drawer over a page does, and it never covers the countdown, which sits
+  in the stage's right-hand column.
+- **The session's own row is a row.** The state label, the ambient toggle and the end button had no layout
+  rule at all: three inline things in a plain block, so the space between them was whatever the whitespace
+  happened to make, and the type was two sizes because the toggle carried `btn--small` at 12px while the
+  other two inherited the body's 14px. They are one size now, with 14px between them.
 - **The focus screen stopped wasting the row it has.** The type scale is one scale again: the step's
   title tops out at 36px instead of 46, the instructions and the fine print under the box are 13px
   rather than inheriting body size (a class-plus-element rule was out-specifying `.muted.small`), and the
@@ -171,6 +176,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **The notice no longer lands on the step's own controls, and the focus screen has one scroller.** With a
+  notice up, the frame around it was sized by `height: calc(100dvh - 48px)` while the column it stood in
+  carried 18px of padding at the top, 96px at the bottom and a 22px gap before it — so the frame was taller
+  than its box, the *page* scrolled as well as the stage, and at 1140x767 the frame sat 15px above the
+  window's top edge with the notice stopping 62px short of the bottom. Worse, the row the learner was about
+  to press ended up behind the notice's edge: measured with a decision notice up at 1140x767, the step's
+  controls were 48px under the notice's top edge — and the test that exists to catch exactly that was
+  scrolling the step into view itself before measuring, so it agreed with the app that all was well. The
+  frame is now laid out rather than calculated (the column's flex item is allowed to be shorter than its
+  content, and the workspace fills it), and the page puts the step's controls clear of the notice by the
+  measured intersection, re-measured through a resize observer because the row is filled in several passes
+  and its first frame is zero pixels tall. The test no longer scrolls anything itself.
 - **The courses the app writes itself are written in the learner's language, not in English.** A
   Chinese window around a course generated from Chinese notes still read `Read: 模拟调制` and
   `Explain "模拟调制" using a concrete example you invent yourself.`, and the built-in course was
