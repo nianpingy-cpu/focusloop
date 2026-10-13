@@ -323,11 +323,13 @@ state or a transition needs no dashboard change at all.
 **2. Silence is not focus, and it is not away either.** A learner who walks away emits no events, so a
 naive reconstruction counts the whole gap as `FOCUSED`. The engine would not have: its idle threshold
 would have moved them to `DISTRACTED`. But the opposite guess — charging the gap as `DISTRACTED` — is
-worse than the first, because it invents an absence nobody observed. So silence is credited to the state
-it was in for at most `idleThresholdMs` and **not counted past that**, and an absence the app actually
-witnessed (`TAB_LEFT`, an idle report) keeps its whole stretch. The consequence is that a window's
-`totalMs` is the time the app can stand behind, **not** the wall-clock its sessions were open; the labels
-that read it say so, as does `docs/wiki/project-features.md` §D2.
+worse than the first, because it invents an absence nobody observed. So every stretch is credited to the
+state it was in for at most `idleThresholdMs` and **not counted past that**, witnessed or not. A witnessed
+absence (`TAB_LEFT`, an idle report) used to keep its whole stretch, because the bridge had observed it;
+that is right as a report of an absence and wrong as recorded time, and it read a night away as a day of
+study. The consequence is that a window's `totalMs` is the time the app can stand behind as **study
+time**, not the wall-clock its sessions were open and not the full length of an observed absence; the
+labels that read it say so, as does `docs/wiki/project-features.md` §D2.
 
 **3. One session is measured by the same rule as a window.** That rule was once only the dashboard's:
 the focus screen's `elapsed` and the dashboard's `session duration` were `startedAt` → `now`, and a

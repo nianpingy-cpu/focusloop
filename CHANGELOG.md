@@ -73,6 +73,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **The focus screen's accent is the app's blue, not a warm orange.** The running clock, the progress
+  bar, the "current micro task" eyebrow, the kind chip, the answer label and the Complete task button all
+  took `--warn`, which made the one screen the learner spends the most time on the only surface that was
+  not the app's own colour — while the return card beside it and the plan's edge were already the accent
+  blue. They take `--accent` now, and the tokens are named `--focus-accent*` because they no longer
+  describe a warm hue.
 - **The plan's rows are banded blue and white instead of tinted by task kind.** Every row carried its
   own kind's colour — the read blue, the practice purple or the quiz orange at 8% over the sheet — so a
   stack of tasks read as three washes interleaved, while the kind was already carried twice over by the
@@ -249,6 +255,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **An overnight absence is no longer a day of study.** A witnessed departure kept its whole span because
+  the bridge had observed it, which is right as a report and wrong as recorded time: a session left at
+  night and resumed the next afternoon put twenty-two hours of 离开中 into the dashboard's total, where it
+  read as a day spent studying. Every stretch is now credited to its state for at most `idleThresholdMs`
+  (two minutes) and nothing past that, witnessed or not — the app stops rather than guessing whether the
+  learner stayed at the desk. The hero's recorded time, this session's duration and the state donut all
+  read the same rebuilt timeline, so they move together, and the "silence is neither time nor away" rule
+  the label states is now the rule for every gap.
 - **The return card no longer lands on the plan.** The notice's row and the plan share the bottom of the
   focus screen, and the lift that keeps the step clear of the card measured only the step. At 1280x800
   with the card up the plan's trigger sat 26px behind the notice's top edge, and opening the sheet put

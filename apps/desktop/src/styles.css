@@ -1601,15 +1601,15 @@ textarea:focus {
  * verdict cannot drift apart between the two screens — separated by a rule rather than boxed, because
  * the card already is a box.
  *
- * The three `--focus-warm*` tokens are the focus screen's, named once inside `.focus-workspace`, and
- * this is the one other surface that shows the block: without them the block's own rules would resolve
- * to nothing here, which is why they are mapped rather than left to fall back. Mapped to `--accent`
- * because that is this card's accent — the warm hue belongs to the screen the step lives on.
+ * The three `--focus-accent*` tokens are named once inside `.focus-workspace`, and this is the one other
+ * surface that shows the block: the card is a sibling of the workspace rather than inside it, so without a
+ * mapping the block's own rules would resolve to nothing here. They take `--accent`, which is also what the
+ * workspace sets now — the two were kept apart while the workspace was warm and are one colour since.
  */
 .resume__recall {
-  --focus-warm: var(--accent);
-  --focus-warm-quiet: color-mix(in srgb, var(--accent) 18%, transparent);
-  --focus-warm-faint: color-mix(in srgb, var(--accent) 8%, transparent);
+  --focus-accent: var(--accent);
+  --focus-accent-quiet: color-mix(in srgb, var(--accent) 18%, transparent);
+  --focus-accent-faint: color-mix(in srgb, var(--accent) 8%, transparent);
 
   margin-top: 12px;
   padding-top: 10px;
@@ -2177,14 +2177,19 @@ code {
    Focus workspace
 
    This is intentionally a canvas rather than another dashboard card. The
-   focus page owns one warm time object and one next action; supporting context
+   focus page owns one accent time object and one next action; supporting context
    is allowed to recede until the learner asks for it.
+
+   The time object used to be warm, to set the running clock apart from the rest of the app. It is the
+   accent blue now, the same colour every other primary surface uses: the warm hue made the screen the
+   learner spends the most time on the only one that was not the app's own colour, and the plan's edge
+   and the return card beside it had already moved to the accent.
    =========================================================================== */
 
 .focus-workspace {
-  --focus-warm: var(--warn);
-  --focus-warm-quiet: color-mix(in srgb, var(--warn) 18%, transparent);
-  --focus-warm-faint: color-mix(in srgb, var(--warn) 8%, transparent);
+  --focus-accent: var(--accent);
+  --focus-accent-quiet: color-mix(in srgb, var(--accent) 18%, transparent);
+  --focus-accent-faint: color-mix(in srgb, var(--accent) 8%, transparent);
   --focus-ink-quiet: color-mix(in srgb, var(--text) 76%, var(--text-muted));
   --focus-stage-width: 920px;
   display: flex;
@@ -2367,7 +2372,7 @@ code {
 }
 
 .step-answer .eyebrow {
-  color: var(--focus-warm);
+  color: var(--focus-accent);
 }
 
 .step-answer__input {
@@ -2397,14 +2402,14 @@ code {
 }
 
 .step-answer__option.is-chosen {
-  border-color: var(--focus-warm);
-  background: var(--focus-warm-faint);
-  color: var(--focus-warm);
+  border-color: var(--focus-accent);
+  background: var(--focus-accent-faint);
+  color: var(--focus-accent);
 }
 
 .step-answer__option[data-mark='right'] {
-  border-color: var(--focus-warm);
-  background: var(--focus-warm-quiet);
+  border-color: var(--focus-accent);
+  background: var(--focus-accent-quiet);
   color: var(--text);
   font-weight: 600;
 }
@@ -2487,7 +2492,7 @@ code {
 }
 
 .step-answer__verdict[data-correct='true'] {
-  color: var(--focus-warm);
+  color: var(--focus-accent);
 }
 
 .step-answer__verdict[data-correct='false'] {
@@ -2554,7 +2559,7 @@ code {
 
 .focus-task .eyebrow {
   margin-bottom: 8px;
-  color: var(--focus-warm);
+  color: var(--focus-accent);
   font-size: 12px;
   letter-spacing: 0.04em;
 }
@@ -2602,9 +2607,9 @@ code {
 }
 
 .focus-task .chip {
-  border-color: color-mix(in srgb, var(--focus-warm) 34%, var(--border));
-  background: var(--focus-warm-faint);
-  color: var(--focus-warm);
+  border-color: color-mix(in srgb, var(--focus-accent) 34%, var(--border));
+  background: var(--focus-accent-faint);
+  color: var(--focus-accent);
 }
 
 .focus-clock {
@@ -2624,7 +2629,7 @@ code {
 .focus-clock::before {
   position: absolute;
   inset: 13%;
-  border: 1px solid var(--focus-warm-quiet);
+  border: 1px solid var(--focus-accent-quiet);
   border-radius: 50%;
   content: '';
   pointer-events: none;
@@ -2650,7 +2655,7 @@ code {
 }
 
 .focus-clock__progress {
-  stroke: var(--focus-warm);
+  stroke: var(--focus-accent);
   stroke-linecap: round;
   transition:
     stroke-dashoffset 500ms ease,
@@ -2709,14 +2714,14 @@ code {
 }
 
 .focus-controls .btn--primary {
-  border-color: var(--focus-warm);
-  background: var(--focus-warm);
+  border-color: var(--focus-accent);
+  background: var(--focus-accent);
   color: var(--on-accent);
 }
 
 .focus-controls .btn--primary:hover {
-  border-color: color-mix(in srgb, var(--focus-warm) 84%, var(--text));
-  background: color-mix(in srgb, var(--focus-warm) 84%, var(--text));
+  border-color: color-mix(in srgb, var(--focus-accent) 84%, var(--text));
+  background: color-mix(in srgb, var(--focus-accent) 84%, var(--text));
 }
 
 .focus-controls .btn--ghost {
@@ -2861,7 +2866,7 @@ code {
   height: 100%;
   min-width: 0;
   border-radius: inherit;
-  background: var(--focus-warm);
+  background: var(--focus-accent);
   transition: width 240ms ease;
 }
 
