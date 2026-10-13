@@ -48,8 +48,7 @@
 
 Sol 对最终布局证据完成视觉复核：`focus-ready-geometry.json` 记录 1540px 与 1157px 两种宽屏下列宽均为 860px；展开计划前后 taskTop、任务高度、content/stage 几何和 stage `scrollTop` 稳定。375×667 视口使用自然流计划行，标题完整、行间距 6px 且无重叠（截图：`focus-final-ready-375x667-plan-rows.png`）。恢复卡通知窄屏截图 `focus-final-resume-notice-375x667.png` 显示标题、操作区、208px 输入框和通知行均在视口内且互不重叠。
 
-最终真实 Electron/Playwright 审计记录在 [focus-functional-audit.md](../output/playwright/focus-functional-audit.md)。独立复核通过：Escape 关闭计划（等待 `aria-expanded=false` 后断言）、外部点击关闭计划、结束会话后出现无活动会话状态，以及实际开始并完成全部 5 项任务后进入 `complete` 且没有待开始任务。计划指针拖放标记、键盘重排和重启后顺序保持也在后续独立运行中通过。恢复卡、计时到时/+1 分钟、求助和导师界面路径有真实 Electron 覆盖；导师使用本地 mock/offline assistant。
-
+最终真实 Electron/Playwright 审计记录在本地生成的 `output/playwright/focus-functional-audit.md`（`output/` 不随仓库提交，因此这里只写路径，不做链接）。独立复核通过：Escape 关闭计划（等待 `aria-expanded=false` 后断言）、外部点击关闭计划、结束会话后出现无活动会话状态，以及实际开始并完成全部 5 项任务后进入 `complete` 且没有待开始任务。计划指针拖放标记、键盘重排和重启后顺序保持也在后续独立运行中通过。恢复卡、计时到时/+1 分钟、求助和导师界面路径有真实 Electron 覆盖；导师使用本地 mock/offline assistant。
 step-answer 的答案/选择题/附件 UI 断言已运行通过，但该次测试在删除临时用户目录时遇到 Windows `EPERM`，所以测试进程结果仍报告失败；此处记录为清理边界，不将其改写成测试套件全通过。较早的 39 项运行有 37 项通过、2 项失败（旧构建指针标记失败及其后无活动会话的连锁失败）；后续独立运行覆盖并通过拖放、Escape、外部点击、结束会话和全部任务完成闭环，不据此声称原 39 项运行整体通过。
 
 原生系统通知权限/投递未验证；Focus 通知是应用内恢复卡，不依赖 OS 通知。轻噪音开关和持久化设置有覆盖，但没有用实体音频输出设备验证实际播放听感。真实外部模型服务未参与，导师交互由本地 mock/offline assistant 提供。主代理报告 540 项单元测试及 typecheck、build、lint、format、`verify:docs` 通过；最终 E2E 清理助手 typecheck 以 `tsc` exit 0 通过，受影响的 3 个文件 ESLint exit 0，helper 格式化且 spec Prettier 检查通过。step-answer 临时 profile 清理遇到的 Windows `EPERM` 仍作为该测试进程的清理失败记录，不影响 UI 断言已通过的结论。

@@ -25,7 +25,15 @@ async function raceTimeout<T>(task: Promise<T>, milliseconds: number): Promise<T
  */
 export async function closeElectronApp(app: ElectronApplication): Promise<void> {
   const electronPid = await raceTimeout(
-    app.evaluate(() => process.pid),
+    /*
+     * `globalThis.process`, not `process`. The callback is serialized with `Function.prototype.toString`
+     * and evaluated in the app's main process, so whatever it says is what runs there — and a bare
+     * `process` in *this* module is not the global: it is the `node:process` import above, which the
+     * CommonJS transform renames (`_nodeProcess`) at the reference, including this one. The rename then
+     * travels inside the serialized source into a process that has no such name, and the call fails with
+     * `ReferenceError: _nodeProcess is not defined` before the app is even asked to quit.
+     */
+    app.evaluate(() => globalThis.process.pid),
     1_000,
   );
   const pidExists = (pid: number) => {

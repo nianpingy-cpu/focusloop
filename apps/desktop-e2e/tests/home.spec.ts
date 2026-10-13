@@ -3,24 +3,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
 import { hermeticEnv } from '../hermetic-env.mjs';
+import { closeElectronApp } from '../support/close-electron-app';
 
 const MAIN = resolve(__dirname, '..', '..', 'desktop', 'dist', 'main', 'main.cjs');
 const MB = 1_048_576;
-
-/**
- * Quits the app this test launched.
- *
- * Deliberately not `support/close-electron-app.ts`, which is the shared way to do this: that helper
- * probes the process for liveness by evaluating `process.pid` in the main process, and the loader
- * this suite runs under rewrites that identifier into a binding the evaluated function cannot see
- * (`ReferenceError: _nodeProcess is not defined`). The part that matters is kept: Electron is asked
- * to quit before the connection is dropped, so close-to-tray cannot leave a window behind holding
- * the loopback bridge port the next spec file launches against.
- */
-async function quit(app: ElectronApplication): Promise<void> {
-  await app.evaluate(({ app: electronApp }) => electronApp.quit()).catch(() => undefined);
-  await app.close().catch(() => undefined);
-}
 
 /**
  * The home page as a page: the three things it is for, and every way each of them can go wrong.
@@ -111,8 +97,14 @@ test('the home page starts a session, browses courses, and takes material in', a
     // 1. A card's first offer is the course itself, which is not the same thing as starting it.
     const firstTitle = await cardTitle(0);
     await cards.nth(0).getByRole('button', { name: 'View course' }).click();
-    await expect(page.getByRole('heading', { name: firstTitle })).toBeVisible({ timeout: 5_000 });
-    expect(page.url()).toContain('#/course/');
+    /*
+     * Polled, not read once: the router moves the hash a tick after the click, and the assertion
+     * below cannot stand in for that wait — the card's own `h3` carries the same title, so it is
+     * already visible on the page the click is leaving. Read once, this raced and failed with the
+     * URL still on `#/home`.
+     */
+    await expect.poll(() => page.url()).toContain('#/course/');
+    await expect(page.getByRole('heading', { name: firstTitle })).toBeVisible();
 
     // 2. And its second starts a session: the focus screen, with a step already in front of the
     // learner rather than a screen waiting to be configured.
@@ -388,7 +380,7 @@ test('the home page starts a session, browses courses, and takes material in', a
     await expect(page.getByText('Current session')).toBeVisible();
     await expect(currentCard.locator('h2')).toHaveText(secondTitle);
   } finally {
-    for (const app of launched) await quit(app);
+    for (const app of launched) await closeElectronApp(app);
     rmSync(profile, { recursive: true, force: true });
   }
 });

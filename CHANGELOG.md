@@ -245,6 +245,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   parallel lines with an empty band in the middle, measured as borders at y=97 and y=128 — the stray
   rule the learner sees as a line that means nothing. The strip keeps its padding and loses the rule, so
   the header's own underline is the only line there.
+- **The focus column sat 5px left of the window's centre while a step ran.** The focus screen's insets are
+  the same on both sides on purpose, and the scroller's own scrollbar — 5px wide — comes out of the right
+  one, which moved the workspace, the task and the plan sheet off the centre line together: measured at
+  1264x801 with a step running, the plan sheet was 199.5px from the left edge of the window and 204.5px
+  from the right, against the 2px the suite that calls it centred allows. The gutter is still _reserved_
+  rather than waited for, because that is what keeps the column from jumping sideways the moment a step
+  makes the page scrollable; the right padding gives the same 5px back instead, read from
+  `--dsh-scrollbar-width` so the padding and the scrollbar cannot drift apart.
 - **The import refuses a name it cannot read, in words, instead of reporting the channel.** A file
   dropped on the home page's zone — or a name typed beside pasted text — whose extension the parser
   does not know (`.rst`, `.pdf`, or none at all) used to travel to the main process and come back as

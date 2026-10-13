@@ -602,20 +602,6 @@ html[data-theme='dark'] .brand__wordmark--dark {
 }
 
 /*
- * The focus screen's scroller reserves the scrollbar's width, so a page that becomes scrollable
- * mid-step does not shift everything sideways when it does.
- *
- * Reserved on **both** edges, because reserving it on one side only narrows the column
- * asymmetrically: the custom scrollbar is 5px wide, and the plan sheet's distance to the left edge
- * of the window came out 5px short of its distance to the right — measured, against a 2px tolerance
- * in the assertion that says the sheet is centred. Both edges keeps the stability the rule is for
- * and gives the column back its symmetry.
- */
-body:has(fl-focus .focus-workspace) .content {
-  scrollbar-gutter: stable both-edges;
-}
-
-/*
  * The children, not the scroller: capping the scroller itself would move the scrollbar
  * away from the window edge. `margin-inline: auto` centres without a wrapper element,
  * and it also catches the error banner, which should line up with the cards.
@@ -3053,6 +3039,26 @@ code {
 
 body:has(fl-focus .focus-workspace[data-rail]) .content {
   padding: 18px clamp(62px, 5vw, 68px) 96px;
+}
+
+/*
+ * The scrollbar's width, given back.
+ *
+ * The inset above is the same on both sides on purpose, and the scroller takes 5px off the right one
+ * again: the content box ends where the scrollbar begins, so everything inside it — the workspace,
+ * and the plan sheet within it — sits 5px left of the window's centre line. Measured at 1264x801 with
+ * a step running: the sheet was 199.5px from the left edge and 204.5px from the right, against the
+ * 2px the assertion that calls it centred allows.
+ *
+ * Reserving the gutter rather than waiting for the page to need it is what keeps the column from
+ * jumping sideways when a step makes it scrollable, so the reserve stays; the right padding pays for
+ * it instead. `--dsh-scrollbar-width` is the custom scrollbar's own width — the amount the reserve
+ * takes — so the two cannot drift apart.
+ */
+body:has(fl-focus .focus-workspace[data-rail]) .content,
+body:has(fl-focus .focus-workspace) .content {
+  scrollbar-gutter: stable;
+  padding-right: calc(clamp(62px, 5vw, 68px) - var(--dsh-scrollbar-width));
 }
 
 /*
