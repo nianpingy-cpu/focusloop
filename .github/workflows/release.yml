@@ -53,6 +53,65 @@ jobs:
       - name: Release hygiene
         run: pnpm verify:scaffolding
 
+      # The one claim no unit test in this repository can make: that a real provider, reached with a
+      # real credential, still answers and still streams. Everything the app does with a model is
+      # covered by tests that mock HTTP — deliberately, so no gate ever spends somebody's key — which
+      # means the day a provider renames a model or starts rejecting a request shape, the first person
+      # to find out is a learner. This runs before the ~114 MB installer is built, so that finding
+      # happens on the runner instead.
+      #
+      # It is opt-in **by credential**, not by a flag. A step that fell over on a missing key would
+      # fail every release of a repository that has none, and there is more than one way to run this
+      # app with no provider at all. So the check is skipped, visibly, when its secrets are absent.
+      #
+      # Only *which* credentials exist is read below. The values are handed to the two steps that need
+      # them and to nothing else: the packaging steps run this repository's own build, and a build is
+      # not a thing that should be able to read an API key out of its environment.
+      - name: Check which live-model credentials are configured
+        id: live
+        shell: pwsh
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          OPENAI_COMPATA_API_KEY: ${{ secrets.OPENAI_COMPATA_API_KEY }}
+          OPENAI_COMPATA_BASE_URL: ${{ secrets.OPENAI_COMPATA_BASE_URL }}
+          OPENAI_COMPATA_MODEL: ${{ secrets.OPENAI_COMPATA_MODEL }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $deepseek = [bool]($env:DEEPSEEK_API_KEY -and $env:DEEPSEEK_API_KEY.Trim())
+          $compatible = [bool](
+            $env:OPENAI_COMPATA_API_KEY -and $env:OPENAI_COMPATA_API_KEY.Trim() -and
+            $env:OPENAI_COMPATA_BASE_URL -and $env:OPENAI_COMPATA_BASE_URL.Trim() -and
+            $env:OPENAI_COMPATA_MODEL -and $env:OPENAI_COMPATA_MODEL.Trim()
+          )
+          "deepseek=$($deepseek.ToString().ToLower())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "compatible=$($compatible.ToString().ToLower())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "Live model check: deepseek=$deepseek compatible=$compatible"
+          # A half-configured provider is the failure that looks like a passing release, so it is said
+          # out loud rather than left to be inferred from a skipped step.
+          $partial = ($env:OPENAI_COMPATA_API_KEY -or $env:OPENAI_COMPATA_BASE_URL -or $env:OPENAI_COMPATA_MODEL) -and -not $compatible
+          if ($partial) {
+            Write-Host '::warning::The compatible provider is only partly configured. The live check needs all of OPENAI_COMPATA_API_KEY, OPENAI_COMPATA_BASE_URL and OPENAI_COMPATA_MODEL; it was skipped.'
+          }
+
+      # `DEEPSEEK_API_KEY` is the name the script reads for itself, one completion and one stream at 64
+      # tokens each. `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` can be added to the environment below to
+      # point it somewhere else.
+      - name: Live model check — DeepSeek
+        if: steps.live.outputs.deepseek == 'true'
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: node scripts/test-llm-connection.mjs --provider deepseek
+
+      # Any OpenAI-compatible endpoint, which is what the third secret exists for: a second vendor can
+      # be exercised without touching the preset the app ships with.
+      - name: Live model check — compatible provider
+        if: steps.live.outputs.compatible == 'true'
+        env:
+          OPENAI_COMPATA_API_KEY: ${{ secrets.OPENAI_COMPATA_API_KEY }}
+          OPENAI_COMPATA_BASE_URL: ${{ secrets.OPENAI_COMPATA_BASE_URL }}
+          OPENAI_COMPATA_MODEL: ${{ secrets.OPENAI_COMPATA_MODEL }}
+        run: node scripts/test-llm-connection.mjs --provider compatible
+
       - name: Package the desktop installer
         run: pnpm --filter @focusloop/desktop run package
 

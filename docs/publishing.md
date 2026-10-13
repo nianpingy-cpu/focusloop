@@ -81,6 +81,30 @@ executes every packaging and checksum step and stops before publishing — a rel
 attached to a branch — and uploads the installer, the extension zip and `SHA256SUMS.txt` to the run
 instead. That is the only way to exercise the NSIS installer without pushing a tag.
 
+## Live model check before a release
+
+The release job runs `scripts/test-llm-connection.mjs` before packaging, so a credential that stopped
+working or a model ID a vendor retired fails the release instead of shipping. It calls a provider for
+real, which is why it is driven by repository secrets rather than by a flag:
+
+| Secret                                                                      | What it enables                                                    |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `DEEPSEEK_API_KEY`                                                          | the DeepSeek check                                                 |
+| `OPENAI_COMPATA_API_KEY`, `OPENAI_COMPATA_BASE_URL`, `OPENAI_COMPATA_MODEL` | the check against any OpenAI-compatible endpoint (a second vendor) |
+
+```bash
+gh secret set DEEPSEEK_API_KEY --repo nianpingy-cpu/focusloop
+gh secret set OPENAI_COMPATA_BASE_URL --repo nianpingy-cpu/focusloop   # e.g. https://…/v1
+gh secret set OPENAI_COMPATA_MODEL --repo nianpingy-cpu/focusloop      # the exact model ID
+gh secret set OPENAI_COMPATA_API_KEY --repo nianpingy-cpu/focusloop
+```
+
+`gh secret set` with no value prompts for it, so nothing is echoed and nothing lands in your shell
+history. Each provider is skipped when its secrets are absent or blank, and a provider that is only
+partly configured raises a warning, so a repository with no secrets releases exactly as it did before.
+Secrets reach only the two check steps; the packaging steps never have a key in their environment.
+`docs/llm-providers.md` records what the check reads and what it deliberately does not print.
+
 ## The application icon
 
 `apps/desktop/resources/icon.ico`, `icon.png` and `icon.icns` are committed assets, not build output.

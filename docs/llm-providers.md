@@ -84,3 +84,24 @@ node scripts/test-llm-connection.mjs --provider compatible --model YOUR_MODEL_ID
 `OPENAI_COMPATA_MODEL` can replace `--model`. `DEEPSEEK_BASE_URL` and `DEEPSEEK_MODEL` optionally
 customize the DeepSeek smoke test. There are no provider-specific variables for custom vendors and
 no fixed custom model IDs in the script. Output excludes keys, URLs, response bodies and raw exceptions.
+
+### The same check at release time
+
+`.github/workflows/release.yml` runs this script on the tag (and on a dispatched rehearsal), before the
+installer is packaged. The point is the one claim no mocked test can make: that a provider still answers
+and still streams with the credential this repository holds.
+
+| Secret                                                                        | Switches on                                                                                                      |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `DEEPSEEK_API_KEY`                                                            | the `deepseek` check (add `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` to the step to point it elsewhere)              |
+| `OPENAI_COMPATA_API_KEY` + `OPENAI_COMPATA_BASE_URL` + `OPENAI_COMPATA_MODEL` | the `compatible` check, which is how a second vendor is exercised without touching the preset the app ships with |
+
+It is opt-in **by credential**, not by a flag: a secret that is absent (or blank) means that step is
+skipped, and a repository with neither set rehearses and releases exactly as it did before. A provider
+that is only partly configured — a key without a model, say — emits a warning rather than being silently
+skipped or failing the release. Secrets are read by the two check steps only, so the packaging steps,
+which run this repository's build, never have a key in their environment.
+
+The check is a gate: a credential that stopped working, or a model ID a vendor has retired, fails the
+release with a reason code rather than shipping. If a provider is having an outage at the moment you
+want to cut a tag, re-run the job (or remove the secret) — the failure says which of those it was.

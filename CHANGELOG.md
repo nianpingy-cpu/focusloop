@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **A release checks that a model still answers before it builds the installer.** Every test in this
+  repository that touches a provider mocks HTTP, which is the right default — a gate that spent a real
+  key would be a gate that fails on somebody else's quota — but it also means the day a vendor renames
+  a model or rejects a request shape, the first person to find out is a learner. The `Release` workflow
+  now runs `scripts/test-llm-connection.mjs` (one completion and one stream, 64 tokens each) against
+  DeepSeek and against any OpenAI-compatible endpoint, **before** the ~114 MB installer is packaged, so
+  that finding happens on a runner. It is opt-in by credential rather than by a flag: `DEEPSEEK_API_KEY`
+  switches on the first check and `OPENAI_COMPATA_API_KEY` + `OPENAI_COMPATA_BASE_URL` +
+  `OPENAI_COMPATA_MODEL` switch on the second, and a repository with none of them rehearses and releases
+  exactly as it did before. A provider that is only partly configured says so as a warning instead of
+  looking like a passing release. Output stays sanitized: provider, model, latency, token counts and a
+  reason code, never a key, a URL of yours, or a response body.
 - **An answer can be a file, and the app reads it here.** A step's answer box, and the same box on a
   resume card, now carry an attach button beside the one that asks the tutor. Plain text, Markdown,
   PDF, Word (`.docx`) and photographs of notes are all accepted, and all four readers run inside the
@@ -179,7 +191,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **The notice no longer lands on the step's own controls, and the focus screen has one scroller.** With a
   notice up, the frame around it was sized by `height: calc(100dvh - 48px)` while the column it stood in
   carried 18px of padding at the top, 96px at the bottom and a 22px gap before it — so the frame was taller
-  than its box, the *page* scrolled as well as the stage, and at 1140x767 the frame sat 15px above the
+  than its box, the _page_ scrolled as well as the stage, and at 1140x767 the frame sat 15px above the
   window's top edge with the notice stopping 62px short of the bottom. Worse, the row the learner was about
   to press ended up behind the notice's edge: measured with a decision notice up at 1140x767, the step's
   controls were 48px under the notice's top edge — and the test that exists to catch exactly that was
