@@ -6,7 +6,7 @@ import { I18nService, type MessageKey } from '../core/i18n/i18n.service';
 import { resolvePanelPlacement, type PanelPlacement } from '../core/panel-placement';
 import {
   TUTOR_MODE_KEYS,
-  TUTOR_MODE_ORDER,
+  TUTOR_PANEL_MODES,
   buildTutorView,
   tutorAnswerApplies,
   tutorEntryVisible,
@@ -20,7 +20,8 @@ const PANEL_GAP_PX = 8;
 /**
  * "Ask about this step" (AG3 step three).
  *
- * The entry point, the six modes, the question, and the one screen that stands in when there is no answer.
+ * The entry point, the three modes, the question, and the one screen that stands in when there is no
+ * answer.
  * The decisions behind all of it — whether the entry is offered, how a reply is labelled, what a refusal
  * looks like, where the "not included" list comes from, and which way the panel opens — live in
  * `core/*.ts` so they are falsifiable without a window; this file is the markup that calls them, plus the
@@ -153,7 +154,7 @@ export class TutorPanelComponent implements OnDestroy {
   private readonly i18n = inject(I18nService);
 
   protected readonly t = this.i18n.t;
-  protected readonly modes = TUTOR_MODE_ORDER;
+  protected readonly modes = TUTOR_PANEL_MODES;
 
   private readonly openState = signal(false);
   protected readonly open = this.openState.asReadonly();
@@ -228,8 +229,8 @@ export class TutorPanelComponent implements OnDestroy {
     });
 
     /*
-     * Measured, not assumed. The panel's height is its content — six mode buttons wrap to two rows in a
-     * narrow window, and an answer adds a result block — so the decision has to follow the element. A
+     * Measured, not assumed. The panel's height is its content — the mode buttons wrap to a second row in
+     * a narrow window, and an answer adds a result block — so the decision has to follow the element. A
      * ResizeObserver reports both the first layout and every later change, which is why there is no
      * "measure once when it opens" call here, and why a panel that grows past the room under it flips.
      *

@@ -8,7 +8,7 @@ never needs one.
 ```mermaid
 flowchart TB
   subgraph Renderer["Angular renderer (sandboxed)"]
-    PAGES[Home · Course · Focus Workspace · Dashboard]
+    PAGES[Home · Course · Focus Workspace · Dashboard · More data]
     STATE[AppStateService signals]
   end
 
@@ -111,6 +111,25 @@ is reached through the same validated IPC bridge as everything else (`settings:g
 restart.
 
 ## The state engine
+
+The desktop Focus workspace also owns a small renderer-local commitment timer. Its four phases
+(`ready`, `active`, `paused`, `expired`) describe the learner's short countdown, not the domain
+`LearningState` below. The pure timer transitions take timestamps as arguments and represent an active
+countdown with an end timestamp, so delayed ticks can reconcile elapsed wall time deterministically.
+`FocusTimerService` retains that timer across route changes in the current renderer and synchronizes
+it to the current session/task owner. It is not currently a SQLite session field and is not restored
+after an application restart. See [focus-mode.md](focus-mode.md) for the user workflow and full
+screen-state boundaries, and [focus-mode-refinement-plan.md](focus-mode-refinement-plan.md) for the
+responsive plan-panel design and its pending browser acceptance.
+
+The Focus plan keeps one centered `min(100%, 860px)` column in both disclosure states. Every block is
+the same height, so the column is the list of what is left rather than a chart of how long each part
+takes — the estimate is written on each row, where it can be read exactly. At viewport widths up to
+480 CSS pixels it switches to a natural-flow vertical task list with wrapping titles and a separate
+action row. Pointer reordering measures the rendered row rectangles, so rows of any height remain
+valid drop targets. The focus header does not
+shrink vertically, and the content reserves a stable scrollbar gutter to prevent width shifts when
+scrolling starts or ends. These responsive details are covered by the plan's browser acceptance work.
 
 `learning-state` is the heart of the project and the reason FocusLoop is an agent rather than a
 prompt wrapper.
@@ -278,6 +297,14 @@ this is built for.
 
 ## Insights: the dashboard is derived, never stored
 
+Screen 5 answers two questions and links to a third: the window ("how have I been doing lately"), the
+session ("how is this one going", including what happened after each interruption), and, one click away
+on `#/more`, the record itself — the week as counts with their evidence, the extension bridge's pairing
+details and the folded event log. None of the three on `#/more` is a number the learner acts on while
+studying, and the change-offer dialog is modal, so the log has to be a route rather than a dialog: it is
+what says whether an offer was applied while that dialog is still on screen.
+([#8](https://github.com/nianpingy-cpu/focusloop/issues/8), [#135](https://github.com/nianpingy-cpu/focusloop/issues/135))
+
 The dashboard's aggregates are **not** a second source of truth. `agent-core/src/insights.ts` rebuilds
 them from the event log every time the window changes, and two rules make that safe:
 
@@ -320,7 +347,9 @@ The log is an audit tail, and left raw it is mostly noise: the demo command alon
 `HELP_REQUESTED` events for one press, which used to draw three identical cards. `events-view.ts`
 folds a run of consecutive events sharing a type _and_ a source into one row, rendered in the
 learner's words with the exact vocabulary on each part's `title` — `You asked for help ×3`, and
-`HELP_REQUESTED` on hover (see [#8](https://github.com/nianpingy-cpu/focusloop/issues/8)).
+`HELP_REQUESTED` on hover (see [#8](https://github.com/nianpingy-cpu/focusloop/issues/8)). It renders on
+the record screen (`#/more`), not on the dashboard: it is a record of what happened, not one of the
+numbers the learner acts on.
 
 Two constraints keep that honest:
 
@@ -514,6 +543,9 @@ sequenceDiagram
 - The event id is remembered in a bounded ring, so a reconnect storm cannot double-count.
 - If the bridge cannot start (port taken), the app still runs and says so; the app's own sensor still
   records the learner leaving and returning, so the demo does not depend on the bridge.
+- The address, the protocol version, the connection count and the token are shown on the record screen
+  (`#/more`), behind a deliberate request — a learner opens the dashboard for their own numbers, so
+  nothing from the machinery is rendered until they ask for it (#135).
 
 ## Determinism and testability
 

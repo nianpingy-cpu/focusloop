@@ -110,17 +110,21 @@ export const zh: Record<MessageKey, string> = {
   'home.import.hint': '仅支持纯文本与 Markdown。导入的材料只留在这台电脑上，除非你配置了模型密钥。',
   'home.import.fileName': '文件名',
   'home.import.content': '内容',
+  'home.import.contentPlaceholder': '把想留下的文字粘贴或输入到这里。',
   'home.import.action': '导入',
   'home.import.placeholder': '笔记.md',
   'home.import.result': '{title}：{concepts} 个概念，{tasks} 个微任务',
   'home.import.needFileName': '请先给文件起个名字。',
+  'home.import.needFormat': '请使用 .txt 或 .md 文件名。',
+  'home.import.needText': '请先拖入文件，或粘贴文字。',
   'home.import.drop': '把文件拖到这里，或点击选择',
   'home.import.dropNow': '松开即可导入',
   'home.import.accepts': '支持纯文本与 Markdown · 单个不超过 {limit}',
-  'home.import.nameHint': '导入后的课程就用这个名字。',
+  'home.import.nameHint': '课程默认用这个名字，除非正文以标题开头。',
   'home.import.remove': '移除文件',
-  'home.import.pasteSummary': '或者直接粘贴文本',
+  'home.import.pasteSummary': '或者不用文件，直接粘贴文字',
   'home.import.reject.tooLarge': '这个文件超过 {limit}。',
+  'home.import.reject.unsupportedFormat': '这个文件不是 .txt 或 .md 文件。',
   'home.import.reject.empty': '这个文件是空的。',
   'home.import.reject.notText': '这个文件不是纯文本。',
   'home.import.reject.unreadable': '这个文件读不出来。',
@@ -292,15 +296,9 @@ export const zh: Record<MessageKey, string> = {
   'focus.stuck.tired': '没力气了',
   'focus.stuck.unsaid': '不想说',
   'focus.paused': '已暂停',
-  'focus.timeUp': '时间到了',
-  'focus.notice.aria': '专注通知',
-  'focus.notice.help': '选择接下来的一步',
-  'focus.notice.choices': '继续、缩小这一步，或者休息',
-  'focus.notice.show': '展开通知',
-  'focus.notice.fold': '收起通知',
-  'focus.notice.simplify': '把这一步再缩小',
-  'focus.notice.break': '休息 3 分钟',
-  'focus.notice.timeUpBody': '你的位置已经保留，需要的话可以再加一分钟。',
+  'focus.notice.aria': '专注提示',
+  'focus.notice.show': '展开提示',
+  'focus.notice.fold': '收起提示',
   'focus.complete': '完成任务',
   'focus.answer.title': '你写下的答案',
   'focus.answer.hint': '它会跟着这一步一起留下，智能体才知道你学到了哪一步。',
@@ -332,8 +330,8 @@ export const zh: Record<MessageKey, string> = {
   'focus.allDone': '这门课程的所有任务都已完成。',
   // 把总量直接说出来，省得学习者自己去把块加起来。
   'focus.plan.remaining': '还剩约 {time}',
-  // 计划表里方块的高度 = 预计用时，这一行把它说出来；不说，用户只会以为排版出错了。
-  'focus.plan.legend': '每个方块是一个任务，高度就是它的预计用时。',
+  // 预计用时写在每一行上，所以这一行只需要说明方块和右边那个数字是什么。
+  'focus.plan.legend': '每个方块是一个任务，右边的是它的预计用时。',
   'focus.plan.reorder': '重新排序 {title}',
   'focus.plan.gripHelp': '回车或空格键向下移，加 Shift 向上移；也可以用上下方向键，或者直接拖动。',
   'focus.plan.moved': '已把 {title} 移到第 {position} 位，共 {total} 项',
@@ -369,7 +367,6 @@ export const zh: Record<MessageKey, string> = {
   'dashboard.window.tasks': '完成任务',
   'dashboard.window.interruptions': '打断次数',
   'dashboard.window.sessions': '会话数',
-  'dashboard.outcomes.none': '还没有展示过干预。',
   'dashboard.courses.title': '课程占比',
 
   // Chinese does not space a number from its unit, so these carry no padding.
@@ -390,37 +387,53 @@ export const zh: Record<MessageKey, string> = {
   'dashboard.tasks': '微任务',
   'dashboard.interruptions': '打断次数',
   'dashboard.latency': '平均恢复耗时',
+  /*
+   * 两个“恢复”指标单独成节：它们回答的是被打断之后发生了什么，和“这次会话进行得怎么样”不是同一个
+   * 问题，样本也不是同一批事件。
+   */
+  'dashboard.resume.title': '恢复效果',
   'dashboard.reengageRate': '恢复后再参与',
   'dashboard.reengageRate.sample':
     '已评估 {evaluated} 次，再参与 {reengaged} 次 · 再次停滞 {stalled} 次 · 待观察 {pending} 次',
   'dashboard.progressRate': '恢复后进步',
   'dashboard.progressRate.sample':
     '已评估 {evaluated} 次，进步 {progressed} 次 · 待观察 {pending} 次',
-  'dashboard.outcomes': '干预结果',
-  'dashboard.rescues': '解困效果',
-  'dashboard.rescues.none': '还没有试过解困。',
-  'dashboard.rescues.rate': '{evaluated} 次中有 {succeeded} 次帮到了你',
-  'dashboard.rescues.rateNone': '尚未判定',
-  'dashboard.rescues.counts':
-    '试过 {accepted} 次 · 又求助 {repeated} 次 · 没看到进展 {expired} 次 · 还在观察 {pending} 次',
+
+  /*
+   * 不属于学习界面的那部分记录：应用自己的日志，以及它和浏览器扩展的连接。两者都放在仪表盘链过去的
+   * 页面上，而不是仪表盘上。
+   */
+  'dashboard.more': '更多数据',
+  'more.eyebrow': '更多数据',
+  'more.title': '更多数据',
+  'more.subtitle': '本周、干预结果、浏览器桥接和事件日志——仪表盘上没有放下的部分。',
+  'more.back': '返回仪表盘',
+  'more.outcomes': '干预结果',
+  'more.outcomes.none': '还没有展示过干预。',
   // 横条自己的说明，以及旁边的两件事：被接受的比例，和原先表格里的计数。N 写出来，是因为只有一次
   // 样本的行否则会读成“每次都成功”。
-  'dashboard.outcomes.share': '{percent} 被接受',
-  'dashboard.outcomes.shareAria': '{action} 的接受比例',
-  'dashboard.outcomes.valueText': '{percent} 被接受 · N = {total}',
-  'dashboard.outcomes.counts':
+  'more.outcomes.share': '{percent} 被接受',
+  'more.outcomes.shareAria': '{action} 的接受比例',
+  'more.outcomes.valueText': '{percent} 被接受 · N = {total}',
+  'more.outcomes.counts':
     '接受 {accepted} · 忽略 {dismissed} · {completed} 随后完成了任务 · N = {total}',
-  'dashboard.bridge': '浏览器桥接',
-  'dashboard.bridge.listening': '正在监听 {url} · 协议 v{version} · 已连接 {connections} 个',
-  'dashboard.bridge.hint':
+  'more.rescues': '解困效果',
+  'more.rescues.none': '还没有试过解困。',
+  'more.rescues.rate': '{evaluated} 次中有 {succeeded} 次帮到了你',
+  'more.rescues.rateNone': '尚未判定',
+  'more.rescues.counts':
+    '试过 {accepted} 次 · 又求助 {repeated} 次 · 没看到进展 {expired} 次 · 还在观察 {pending} 次',
+  'more.bridge': '浏览器桥接',
+  'more.bridge.listening': '正在监听 {url} · 协议 v{version} · 已连接 {connections} 个',
+  'more.bridge.hint':
     '把这个令牌粘贴到 FocusLoop Bridge 扩展里。它每次启动都会更换，且只在本机有效。',
-  'dashboard.bridge.reveal': '显示连接信息',
-  'dashboard.bridge.hide': '收起连接信息',
-  'dashboard.bridge.stopped': '桥接服务未在运行。演示事件模拟器覆盖了同一条链路。',
-  'dashboard.bridge.unavailable': '暂时拿不到桥接状态。',
-  'dashboard.events': '最近事件',
-  'dashboard.events.none': '还没有记录到事件。', // 没有单数形式：这个角标只在两条以上时才出现。
-  'dashboard.events.times': '{count} 次',
+  'more.bridge.reveal': '显示连接信息',
+  'more.bridge.hide': '收起连接信息',
+  'more.bridge.stopped': '桥接服务未在运行。演示事件模拟器覆盖了同一条链路。',
+  'more.bridge.unavailable': '暂时拿不到桥接状态。',
+  'more.events': '最近事件',
+  'more.events.none': '还没有记录到事件。', // 没有单数形式：这个角标只在两条以上时才出现。
+  'more.events.times': '{count} 次',
 
   /*
    * 用学习者的说法写历史，而不是用日志的说法。`EVENT_TYPE_KEYS` 与 `EVENT_SOURCE_KEYS` 对封闭词表
@@ -546,7 +559,7 @@ export const zh: Record<MessageKey, string> = {
   'tutor.placeholder.answer': '写下或粘贴你的答案，导师会帮你看看。',
   'tutor.ask': '提问',
   'tutor.asking': '正在提问…',
-  'tutor.hint.mode': '先在上面六项里选一个，再点「提问」。',
+  'tutor.hint.mode': '先在上面三项里选一个，再点「提问」。',
   'tutor.hint.question': '先在上面的输入框里写下你的问题，再点「提问」。',
   'tutor.mode.EXPLAIN': '解释一下',
   'tutor.mode.HINT': '给点提示',

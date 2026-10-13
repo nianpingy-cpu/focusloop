@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
 import { hermeticEnv } from '../hermetic-env.mjs';
+import { closeElectronApp } from '../support/close-electron-app';
 
 const MAIN = resolve(__dirname, '..', '..', 'desktop', 'dist', 'main', 'main.cjs');
 
@@ -182,9 +183,9 @@ test('a step records what the learner wrote, and answers a quiz it asks', async 
     await expect(page.locator('.banner--error')).toHaveCount(0);
   } finally {
     for (const app of launched) {
-      await app.close().catch(() => undefined);
+      await closeElectronApp(app);
     }
-    rmSync(profile, { recursive: true, force: true });
+    rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   }
 });
 

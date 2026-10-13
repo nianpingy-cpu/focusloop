@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { _electron as electron, expect, test, type Page } from '@playwright/test';
 import { hermeticEnv } from '../hermetic-env.mjs';
 import { fireDemoEvent } from '../demo-events.mjs';
+import { closeElectronApp } from '../support/close-electron-app';
 import type { FocusLoopApi } from '@focusloop/shared-types';
 
 declare global {
@@ -91,7 +92,7 @@ async function taskIsUnobstructed(page: Page): Promise<void> {
   await expect(page.getByTestId('complete-task')).toBeInViewport();
 }
 
-test('one bottom slot preserves pending choices, priority, keyboard access and the task', async ({
+test('the bottom slot carries the return card and nothing else, and the step clears it', async ({
   browserName: _browserName,
 }, info) => {
   const profile = mkdtempSync(join(tmpdir(), 'focusloop-notice-'));
@@ -129,54 +130,99 @@ test('one bottom slot preserves pending choices, priority, keyboard access and t
       )
       .toBe(true);
 
-    // The three-minute commitment expires without changing main-process time or policy.
+    /*
+     * An expired commitment is not a notice any more.
+     *
+     * It used to be one of the three things this slot could carry. The control row already answers it —
+     * the primary button turns into "+1 minute" for exactly this phase — so the strip was a second
+     * surface saying what the button under the clock already said, over the step the learner was reading.
+     * What has to be true instead is that the offer is *there*, on the control that owns it, and that
+     * nothing appears over the step.
+     */
     await page.clock.fastForward(180_250);
-    await expect(notice).toHaveAttribute('data-notice', 'time-up');
-    await taskIsUnobstructed(page);
+    await expect(page.locator('.focus-workspace')).toHaveAttribute('data-phase', 'expired');
+    await expect(notice).toHaveCount(0);
+    // The primary control is the offer; the quiet "+1 minute" beside it is always there.
+    const expiredPrimary = page.locator('.focus-controls .btn--primary', { hasText: '+1 minute' });
+    await expect(expiredPrimary).toBeVisible();
     await page.screenshot({ path: info.outputPath('time-up.png') });
 
-    await toggle.focus();
-    await page.keyboard.press('Escape');
-    await expect(notice).toHaveAttribute('data-folded', 'true');
-    await expect(toggle).toBeFocused();
-    await expect(page.getByTestId('focus-notice-body')).toHaveCount(0);
+    await expiredPrimary.click();
+    await expect(page.locator('.focus-workspace')).toHaveAttribute('data-phase', 'active');
+    await expect(notice).toHaveCount(0);
 
-    // Help wins over an expired timer, but a new notice must not undo a manual fold.
+    // Asking for help is answered in the step that asked, and the slot stays empty.
     await page.getByTestId('focus-stuck').click();
     await page.getByTestId('stuck-too-big').click();
-    await expect(notice).toHaveAttribute('data-notice', 'help');
-    await expect(notice).toHaveAttribute('data-folded', 'true');
-    await toggle.click();
     await expect(page.getByTestId('agent-offered')).toBeVisible();
-    await taskIsUnobstructed(page);
+    await expect(notice).toHaveCount(0);
+    await expect(page.getByTestId('focus-notice-body')).toHaveCount(0);
+    /*
+     * In the control row rather than over it: the suggestion is one more item of the row, so the box grows
+     * by its height instead of the suggestion landing on top of the buttons. That is the assertion — the
+     * card's box is inside the row's, and the row's own controls are still on screen.
+     */
+    const offered = await page.getByTestId('agent-offered').boundingBox();
+    const controls = await page.locator('.focus-controls').boundingBox();
+    expect(offered).not.toBeNull();
+    expect(controls).not.toBeNull();
+    expect(offered!.y).toBeGreaterThanOrEqual(controls!.y);
+    expect(offered!.y + offered!.height).toBeLessThanOrEqual(
+      controls!.y + controls!.height + TOUCH_TOLERANCE,
+    );
+    await expect(page.getByTestId('complete-task')).toBeInViewport();
+    await expect(page.getByTestId('focus-stuck')).toBeInViewport();
     await page.screenshot({ path: info.outputPath('stuck.png') });
 
-    // Folding sends no dismissal. A subsequent evaluation still has the same offer.
+    /*
+     * Rendering it in the step must not resolve anything. It did not before this moved: the offer is the
+     * main process's, and a surface that shows it is not a surface that answers it.
+     */
     const offerId = await page.evaluate(async () => {
       const session = await window.focusloop.getCurrentSession();
       return (await window.focusloop.getPendingRescue(session!.session.id))?.interventionId;
     });
-    await toggle.click();
     await fireDemoEvent(page, 'success');
-    await expect(notice).toHaveAttribute('data-folded', 'true');
     expect(
       await page.evaluate(async () => {
         const session = await window.focusloop.getCurrentSession();
         return (await window.focusloop.getPendingRescue(session!.session.id))?.interventionId;
       }),
     ).toBe(offerId);
+    await expect(page.getByTestId('agent-offered')).toBeVisible();
 
-    // A resume wins over help and time up without consuming either lower-priority candidate.
+    // A resume takes the slot, without consuming the offer the step is still showing.
     await fireDemoEvent(page, 'distraction');
     await fireDemoEvent(page, 'return');
     await expect(notice).toHaveAttribute('data-notice', 'resume');
+    await expect(page.getByTestId('agent-offered')).toBeVisible();
+
+    // The card is foldable, and a fold is remembered per session rather than per mount.
+    await toggle.focus();
+    await page.keyboard.press('Escape');
     await expect(notice).toHaveAttribute('data-folded', 'true');
+    await expect(toggle).toBeFocused();
+    await expect(page.getByTestId('focus-notice-body')).toHaveCount(0);
     await toggle.click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByTestId('resume-continue')).toBeVisible();
     await taskIsUnobstructed(page);
     await expect(page.getByTestId('resume-continue')).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: info.outputPath('resume.png') });
+    /*
+     * The pending suggestion is answered before the size loop below, because it is part of the *step* now
+     * and the loop measures the two boxes against each other. 800x700 with the return card up is the size
+     * the stylesheet's own comment calls the one where the card and the step cannot both have the room
+     * they want, and the step is the one that yields: with a suggestion in its control row there is no
+     * scroll position that shows both the whole box and the whole card, and the box's top is what goes.
+     * The suggestion's own geometry is asserted above, where it is inside the row and the row's controls
+     * are still on screen.
+     */
+    await page
+      .getByTestId('agent-offered')
+      .getByRole('button', { name: 'Not now', exact: true })
+      .click();
+    await expect(page.getByTestId('agent-offered')).toHaveCount(0);
     // CI macOS uses space-consuming scrollbars, unlike this developer machine's
     // overlay scrollbars. Exercise that width loss explicitly, not only by OS label.
     const classicScrollbars = await page.addStyleTag({
@@ -238,37 +284,49 @@ test('one bottom slot preserves pending choices, priority, keyboard access and t
     });
     await expect(notice).toHaveAttribute('data-folded', 'true');
     await toggle.click();
+    await expect(page.getByTestId('resume-continue')).toBeVisible();
     await page.getByTestId('resume-continue').click();
-    await expect(notice).toHaveAttribute('data-notice', 'help');
-    // The card removed the button that had focus; the keyboard stays inside the notice.
-    await expect(toggle).toBeFocused();
 
-    // Continue uses MICRO_START, preserving the task and restarting the expired clock.
-    await page.getByTestId('notice-continue').click();
-    await expect(page.getByTestId('agent-accepted')).toHaveAttribute('data-action', 'MICRO_START');
+    /*
+     * Answering the card empties the slot, which used to be impossible: the resume decision fell through
+     * to the agent's offer in the same strip, so the learner answered "where was I" and was immediately
+     * asked something else. The offer is in the step and stays there.
+     */
+    await expect(notice).toHaveCount(0);
+    // The card removed the button that had focus, and the notice it lived in is gone with it: the
+    // keyboard is handed to the stage rather than left on `<body>`, where Tab restarts at the document.
+    await expect(page.locator('.focus-stage')).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect
+      .poll(() => page.evaluate(() => document.activeElement?.closest('.focus-stage') !== null))
+      .toBe(true);
+
+    // Accepting from the step keeps the whole lifecycle: offered → accepted → plan → continue.
+    await page.getByTestId('focus-stuck').click();
+    await page.getByTestId('stuck-too-big').click();
+    await page
+      .getByTestId('agent-offered')
+      .getByRole('button', { name: 'Try this', exact: true })
+      .click();
+    await expect(page.getByTestId('agent-accepted')).toHaveAttribute('data-action', 'SIMPLIFY');
     await expect(page.locator('.focus-workspace')).toHaveAttribute('data-phase', 'active');
     await page
       .getByTestId('agent-accepted')
       .getByRole('button', { name: 'Continue', exact: true })
       .click();
-    await expect(notice).toHaveCount(0);
+    await expect(page.getByTestId('agent-accepted')).toHaveCount(0);
 
+    /*
+     * BREAK is the one action that pauses the live clock, and it still does, from the same place. The
+     * reason is asked for where it always was — the six buttons in the control row, which is what the
+     * notice's own three choices were a second copy of.
+     */
     await page.getByTestId('focus-stuck').click();
-    await page.getByTestId('stuck-too-big').click();
-    await page.getByTestId('notice-simplify').click();
-    await expect(page.getByTestId('agent-accepted')).toHaveAttribute('data-action', 'SIMPLIFY');
-    // The button that was pressed removes itself, and this surface is non-modal: the keyboard must
-    // stay inside the notice instead of falling to `<body>`, where the next Tab restarts at the top.
-    await expect(toggle).toBeFocused();
+    await page.getByTestId('stuck-tired').click();
     await page
-      .getByTestId('agent-accepted')
-      .getByRole('button', { name: 'Continue', exact: true })
+      .getByTestId('agent-offered')
+      .getByRole('button', { name: 'Try this', exact: true })
       .click();
-    await expect(notice).toHaveCount(0);
-
-    await page.getByTestId('focus-stuck').click();
-    await page.getByTestId('stuck-cannot-start').click();
-    await page.getByTestId('notice-break').click();
     await expect(page.getByTestId('agent-accepted')).toHaveAttribute('data-action', 'BREAK');
     await expect(page.locator('.focus-workspace')).toHaveAttribute('data-phase', 'paused');
     await page
@@ -277,10 +335,11 @@ test('one bottom slot preserves pending choices, priority, keyboard access and t
       .click();
     await expect(page.locator('.focus-workspace')).toHaveAttribute('data-phase', 'active');
 
-    // Reduced motion covers both the sheet and its expanded contents.
+    // Reduced motion covers the slot and its expanded contents.
+    await fireDemoEvent(page, 'distraction');
+    await fireDemoEvent(page, 'return');
+    await expect(notice).toHaveAttribute('data-notice', 'resume');
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.getByTestId('focus-stuck').click();
-    await page.getByTestId('stuck-too-big').click();
     expect(await notice.evaluate((node) => getComputedStyle(node).animationName)).toBe('none');
     expect(
       await page
@@ -291,19 +350,20 @@ test('one bottom slot preserves pending choices, priority, keyboard access and t
 
     // A new session starts unfolded, rather than inheriting the previous session's fold.
     await toggle.click();
+    await expect(notice).toHaveAttribute('data-folded', 'true');
     await page.getByTestId('end-session').click();
     await page.evaluate(() => {
       location.hash = '#/home';
     });
     await page.getByTestId('course-card').first().getByTestId('start-session').click();
     await page.getByTestId('start-task').first().click();
-    await page.getByTestId('focus-stuck').click();
-    await page.getByTestId('stuck-too-big').click();
+    await fireDemoEvent(page, 'distraction');
+    await fireDemoEvent(page, 'return');
     await expect(notice).toHaveAttribute('data-folded', 'false');
     await taskIsUnobstructed(page);
   } finally {
-    await app.close();
-    rmSync(profile, { recursive: true, force: true });
+    await closeElectronApp(app);
+    rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
   }
 });
 
@@ -348,7 +408,7 @@ test('other routes keep the modal resume card, trap and all', async () => {
     await expect(dialog).toBeHidden();
     await expect(page.locator('.banner--error')).toHaveCount(0);
   } finally {
-    await app.close();
+    await closeElectronApp(app);
     rmSync(profile, { recursive: true, force: true });
   }
 });

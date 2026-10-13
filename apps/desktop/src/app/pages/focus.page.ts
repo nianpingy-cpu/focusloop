@@ -34,7 +34,7 @@ import { KIND_GLYPHS, buildPlan } from '../core/session-plan';
 import { keepsRail, type FocusPhase } from '../core/focus-phase';
 import { FocusTimerService } from '../core/focus-timer.service';
 import { PLAN_INITIAL_OPEN, nextPlanOpen, type PlanEvent } from '../core/plan-visibility';
-import { dropIndexFor, reorder, sameOrder } from '../core/task-order';
+import { reorder, sameOrder } from '../core/task-order';
 import { helpRequestPayload } from '../core/stuck-picker';
 import {
   answerTooLong,
@@ -47,6 +47,7 @@ import {
 import type { MessageKey } from '../core/i18n/messages.en';
 import { TutorPanelComponent } from '../components/tutor-panel.component';
 import { FocusNoticeComponent } from '../components/focus-notice.component';
+import { AgentPanelComponent } from '../components/agent-panel.component';
 
 const CLOCK_RADIUS = 86;
 const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
@@ -55,7 +56,7 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
 @Component({
   selector: 'fl-focus',
   standalone: true,
-  imports: [TutorPanelComponent, FocusNoticeComponent],
+  imports: [TutorPanelComponent, FocusNoticeComponent, AgentPanelComponent],
   /*
    * Both of these belong to the document rather than to this element. The plan panel is not a
    * modal, so by the time the learner changes their mind, focus may be anywhere on the page — and a
@@ -106,7 +107,12 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
           </div>
         </header>
 
-        <main class="focus-stage">
+        <!--
+          tabindex="-1": the stage is where the keyboard is handed back to when the notice's own decision
+          unmounts the slot, which is the one thing that can remove the element holding focus without
+          putting it anywhere else. Programmatically focusable, never in the tab order.
+        -->
+        <main class="focus-stage" #stage tabindex="-1">
           <div class="focus-progress-strip" aria-label="{{ t('focus.progress') }}">
             <span class="focus-progress-strip__item">
               <span class="focus-progress-strip__label">{{ t('focus.progress') }}</span>
@@ -161,10 +167,19 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                   </button>
                   <span class="focus-task__time-note">{{ t('focus.readyHint') }}</span>
                 </div>
+                <!--
+                  The agent has something to say in this phase too — an overloaded session is a fact about
+                  the session and not about the step — so every phase's box carries the card, and the empty
+                  case renders nothing at all. See the running step's copy for why it is here and not in the
+                  bottom slot.
+                -->
+                <fl-agent-panel />
               </section>
             } @else {
               <section class="focus-task focus-task--empty" #taskAnchor>
                 <p class="muted">{{ t('focus.allDone') }}</p>
+                <!-- Every phase's box carries the card, including the one with nothing left to start. -->
+                <fl-agent-panel />
               </section>
             }
           } @else if (phase() === 'complete') {
@@ -191,6 +206,7 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
               } @else {
                 <p class="focus-task__instructions">{{ t('focus.allDone') }}</p>
               }
+              <fl-agent-panel />
             </section>
           } @else if (task(); as currentTask) {
             <section
@@ -433,6 +449,16 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                   at all, from the session and the current task.
                 -->
                 <fl-tutor-panel />
+                <!--
+                  What the agent decided, in the row that asked for it.
+
+                  It used to be a strip pinned over the bottom of the screen (the focus notice), with three
+                  quick choices that were the stuck reasons over again. A suggestion about *this step*
+                  belongs with the step: replied to where the question was asked, in the flow of the box
+                  rather than over it, and it cannot cover the controls because it is one of them. The
+                  nothing-to-say case renders nothing at all.
+                -->
+                <fl-agent-panel />
               </div>
             </section>
           }
@@ -467,10 +493,9 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
                   <p class="muted">{{ t('focus.allDone') }}</p>
                 } @else {
                   <!--
-                    The column's encoding, said in words. Height is the estimate, which is the whole
-                    reason this is a timeline rather than a list — and an encoding nobody has been told
-                    about is read as a layout fault, which is what the empty halves of these blocks
-                    looked like before this line existed.
+                    What the column is, said in words: one block per task, the estimate written on the
+                    row. The number is read from the row rather than from the block's length, so the
+                    line only has to name the two things the learner is looking at.
                   -->
                   <p class="focus-plan__legend" data-testid="plan-legend">
                     {{ t('focus.plan.legend') }}
@@ -541,7 +566,7 @@ const CLOCK_CIRCUMFERENCE = 2 * Math.PI * CLOCK_RADIUS;
             }
           </section>
         </main>
-        <fl-focus-notice #noticeRoot [expired]="phase() === 'expired'" (continueTimer)="resume()" />
+        <fl-focus-notice #noticeRoot />
       </div>
     } @else {
       <div class="focus-workspace" data-phase="ready">
@@ -575,7 +600,7 @@ export class FocusPage implements OnDestroy, OnInit {
   private readonly gripRefs = viewChildren<ElementRef<HTMLButtonElement>>('planGrip');
   private readonly stuckTrigger = viewChild<ElementRef<HTMLButtonElement>>('stuckTrigger');
   private readonly stuckGroup = viewChild<ElementRef<HTMLElement>>('stuckGroup');
-  /** Whatever step is on screen, whichever phase it is in — the thing the plan sheet must not cover. */
+  /** The step whose area scrolls when the fixed-height notice row is present. */
   private readonly taskAnchor = viewChild<ElementRef<HTMLElement>>('taskAnchor');
   /**
    * The bottom slot, which the stage has to stop short of.
@@ -589,6 +614,8 @@ export class FocusPage implements OnDestroy, OnInit {
     'noticeRoot',
     { read: ElementRef },
   );
+  /** Where the keyboard lands when the notice's decision unmounts the slot: see `handBackAfterNotice`. */
+  private readonly stage = viewChild<ElementRef<HTMLElement>>('stage');
   /** Watching the bottom row's box, not its state: see `watchNoticeSize`. */
   private noticeObserver: ResizeObserver | null = null;
 
@@ -774,15 +801,32 @@ export class FocusPage implements OnDestroy, OnInit {
   /**
    * Where the row would land.
    *
-   * Measured against the track's own box rather than accumulated from deltas: the blocks tile it, so
-   * the row under the pointer is a lookup, and a lookup cannot drift the way a running total can.
+   * Measured against the rendered rows rather than accumulated from pointer deltas. That keeps the
+   * target correct when the timeline itself is scrolled or when narrow layouts let titles wrap.
    */
   protected gripMove(event: PointerEvent): void {
     if (this.dragFrom() === null) return;
     const track = this.planTrack()?.nativeElement;
     if (track === undefined) return;
-    const bounds = track.getBoundingClientRect();
-    this.dropIndex.set(dropIndexFor(this.plan().blocks, event.clientY - bounds.top));
+    const blocks = [...track.querySelectorAll<HTMLElement>('.focus-plan__block')];
+    if (blocks.length === 0) return;
+    const underPointer = blocks.findIndex((block) => {
+      const bounds = block.getBoundingClientRect();
+      return event.clientY >= bounds.top && event.clientY <= bounds.bottom;
+    });
+    if (underPointer >= 0) {
+      this.dropIndex.set(underPointer);
+      return;
+    }
+    const nearest = blocks.reduce(
+      (best, block, index) => {
+        const bounds = block.getBoundingClientRect();
+        const distance = Math.abs(event.clientY - (bounds.top + bounds.height / 2));
+        return distance < best.distance ? { index, distance } : best;
+      },
+      { index: 0, distance: Number.POSITIVE_INFINITY },
+    );
+    this.dropIndex.set(nearest.index);
   }
 
   /**
@@ -962,51 +1006,14 @@ export class FocusPage implements OnDestroy, OnInit {
     this.planOpenState.update((isOpen) => nextPlanOpen(isOpen, event));
   }
 
-  /**
-   * Raises the sheet without burying the step it belongs to.
-   *
-   * The sheet is anchored to the bottom edge (`bottom: 16px`), and the step sits in a column that is
-   * laid out from the top, so on a window of any ordinary height the sheet's top edge lands across the
-   * step's own controls. Measured on a 1157x732 window: "Start for 3 minutes" and the plan's summary
-   * were painted through each other over 148x32 px of the button, and pressing it hit the sheet.
-   *
-   * Neither obvious fix holds. Shrinking the sheet to the room left under the step leaves 133px of a
-   * five-block plan; reserving room in the column's *layout* changes nothing, because the step is
-   * packed from the top and padding below it moves nothing. So the window scrolls instead — the sheet
-   * is `position: fixed`, so lifting the step into the space above it leaves the sheet exactly where
-   * it was designed to be, and `styles.css` keeps scroll room free for that while the sheet is up.
-   * Scrolled by the measured intersection rather than by the sheet's height, so the step's title is not
-   * thrown off the screen on the way to clearing the sheet.
-   *
-   * `afterRenderEffect`, not `effect`: the sheet has to be in the DOM before it can be measured. A
-   * resize runs the same check, because the room under the anchor changes without the sheet moving.
-   */
-  private readonly uncoverTask = afterRenderEffect(() => {
-    if (!this.planOpen()) return;
-    untracked(() => this.uncoverTaskFromSheet());
-  });
-
   private readonly onWindowResize = (): void => {
-    if (this.planOpen()) this.uncoverTaskFromSheet();
     // The notice's own height does not change with the window, but the room it takes from the stage
     // does, so the same check runs again.
     this.liftStepClearOfNotice();
   };
 
-  private uncoverTaskFromSheet(): void {
-    const sheet = this.planRoot()?.nativeElement;
-    const task = this.taskAnchor()?.nativeElement;
-    const scroller = task?.closest<HTMLElement>('.content') ?? null;
-    if (sheet === undefined || task === undefined || scroller === null) return;
-    const covered = task.getBoundingClientRect().bottom - (sheet.getBoundingClientRect().top - 8);
-    if (covered > 0) scroller.scrollTop += covered;
-  }
-
   /**
-   * Keeps the step clear of the notice, which is the sheet's job with one difference: the sheet floats
-   * over the window, so the *page* can scroll under it, while the notice is a real row of the frame and
-   * the frame is the window — so the stage moves, and the stage is the frame's only scroller
-   * (see `styles.css`).
+   * Keeps the step clear of the notice row, scrolling only the stage when that row is present.
    *
    * Observed rather than run on the slot's own changes, because what matters is the row's *height*, and
    * the row is filled in passes: the decision, its sentence, its buttons and its fold each arrive on their
@@ -1024,6 +1031,34 @@ export class FocusPage implements OnDestroy, OnInit {
       this.noticeObserver.disconnect();
       this.noticeObserver.observe(element);
       this.liftStepClearOfNotice();
+    });
+  });
+
+  /**
+   * Where the keyboard goes when the notice's own decision empties the slot.
+   *
+   * The slot's decision is destroying its last control: the card's Continue button is what had focus, and
+   * the whole notice unmounts behind it — so the notice's own `reclaimKeyboard` has nothing left to put
+   * focus on, and without this the learner's keyboard is on `<body>` and the next Tab restarts at the top
+   * of the document. It used to be masked: answering the card fell through to the agent's offer, so the
+   * slot stayed mounted and kept the focus. The stage is the landmark that is always there, and it carries
+   * the running step's name.
+   *
+   * Only when the keyboard is actually orphaned, and only on the falling edge: a learner who moved focus
+   * into the step themselves keeps it, and arriving on the screen with no notice never moves anything.
+   */
+  private noticeWasUp = false;
+  private readonly handBackAfterNotice = effect(() => {
+    if (this.state.resumeCard() !== null) {
+      this.noticeWasUp = true;
+      return;
+    }
+    if (!this.noticeWasUp) return;
+    this.noticeWasUp = false;
+    queueMicrotask(() => {
+      const active = document.activeElement;
+      if (active !== null && active !== document.body) return;
+      this.stage()?.nativeElement.focus();
     });
   });
 
@@ -1275,8 +1310,7 @@ export class FocusPage implements OnDestroy, OnInit {
   }
 
   ngOnInit(): void {
-    // The sheet's check has to run on a resize too: the room under the step changes without the sheet
-    // moving, and the tutor panel already listens for the same reason.
+    // Recheck the notice overlap after a resize; its measured height stays the same, but the stage room changes.
     window.addEventListener('resize', this.onWindowResize);
   }
 
@@ -1286,8 +1320,8 @@ export class FocusPage implements OnDestroy, OnInit {
     this.syncTimer.destroy();
     this.manageStuckFocus.destroy();
     this.restoreGripFocus.destroy();
-    this.uncoverTask.destroy();
     this.watchNoticeSize.destroy();
+    this.handBackAfterNotice.destroy();
     this.noticeObserver?.disconnect();
     window.removeEventListener('resize', this.onWindowResize);
   }

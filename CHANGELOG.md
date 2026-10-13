@@ -64,6 +64,56 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **Every page has the same vertical rhythm now, not just home.** `fl-home` was given a 22px column gap
+  and the other three page elements were left as plain blocks, so the gap `.content` puts between pages
+  stopped at the page boundary and the sections inside them sat flush: measured at 1280, the record
+  screen's five sections began at 126, 178, 265, 351 and 441 with 0px between a section and the next
+  one's title, the dashboard's at 389 and 499 with the first two touching, and the course page's header,
+  course map, concepts and task table at 46, 129, 527 and 1088 with nothing between any of them. They all
+  ask for the same rhythm now. Inside the pages the same treatment: cards carry 18px of padding rather
+  than 16, panels 16/18 rather than 14/16, grid gaps 16px rather than 12, the concept cards and their key
+  points are spaced instead of stacked, the micro-task table's rows are 63px rather than 55, and the
+  event log's rows are 10px apart rather than 7 — where a row's two hairlines sat closer to its text than
+  the rows sat to each other. The record screen's weekly lines also stopped welding their parts together:
+  Angular drops whitespace-only text nodes, so a row of label, value and evidence rendered as
+  "给出的帮助289289 次观察", and the three parts now carry the gap the markup never had.
+- **The import form says what it needs, and no longer ships demonstration text.** The text box arrived
+  holding a paragraph of the demo course, which made the button live before the learner had brought
+  anything — and what that paragraph imported was a second course called "Rotations" that nobody asked
+  for. The box is empty and prompts for the text instead, and the button stays off until the form has all
+  three things it needs, each stated under it in words rather than answered by the main process: a name
+  ("Give the file a name first."), a name the parser can read ("Use a .txt or .md name."), and something
+  to import ("Drop a file, or paste the text first."). The last of the three is also what the paste box is
+  for, and it is not decoration: it is the only way in for material that is not a file — notes copied out
+  of a page, a chat or a PDF viewer — which is what the file chooser was later added on top of, so its
+  label now says so ("Or paste text instead of a file").
+- **The dashboard keeps to the numbers, and the record has a screen of its own.** The plan's rows are
+  all the same height: the estimate is written on each row rather than drawn as a length, which is what
+  made a five-task plan read as a chart and a two-minute task as a hairline — and an even column is what
+  makes a row findable again after a reorder. On the dashboard, re-engagement and progress after an
+  interruption have their own section instead of sharing the session's row, because they answer a
+  different question and are counted from a different set of events. The week's evidence, the
+  intervention and rescue results, the browser bridge's pairing details and the folded event log moved to
+  **More data** (`#/more`), one click from the dashboard — none of them is a number the learner acts on
+  while studying, and the log has to be a screen rather than a dialog because a change offer is confirmed
+  in a modal that the log is read through.
+- **The focus screen's bottom slot is the return card, and nothing else.** It used to be a three-way
+  strip: a resume card, the agent's suggestion with three quick choices, and an expired-timer offer. Two
+  of the three were second copies of controls already on the screen the learner was reading — the three
+  choices are `cannot-start`, `too-big` and `tired`, which are three of the six reasons the step's own
+  Ask-for-help control already offers, and an expired commitment is already answered by the control that
+  turns into "+1 minute" for exactly that phase. Both are still reachable: the agent's card is drawn in
+  the step's control row, where it is one more item of the row rather than a strip over the box, so it
+  cannot cover the buttons it belongs beside; the expired clock keeps its offer on the clock's own
+  control. What is left at the bottom is the one genuinely interruptive case — you have just come back
+  from somewhere else and your place has to be found for you. Answering the card now empties the slot
+  instead of falling through to a second question, and the keyboard is handed to the stage rather than
+  left on the document, which is what the notice's own reclaim can no longer do once it unmounts.
+- **The tutor is asked with three buttons instead of six.** Explain this, Give me a hint and Check my
+  answer: the three moments one step can put a learner in — not understanding it, not being able to
+  start it, and having written something they want judged. The other three modes (`EXAMPLE`, `SOCRATIC`,
+  `SUMMARIZE`) are still in the contract and still reached from where they belong, but a picker that
+  lists everything the contract can express makes the learner read a menu before they can ask anything.
 - **The folded sidebar hands its column back on the focus screen, symmetrically.** With the sidebar away,
   the focus workspace used to keep the open sidebar's whole column — `padding-left: 256px`, the 232px track
   plus the base padding — so that the hover-peeked panel could only ever slide over an empty gutter, and the
@@ -188,10 +238,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   same reach, plus rotation), and the pages publish on every change. Also in this release: the sync
   script itself was broken (`#271`) and the three ADRs already linked from the sidebar were never
   published; both are fixed and the wiki now carries all ten pages.
+- **The focus screen's header had two rules under it.** The header row ends in a 1px border and the
+  progress strip began with a 1px border of its own, with the stage's 30px of padding between them: two
+  parallel lines with an empty band in the middle, measured as borders at y=97 and y=128 — the stray
+  rule the learner sees as a line that means nothing. The strip keeps its padding and loses the rule, so
+  the header's own underline is the only line there.
+- **The import refuses a name it cannot read, in words, instead of reporting the channel.** A file
+  dropped on the home page's zone — or a name typed beside pasted text — whose extension the parser
+  does not know (`.rst`, `.pdf`, or none at all) used to travel to the main process and come back as
+  `Error invoking remote method 'focusloop:material:import': MaterialParseError: Cannot determine a
+supported format for outline.rst.`: a channel name, an error class, and nothing a learner can act
+  on. The renderer now applies the parser's own rule where the mistake is. A dropped or chosen file is
+  refused on the zone beside the other three refusals ("That file is not a .txt or .md file."), before
+  it is read at all, and the Import button stays off under the field with "Use a .txt or .md name."
+  while the name is unreadable — the same treatment an empty name has had since the channel error for
+  that one was removed. The hint beside the field also stopped over-promising: it said "The course
+  takes this name." while a Markdown document with its own `# heading` has always been titled after
+  the heading, so a file named `sweep-notes.md` containing `# Sweep notes` was never going to be
+  "sweep notes". The chooser's own filter now lists what the parser reads (`.txt`, `.text`, `.md`,
+  `.markdown`, `.mdx`) rather than a shorter list the app would then argue with, and the whole page —
+  the current-session card, course cards, the getting-started block and all four refusals — is pinned
+  by the new `apps/desktop-e2e/tests/home.spec.ts`.
 - **The notice no longer lands on the step's own controls, and the focus screen has one scroller.** With a
   notice up, the frame around it was sized by `height: calc(100dvh - 48px)` while the column it stood in
   carried 18px of padding at the top, 96px at the bottom and a 22px gap before it — so the frame was taller
-  than its box, the *page* scrolled as well as the stage, and at 1140x767 the frame sat 15px above the
+  than its box, the _page_ scrolled as well as the stage, and at 1140x767 the frame sat 15px above the
   window's top edge with the notice stopping 62px short of the bottom. Worse, the row the learner was about
   to press ended up behind the notice's edge: measured with a decision notice up at 1140x767, the step's
   controls were 48px under the notice's top edge — and the test that exists to catch exactly that was
