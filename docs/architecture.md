@@ -161,7 +161,7 @@ stateDiagram-v2
   INITIATION_FRICTION --> FOCUSED: TASK_STARTED
   FOCUSED --> CONFUSED: HELP_REQUESTED / 2× QUIZ_INCORRECT
   FOCUSED --> OVERLOADED: 3× HELP_REQUESTED in the window
-  FOCUSED --> DISTRACTED: TAB_LEFT / IDLE_STARTED
+  FOCUSED --> DISTRACTED: TAB_LEFT
   DISTRACTED --> FOCUSED: TAB_RETURNED within threshold
   DISTRACTED --> INTERRUPTED: threshold exceeded
   CONFUSED --> FOCUSED: QUIZ_CORRECT
@@ -174,6 +174,10 @@ stateDiagram-v2
 
 Properties that the tests hold us to:
 
+- **Quiet is not away.** `IDLE_STARTED` / `IDLE_ENDED` are recorded as observations but change no state;
+  only `TAB_LEFT`, an observed departure, moves the learner to `DISTRACTED`, and only an observed
+  departure escalates to `INTERRUPTED`. Reading a paper produces no input, and a state machine that read
+  silence as absence filed the learner as gone two minutes into their best work.
 - **Pure.** `reduceState(previous, event, config)` never mutates, never reads the clock, never does
   IO. The event carries its own timestamp.
 - **Deterministic.** The same inputs always produce the same state.

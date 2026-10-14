@@ -149,6 +149,15 @@ const NOTICE_GAP = 16;
                 [style.width.%]="current.progress.completionRatio * 100"
               ></span>
             </span>
+            <!--
+              Two clocks on one screen, and they are not supposed to agree: the bar is how many tasks
+              are done, the ring is the time this step was given. A learner who watched the ring hit
+              zero while the bar stayed put read it as a broken progress bar, so the page says which
+              is which rather than forcing the numbers together.
+            -->
+            <p class="muted small focus-progress-strip__hint" data-testid="progress-hint">
+              {{ t('focus.progress.hint') }}
+            </p>
           </div>
 
           @if (phase() === 'ready') {

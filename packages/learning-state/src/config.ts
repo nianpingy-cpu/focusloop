@@ -3,9 +3,14 @@
  * Everything here is configuration, never a diagnosis.
  */
 export interface StateEngineConfig {
-  /** Away-from-task duration that turns DISTRACTED into INTERRUPTED. */
+  /** Away-from-task duration that turns DISTRACTED into INTERRUPTED — an *observed* departure. */
   readonly tabLeftThresholdMs: number;
-  /** Idle duration that turns DISTRACTED into INTERRUPTED. */
+  /**
+   * Quiet duration after which the shell may remind the learner — how long "no input" runs before the
+   * app says something. It does **not** drive a state transition: quiet is not away, or reading a paper
+   * would file the learner as gone two minutes in. Only `tabLeftThresholdMs`, an observed departure,
+   * escalates.
+   */
   readonly idleThresholdMs: number;
   /**
    * How long an unobserved stretch — after the last event of a still-open session — may be credited to

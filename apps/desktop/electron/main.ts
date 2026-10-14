@@ -89,9 +89,9 @@ async function bootstrap(): Promise<void> {
 
   const ticker = setInterval(() => {
     /*
-     * Sampled before the tick, and that order is the point: an idle report dispatched here sets
-     * `idleSince`, and the tick immediately after is what escalates it against the domain's own
-     * threshold. Sampling afterwards would delay the learner's interruption by one whole interval.
+     * Sampled before the tick so the observation is recorded before anything reasons about it. The
+     * order is no longer load-bearing for an interruption — an idle report is not one — but a tick
+     * that mentions a quiet stretch should find it already in the log.
      */
     sensor.sample();
     broadcastTick(service, router);

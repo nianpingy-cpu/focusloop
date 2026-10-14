@@ -162,11 +162,10 @@ export function startDistractionSensor(
       /*
        * Dated when the silence began, not when it was noticed.
        *
-       * `idleThresholdMs` is defined as the idle duration that turns `DISTRACTED` into
-       * `INTERRUPTED`, and the domain escalates by counting from `idleSince`. Reporting the current
-       * time as the start would make the learner wait twice — once for the app to notice, once again
-       * for the rule — so the report carries the moment input actually stopped, which is also simply
-       * when it happened.
+       * The event is an observation, not a departure: quiet no longer turns `DISTRACTED` into
+       * `INTERRUPTED`, so nothing the state machine does depends on this timestamp. It is still the
+       * moment the quiet actually began rather than the moment the sensor noticed, because an agent
+       * reading the log should be told when the learner went quiet, not when a timer happened to fire.
        */
       const startedAtMs = Date.parse(options.now()) - idleMs;
       idleReported = true;

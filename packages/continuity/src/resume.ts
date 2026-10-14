@@ -85,12 +85,19 @@ function selectResumeInterruption(
   const nowMs = Date.parse(now);
   if (!Number.isFinite(nowMs)) return null;
   const entries = events.map((event, index) => ({ event, index, atMs: Date.parse(event.at) }));
+  /*
+   * Only an observed departure is a resume interruption.
+   *
+   * `IDLE_ENDED` used to be one, and it no longer is: going quiet is not leaving, so a learner who read
+   * a paper without touching the keyboard should not be told they were away. The idle events stay in the
+   * log as observations; they are not what the card measures a gap from.
+   */
   const completed = entries
     .filter(
       ({ event, atMs }) =>
         Number.isFinite(atMs) &&
         atMs <= nowMs &&
-        (event.type === 'TAB_RETURNED' || event.type === 'IDLE_ENDED') &&
+        event.type === 'TAB_RETURNED' &&
         Number.isFinite(interruptionDuration(event)) &&
         interruptionDuration(event) >= 0,
     )
@@ -98,10 +105,7 @@ function selectResumeInterruption(
     .at(-1);
   const started = entries
     .filter(
-      ({ event, atMs }) =>
-        Number.isFinite(atMs) &&
-        atMs <= nowMs &&
-        (event.type === 'TAB_LEFT' || event.type === 'IDLE_STARTED'),
+      ({ event, atMs }) => Number.isFinite(atMs) && atMs <= nowMs && event.type === 'TAB_LEFT',
     )
     .sort((a, b) => a.atMs - b.atMs || a.index - b.index)
     .at(-1);
@@ -122,9 +126,7 @@ export function deriveResumeGapMs(events: readonly LearningEvent[], now: string)
 }
 
 function interruptionDuration(event: LearningEvent): number {
-  if (event.type === 'TAB_RETURNED') return event.payload.awayMs;
-  if (event.type === 'IDLE_ENDED') return event.payload.idleMs;
-  return Number.NaN;
+  return event.type === 'TAB_RETURNED' ? event.payload.awayMs : Number.NaN;
 }
 
 /**

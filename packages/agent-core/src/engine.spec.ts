@@ -1303,6 +1303,13 @@ describe('FocusLoopEngine', () => {
 
     it('ends a session and freezes its duration', () => {
       const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      // A task, so the minute is study time rather than a session sitting in `READY`.
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
       ctx.clock.advance(60_000);
       const ended = ctx.engine.endSession({ sessionId: session.id, reason: 'user' });
       expect(ended.endedAt).toBeDefined();
@@ -1319,7 +1326,14 @@ describe('FocusLoopEngine', () => {
      */
     it('reports the time studied, not the two weeks the session was left open for', () => {
       const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
-      // The longest silence the app stands behind on its own, with no report to bound it.
+      // Work has to be under way for there to be study time to measure.
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+      // The longest unobserved study tail the app stands behind on its own.
       ctx.clock.advance(120_000);
       const studied = ctx.engine.getSessionProgress(session.id)?.elapsedMs;
       expect(studied).toBe(120_000);

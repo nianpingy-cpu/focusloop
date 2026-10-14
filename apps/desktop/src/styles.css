@@ -2870,6 +2870,23 @@ code {
   transition: width 240ms ease;
 }
 
+/* One line under the meter, spanning it, saying the bar and the clock measure different things. */
+.focus-progress-strip__hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/*
+ * The notice's row is the tightest the stage ever gets, and the step's own title has to keep the room
+ * there (`focus-notice.spec.ts` measures it at 800x700). The hint is the newest and least load-bearing
+ * line on the screen, so it is the one that yields.
+ */
+.focus-workspace:has(.focus-notice) .focus-progress-strip__hint {
+  display: none;
+}
+
 .focus-plan {
   align-self: center;
   width: min(100%, 860px);

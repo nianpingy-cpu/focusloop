@@ -73,6 +73,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
+- **The dashboard measures study time, not open time.** The hero, the state donut, the daily activity and
+  the course bars all add up study states now (`FOCUSED`, `RESUMING`, `CONFUSED`, `OVERLOADED`) and leave
+  away, interrupted and ready time out entirely — those answer "how long was the app open", not "how long
+  did I work", and adding them back is what made a night away read as a day of study. The labels say
+  "Study time" rather than "Recorded time" so the number cannot be mistaken for wall-clock.
+- **The focus screen says why its two clocks differ.** The progress bar counts finished tasks and the
+  timer ring counts down the step's planned time, so a learner can watch the ring reach zero while the bar
+  is barely moved. One muted line under the bar says which is which, instead of forcing the two numbers
+  into a relationship they do not have.
 - **The focus screen's accent is the app's blue, not a warm orange.** The running clock, the progress
   bar, the "current micro task" eyebrow, the kind chip, the answer label and the Complete task button all
   took `--warn`, which made the one screen the learner spends the most time on the only surface that was
@@ -259,6 +268,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- **Quiet is not away.** `IDLE_STARTED` used to move the learner to `DISTRACTED` after two minutes without
+  input, which is right for a screen that expects a mouse and wrong for this one: reading a paper, a long
+  PDF or handwritten notes produces no input at all, so a learner working hard was filed as gone and their
+  study clock stopped. The idle events are still recorded — an agent reading the session should know they
+  went quiet — but they change no learning state, and only an observed departure (the window losing focus)
+  now escalates to `INTERRUPTED`. The resume card follows: it is built from a real departure, not from a
+  quiet stretch, so a reader is not told they were away.
+- **A focus commitment survives a reload or restart.** The three-minute commitment lived only in memory, so
+  a learner who reloaded at 2:50 was handed a fresh three minutes, and closing the app lost it entirely.
+  The service stores it under the renderer's own key and restores it against the session and task it was
+  started for; the stored value carries the absolute end time, so a restore recomputes what is left from
+  the clock rather than trusting a remainder that stopped moving, and a timer that ran out while the app
+  was closed comes back expired rather than reset.
 - **Study time no longer depends on how often the app wrote an event.** The insights timeline capped
   every stretch at the idle threshold, so the same ten minutes of reading counted as ten with an event
   every two minutes and as two with only a start and an end, and a witnessed absence was credited in full

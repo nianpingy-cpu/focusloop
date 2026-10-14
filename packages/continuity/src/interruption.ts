@@ -6,7 +6,7 @@ export interface InterruptionThresholds {
   readonly idleThresholdMs?: number;
 }
 
-export type InterruptionKind = 'tab-left' | 'idle' | 'none';
+export type InterruptionKind = 'tab-left' | 'none';
 
 export interface InterruptionStatus {
   readonly interrupted: boolean;
@@ -38,7 +38,8 @@ export function detectInterruption(
 
   return {
     interrupted: true,
-    kind: transition.eventType === 'TAB_LEFT' ? 'tab-left' : 'idle',
+    // Only an observed departure escalates now; the state engine emits no idle transition.
+    kind: 'tab-left',
     elapsedMs: interruptionElapsedMs(engineState, now),
     reason: transition.reason,
   };

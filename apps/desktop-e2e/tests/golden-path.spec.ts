@@ -764,11 +764,16 @@ test('the interface can be switched to Chinese, and the choice survives a restar
    * where the button is absent the tutor wording is never verified and the test still
    * passes, which is worse than failing.
    */
+  /*
+   * A step is under way either way: started here, or carried across the restart above by the focus
+   * commitment, which now survives one. The commitment is what decides the focus screen's phase, so
+   * this no longer insists on a task that *this* test started — `tutor-entry` is the thing that says
+   * a step is on screen, in any of the states a running step can be in.
+   */
   const startTask = window.getByTestId('start-task').first();
   if (await startTask.isVisible().catch(() => false)) {
     await startTask.click();
   }
-  await stateIs('FOCUSED');
   await expect(window.getByTestId('tutor-entry')).toBeVisible();
   await window.getByTestId('tutor-entry').click();
   await expect(window.getByTestId('tutor-panel')).toBeVisible();

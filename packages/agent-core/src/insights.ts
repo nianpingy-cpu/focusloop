@@ -175,8 +175,10 @@ export function buildStateTimeline(
 /**
  * How long one session was studied, by the only rule the app can stand behind.
  *
- * The sum of `buildStateTimeline`'s credited segments, which is the same number the dashboard's
- * "recorded time" is built from — so a session's own figure and the range figure cannot disagree.
+ * The sum of the timeline's **study-state** stretches, which is the same number the dashboard's total is
+ * built from — so a session's own figure and the range figure cannot disagree. Away, interrupted and
+ * ready stretches are in the timeline but not in this sum: they are not study, and adding them back is
+ * what made a night away read as a day of work.
  *
  * This exists because the session's elapsed time was the window's wall clock (`startedAt` → `now`),
  * and a session is not ended by closing the app. Left open overnight, and again over a weekend, the
@@ -192,7 +194,8 @@ export function recordedSessionMs(
   config: Partial<StateEngineConfig> = {},
 ): number {
   return buildStateTimeline(source.session, source.events, now, config).reduce(
-    (total, segment) => total + (segment.toMs - segment.fromMs),
+    (total, segment) =>
+      total + (STUDY_STATES.has(segment.state) ? segment.toMs - segment.fromMs : 0),
     0,
   );
 }
@@ -342,6 +345,13 @@ export function buildInsightsSummary(input: BuildInsightsInput): InsightsSummary
       new Date(Math.max(overlapTo, sessionStartMs)).toISOString(),
       input.config,
     )) {
+      /*
+       * Study time, not recorded time. Away, interrupted and ready time are bounded in the timeline so
+       * they cannot dominate it, but they are still not study, and a dashboard that adds them answers
+       * "how long was the app open" rather than "how long did I work". A departure is counted by the
+       * interruption counter instead, and it does not enter `totalMs`, the donut or the course bars.
+       */
+      if (!STUDY_STATES.has(segment.state)) continue;
       const fromMs = Math.max(segment.fromMs, window.fromMs, sessionStartMs);
       const toMs = Math.min(segment.toMs, window.toMs, now, sessionEndMs);
       if (toMs <= fromMs) continue;

@@ -255,6 +255,7 @@ export function reduceState(
       if (awayMs >= config.tabLeftThresholdMs) {
         return apply('INTERRUPTED', `away for ${awayMs}ms`, {
           awaySince: null,
+          idleSince: null,
           awaitingResume: true,
         });
       }
@@ -265,21 +266,21 @@ export function reduceState(
       });
     }
 
+    /*
+     * Quiet is not away.
+     *
+     * `IDLE_STARTED` used to move the learner to `DISTRACTED`, which is right for a screen that
+     * expects a mouse and wrong for this one: reading a paper, a long PDF or handwritten notes
+     * produces no input at all, so a learner working hard was filed as gone two minutes in and their
+     * study time stopped. The event is still recorded — it is an observation, and an agent reading the
+     * session should know they went quiet — but it changes nothing about the learning state. Only a
+     * real departure (`TAB_LEFT`, the window losing focus) moves them away.
+     */
     case 'IDLE_STARTED':
-      return apply('DISTRACTED', 'idle started', { idleSince: at });
+      return stay({ idleSince: at });
 
-    case 'IDLE_ENDED': {
-      const idleMs = event.payload.idleMs;
-      if (idleMs >= config.idleThresholdMs) {
-        return apply('INTERRUPTED', `idle for ${idleMs}ms`, {
-          idleSince: null,
-          awaySince: null,
-          awaitingResume: true,
-        });
-      }
-      const restored: LearningState = previous.currentTaskId !== null ? 'FOCUSED' : 'READY';
-      return apply(restored, 'idle ended within threshold', { idleSince: null });
-    }
+    case 'IDLE_ENDED':
+      return stay({ idleSince: null });
 
     case 'RESUME_REQUESTED':
       return apply('RESUMING', 'resume accepted', { awaitingResume: false });
@@ -359,21 +360,20 @@ export function evaluateTimeBasedState(
   const nowMs = Date.parse(now);
 
   const awaySinceMs = previous.awaySince === null ? null : Date.parse(previous.awaySince);
-  const idleSinceMs = previous.idleSince === null ? null : Date.parse(previous.idleSince);
 
   const awayElapsed =
     awaySinceMs !== null && Number.isFinite(awaySinceMs) ? nowMs - awaySinceMs : 0;
-  const idleElapsed =
-    idleSinceMs !== null && Number.isFinite(idleSinceMs) ? nowMs - idleSinceMs : 0;
 
-  const toInterrupted =
-    awayElapsed >= config.tabLeftThresholdMs || idleElapsed >= config.idleThresholdMs;
-
-  if (toInterrupted && previous.state !== 'INTERRUPTED' && previous.state !== 'RESUMING') {
-    const reason =
-      awayElapsed >= config.tabLeftThresholdMs
-        ? `away for ${awayElapsed}ms`
-        : `idle for ${idleElapsed}ms`;
+  /*
+   * Only an observed departure escalates. `idleSince` is deliberately not read here: a learner who has
+   * not touched the keyboard is not necessarily gone, and the state machine must not decide they are.
+   * The idle reminder is a separate signal the shell may act on; it is not a countdown to `INTERRUPTED`.
+   */
+  if (
+    awayElapsed >= config.tabLeftThresholdMs &&
+    previous.state !== 'INTERRUPTED' &&
+    previous.state !== 'RESUMING'
+  ) {
     return {
       state: {
         ...previous,
@@ -388,8 +388,8 @@ export function evaluateTimeBasedState(
         to: 'INTERRUPTED',
         at: now,
         eventId: `time-eval:${now}`,
-        eventType: awayElapsed >= config.tabLeftThresholdMs ? 'TAB_LEFT' : 'IDLE_STARTED',
-        reason,
+        eventType: 'TAB_LEFT',
+        reason: `away for ${awayElapsed}ms`,
       },
       duplicate: false,
     };

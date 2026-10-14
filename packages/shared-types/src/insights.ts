@@ -57,9 +57,10 @@ export interface InsightsSummary {
   /** End of the window, inclusive — "now" is part of the window it closes. */
   readonly to: string;
   /**
-   * Time inside the window the app can stand behind: what its events witnessed, across every session in
-   * the window. Deliberately not the wall-clock those sessions spanned — silence is not evidence, and
-   * counting it produced a dashboard that called a quiet hour of reading "away".
+   * Study time inside the window: the measured stretches where the learner was on task, across every
+   * session in the window. Deliberately not the wall-clock those sessions spanned, and deliberately not
+   * away time either — an absence, however well observed, is not work, and adding it back is what made a
+   * night away read as a day of study.
    */
   readonly totalMs: number;
   readonly sessionCount: number;

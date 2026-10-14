@@ -347,7 +347,8 @@ describe('buildInsightsSummary', () => {
      * 10:00 → 11:00 with events at 10:00 and 10:30. The half hour between them is study time and is
      * credited whole now — the old rule charged each stretch the idle threshold and returned 4 minutes
      * for a session in which the learner had worked for half an hour. The half hour after the completion
-     * is `READY` (no task running), which is not study time and is bounded.
+     * is still `FOCUSED` (finishing a task does not leave the session) and is the unobserved tail, so it
+     * is bounded at `presenceTimeoutMs`: 30 minutes observed + 2 minutes of tail.
      */
     expect(summary.totalMs).toBe(32 * 60_000);
     const shares = summary.stateShares.reduce((sum, s) => sum + s.share, 0);
@@ -489,6 +490,12 @@ describe('buildInsightsSummary', () => {
   it('groups time by course and resolves the title', () => {
     const second = source({
       session: { ...session(at(15, 11), at(15, 11, 30)), id: 'session-2', courseId: 'course-2' },
+      // Its own events: the default `source()` events are dated to the first session and would be
+      // ignored as out of order, leaving this course with no study time to group.
+      events: [
+        event('s2-e1', 'TASK_STARTED', at(15, 11), { taskId: 't1' }),
+        event('s2-e2', 'TASK_COMPLETED', at(15, 11, 30), { taskId: 't1' }),
+      ],
     });
     const courses: Course[] = [
       ...COURSES,

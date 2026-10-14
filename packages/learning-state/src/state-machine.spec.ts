@@ -118,15 +118,32 @@ describe('state engine — interruption detection', () => {
     expect(state.awaitingResume).toBe(false);
   });
 
-  it('moves to INTERRUPTED after a long idle period ends', () => {
+  it('does not treat quiet as away — reading with no input stays on task', () => {
+    /*
+     * The rule the product turns on: `IDLE_STARTED` is an observation, not a departure. A learner
+     * reading a paper produces no input for ten minutes, and the old transition filed them as
+     * `DISTRACTED` two minutes in and stopped their study clock. The event is still recorded, so
+     * `idleSince` moves for the agent signal, but the state does not.
+     */
     const idleMs = DEFAULT_STATE_ENGINE_CONFIG.idleThresholdMs + 1;
     const state = run(createInitialState(T0), [
       event('TASK_STARTED', { taskId: 't1' }, 1_000),
       event('IDLE_STARTED', {}, 2_000, 'extension'),
       event('IDLE_ENDED', { idleMs }, 2_000 + idleMs, 'extension'),
     ]);
-    expect(state.state).toBe('INTERRUPTED');
-    expect(state.awaitingResume).toBe(true);
+    expect(state.state).toBe('FOCUSED');
+    expect(state.awaitingResume).toBe(false);
+    expect(state.idleSince).toBeNull();
+  });
+
+  it('does not escalate a long quiet stretch on a tick', () => {
+    const started = run(createInitialState(T0), [
+      event('TASK_STARTED', { taskId: 't1' }, 1_000),
+      event('IDLE_STARTED', {}, 2_000, 'extension'),
+    ]);
+    const result = evaluateTimeBasedState(started, at(2_000 + 10 * 60_000));
+    expect(result.state.state).toBe('FOCUSED');
+    expect(result.transition).toBeNull();
   });
 
   it('promotes DISTRACTED to INTERRUPTED on a time tick past the threshold', () => {

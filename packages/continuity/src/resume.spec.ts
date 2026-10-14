@@ -250,7 +250,7 @@ describe('buildResumeCard', () => {
     ).toThrow(RangeError);
   });
 
-  it('reports idle-based interruptions too', () => {
+  it('does not measure a gap from an idle event — the card is about a real departure', () => {
     const engineState: StateEngineState = {
       ...createInitialState(T0),
       state: 'INTERRUPTED',
@@ -273,7 +273,9 @@ describe('buildResumeCard', () => {
       ],
       now: T1,
     });
-    expect(card.lastContext.params['duration']).toBe('3 min');
+    // Nothing observed the departure, so the card falls back to its context sentence rather than
+    // claiming a three-minute absence from a quiet stretch.
+    expect(card.lastContext.key).toBe('resume.context.plain');
   });
 
   it('works when no interruption event is present', () => {
@@ -368,14 +370,15 @@ describe('interruption detection', () => {
     expect(status.elapsedMs).toBe(300_000);
   });
 
-  it('flags an idle interruption past the threshold', () => {
+  it('does not flag quiet as an interruption, however long it lasts', () => {
+    // Reading produces no input; the idle marker is not a departure and must not become one.
     const state: StateEngineState = {
       ...createInitialState(T0),
       idleSince: T0,
-      state: 'DISTRACTED',
+      state: 'FOCUSED',
     };
     const status = detectInterruption(state, T1, { idleThresholdMs: 60_000 });
-    expect(status).toMatchObject({ interrupted: true, kind: 'idle' });
+    expect(status).toMatchObject({ interrupted: false, kind: 'none' });
   });
 
   it('does not flag anything below the threshold', () => {
