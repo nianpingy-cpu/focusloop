@@ -14,6 +14,9 @@ import type {
   ResumeDecisionRequest,
   ResolveInterventionRequest,
   SetAmbientSoundRequest,
+  SetOnboardedRequest,
+  SetReminderEnabledRequest,
+  SetReminderTimeRequest,
   SetLocaleRequest,
   SetThemeRequest,
   SetShowMaterialTextRequest,
@@ -87,6 +90,11 @@ export const payload = {
     showMaterialText,
   }),
   setAmbientSound: (ambientSound: boolean): SetAmbientSoundRequest => ({ ambientSound }),
+  setReminderEnabled: (reminderEnabled: boolean): SetReminderEnabledRequest => ({
+    reminderEnabled,
+  }),
+  setReminderTime: (reminderTime: string): SetReminderTimeRequest => ({ reminderTime }),
+  setOnboarded: (onboarded: boolean): SetOnboardedRequest => ({ onboarded }),
   saveLlmProvider: (request: SaveProviderRequest): SaveProviderRequest => ({
     provider: request.provider,
     ...(request.apiKey === undefined ? {} : { apiKey: request.apiKey }),

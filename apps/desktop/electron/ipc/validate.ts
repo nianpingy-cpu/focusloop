@@ -2,6 +2,7 @@ import {
   isAgentProposalKind,
   isInsightRange,
   isLocale,
+  isReminderTime,
   isStuckReason,
   isThemePreference,
   isTutorMode,
@@ -26,6 +27,9 @@ import {
   type ResolveRescueRequest,
   type SessionEndReason,
   type SetAmbientSoundRequest,
+  type SetOnboardedRequest,
+  type SetReminderEnabledRequest,
+  type SetReminderTimeRequest,
   type SetLocaleRequest,
   parseProviderConfig,
   parseProviderConnection,
@@ -324,6 +328,37 @@ export function parseSetAmbientSound(channel: string, value: unknown): SetAmbien
     fail(channel, `ambientSound must be a boolean, received ${typeof ambientSound}`);
   }
   return { ambientSound };
+}
+
+export function parseSetReminderEnabled(
+  channel: string,
+  value: unknown,
+): SetReminderEnabledRequest {
+  const record = asRecord(channel, value);
+  const reminderEnabled = record['reminderEnabled'];
+  if (typeof reminderEnabled !== 'boolean') {
+    fail(channel, `reminderEnabled must be a boolean, received ${typeof reminderEnabled}`);
+  }
+  return { reminderEnabled };
+}
+
+/** The time is checked against `HH:MM`, not coerced: a bad time is a caller bug, not a preference. */
+export function parseSetReminderTime(channel: string, value: unknown): SetReminderTimeRequest {
+  const record = asRecord(channel, value);
+  const reminderTime = asString(channel, record, 'reminderTime');
+  if (!isReminderTime(reminderTime)) {
+    fail(channel, `reminderTime must be HH:MM in 24-hour form, received "${reminderTime}"`);
+  }
+  return { reminderTime };
+}
+
+export function parseSetOnboarded(channel: string, value: unknown): SetOnboardedRequest {
+  const record = asRecord(channel, value);
+  const onboarded = record['onboarded'];
+  if (typeof onboarded !== 'boolean') {
+    fail(channel, `onboarded must be a boolean, received ${typeof onboarded}`);
+  }
+  return { onboarded };
 }
 
 export function parseSaveProvider(channel: string, value: unknown): SaveProviderRequest {

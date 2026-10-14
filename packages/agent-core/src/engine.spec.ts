@@ -49,6 +49,9 @@ describe('FocusLoopEngine', () => {
         theme: 'system',
         showMaterialText: true,
         ambientSound: false,
+        reminderEnabled: false,
+        reminderTime: '09:00',
+        onboarded: false,
       });
     });
 
@@ -58,6 +61,9 @@ describe('FocusLoopEngine', () => {
         theme: 'system',
         showMaterialText: true,
         ambientSound: false,
+        reminderEnabled: false,
+        reminderTime: '09:00',
+        onboarded: false,
       });
       expect(ctx.engine.getSettings().locale).toBe('zh');
     });
@@ -69,12 +75,18 @@ describe('FocusLoopEngine', () => {
         theme: 'light',
         showMaterialText: true,
         ambientSound: false,
+        reminderEnabled: false,
+        reminderTime: '09:00',
+        onboarded: false,
       });
       expect(ctx.engine.getSettings()).toEqual({
         locale: 'zh',
         theme: 'light',
         showMaterialText: true,
         ambientSound: false,
+        reminderEnabled: false,
+        reminderTime: '09:00',
+        onboarded: false,
       });
     });
 
@@ -84,6 +96,9 @@ describe('FocusLoopEngine', () => {
         theme: 'system',
         showMaterialText: false,
         ambientSound: false,
+        reminderEnabled: false,
+        reminderTime: '09:00',
+        onboarded: false,
       });
       // `app_meta` stores strings, so the value comes back as the word rather than the primitive.
       // A guard that only accepted a real boolean would silently fall back to the default, and the
@@ -98,6 +113,9 @@ describe('FocusLoopEngine', () => {
         theme: 'system',
         showMaterialText: true,
         ambientSound: true,
+        reminderEnabled: false,
+        reminderTime: '09:00',
+        onboarded: false,
       });
       // Stored as a word like the preference above, so it has to come back as one.
       expect(ctx.engine.getSettings().ambientSound).toBe(true);
@@ -111,6 +129,26 @@ describe('FocusLoopEngine', () => {
     it('ignores a theme nobody implemented', () => {
       ctx.engine.setTheme('sepia' as never);
       expect(ctx.engine.getSettings().theme).toBe('system');
+    });
+
+    it('remembers the daily reminder, off by default, and refuses an unreadable time', () => {
+      expect(ctx.engine.getSettings().reminderEnabled).toBe(false);
+      expect(ctx.engine.getSettings().reminderTime).toBe('09:00');
+
+      ctx.engine.setReminderEnabled(true);
+      ctx.engine.setReminderTime('18:30');
+      expect(ctx.engine.getSettings().reminderEnabled).toBe(true);
+      expect(ctx.engine.getSettings().reminderTime).toBe('18:30');
+
+      // `HH:MM` or the default: the stored time is the one the shell can fire on.
+      ctx.engine.setReminderTime('25:00');
+      expect(ctx.engine.getSettings().reminderTime).toBe('09:00');
+    });
+
+    it('remembers that the first-run questionnaire has been answered', () => {
+      expect(ctx.engine.getSettings().onboarded).toBe(false);
+      expect(ctx.engine.setOnboarded(true).onboarded).toBe(true);
+      expect(ctx.engine.getSettings().onboarded).toBe(true);
     });
   });
 

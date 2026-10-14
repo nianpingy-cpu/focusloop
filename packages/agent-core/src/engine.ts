@@ -98,6 +98,9 @@ import {
   DEFAULT_INSIGHT_RANGE,
   coerceLocale,
   coerceAmbientSound,
+  coerceOnboarded,
+  coerceReminderEnabled,
+  coerceReminderTime,
   coerceShowMaterialText,
   coerceTheme,
 } from '@focusloop/shared-types';
@@ -173,6 +176,14 @@ export const SHOW_MATERIAL_TEXT_KEY = 'show-material-text';
 
 /** The `app_meta` key the ambient-layer preference is stored under (#57). */
 export const AMBIENT_SOUND_KEY = 'ambient-sound';
+
+/** The `app_meta` keys the daily reminder is stored under. */
+export const REMINDER_ENABLED_KEY = 'reminder-enabled';
+export const REMINDER_TIME_KEY = 'reminder-time';
+/** The local date the reminder last fired, so a restart does not fire it again the same day. */
+export const REMINDER_LAST_FIRED_KEY = 'reminder-last-fired';
+/** Whether the first-run questionnaire has been answered. */
+export const ONBOARDED_KEY = 'onboarded';
 
 /**
  * A request the engine refuses, carrying the code the caller branches on — so a rejection is a value
@@ -2267,6 +2278,9 @@ export class FocusLoopEngine {
       theme: coerceTheme(this.store.getMeta(THEME_KEY)),
       showMaterialText: coerceShowMaterialText(this.store.getMeta(SHOW_MATERIAL_TEXT_KEY)),
       ambientSound: coerceAmbientSound(this.store.getMeta(AMBIENT_SOUND_KEY)),
+      reminderEnabled: coerceReminderEnabled(this.store.getMeta(REMINDER_ENABLED_KEY)),
+      reminderTime: coerceReminderTime(this.store.getMeta(REMINDER_TIME_KEY)),
+      onboarded: coerceOnboarded(this.store.getMeta(ONBOARDED_KEY)),
     };
   }
 
@@ -2288,6 +2302,30 @@ export class FocusLoopEngine {
   setAmbientSound(ambientSound: boolean): AppSettings {
     this.store.setMeta(AMBIENT_SOUND_KEY, ambientSound ? 'true' : 'false');
     return this.getSettings();
+  }
+
+  setReminderEnabled(reminderEnabled: boolean): AppSettings {
+    this.store.setMeta(REMINDER_ENABLED_KEY, reminderEnabled ? 'true' : 'false');
+    return this.getSettings();
+  }
+
+  setReminderTime(reminderTime: string): AppSettings {
+    this.store.setMeta(REMINDER_TIME_KEY, coerceReminderTime(reminderTime));
+    return this.getSettings();
+  }
+
+  setOnboarded(onboarded: boolean): AppSettings {
+    this.store.setMeta(ONBOARDED_KEY, onboarded ? 'true' : 'false');
+    return this.getSettings();
+  }
+
+  /** The local date the daily reminder last fired, or `null` when it never has. */
+  getReminderLastFired(): string | null {
+    return this.store.getMeta(REMINDER_LAST_FIRED_KEY);
+  }
+
+  markReminderFired(date: string): void {
+    this.store.setMeta(REMINDER_LAST_FIRED_KEY, date);
   }
 
   // --------------------------------------------------- structural proposals

@@ -26,6 +26,9 @@ import {
   parseSessionId,
   parseSetLocale,
   parseSetAmbientSound,
+  parseSetOnboarded,
+  parseSetReminderEnabled,
+  parseSetReminderTime,
   parseSetTheme,
   parseSimulatorCommand,
   parseStartSession,
@@ -151,6 +154,21 @@ describe('the preload and the main process agree on every payload', () => {
         parseSetAmbientSound(IPC_CHANNELS.setAmbientSound, payload.setAmbientSound(ambientSound)),
       ).toEqual({ ambientSound });
     }
+  });
+
+  it('the reminder channels accept what the preload sends, and refuse an unreadable time', () => {
+    expect(
+      parseSetReminderEnabled(IPC_CHANNELS.setReminderEnabled, payload.setReminderEnabled(true)),
+    ).toEqual({ reminderEnabled: true });
+    expect(
+      parseSetReminderTime(IPC_CHANNELS.setReminderTime, payload.setReminderTime('18:30')),
+    ).toEqual({ reminderTime: '18:30' });
+    expect(parseSetOnboarded(IPC_CHANNELS.setOnboarded, payload.setOnboarded(true))).toEqual({
+      onboarded: true,
+    });
+    expect(() =>
+      parseSetReminderTime(IPC_CHANNELS.setReminderTime, { reminderTime: '25:00' }),
+    ).toThrowError(/HH:MM/);
   });
 
   it('the insights channel accepts what the preload sends', () => {
