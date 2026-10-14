@@ -39,6 +39,22 @@ describe('the Windows task', () => {
     );
   });
 
+  /*
+   * The parser this has to survive reads a backslash before a quote as an escape for that quote, so a
+   * path that ends in one would swallow the closing quote and merge the arguments after it.
+   */
+  it('doubles a trailing backslash rather than letting it escape the closing quote', () => {
+    expect(windowsTaskCommand('C:\\Program Files\\FocusLoop\\', [], 'en')).toBe(
+      '"C:\\Program Files\\FocusLoop\\\\" "--reminder-fire" "--reminder-locale" "en"',
+    );
+  });
+
+  it('escapes a quote inside an argument', () => {
+    expect(windowsTaskCommand('C:\\a b\\FocusLoop.exe', ['a"b'], 'en')).toBe(
+      '"C:\\a b\\FocusLoop.exe" "a\\"b" "--reminder-fire" "--reminder-locale" "en"',
+    );
+  });
+
   it('is a daily task at the chosen time, replaced if it exists', () => {
     expect(windowsCreateArgs('08:15', 'cmd')).toEqual([
       '/Create',

@@ -42,8 +42,30 @@ export function reminderClock(
   return { hour, minute };
 }
 
+/**
+ * Windows command-line quoting, per the rule `CommandLineToArgvW` itself applies.
+ *
+ * Wrapping in quotes is not enough: a backslash *before* a quote is an escape for that quote, so a path
+ * that ends in one — `C:\Program Files\` — would swallow the closing quote and merge the arguments that
+ * follow. Every run of backslashes is therefore doubled where it precedes a quote, and a quote is escaped
+ * with an odd count, which is the only shape the parser reads back as the original string.
+ */
 function quote(value: string): string {
-  return `"${value.replace(/"/g, '\\"')}"`;
+  let quoted = '"';
+  let backslashes = 0;
+  for (const character of value) {
+    if (character === '\\') {
+      backslashes += 1;
+      continue;
+    }
+    if (character === '"') {
+      quoted += `${'\\'.repeat(backslashes * 2 + 1)}"`;
+    } else {
+      quoted += `${'\\'.repeat(backslashes)}${character}`;
+    }
+    backslashes = 0;
+  }
+  return `${quoted}${'\\'.repeat(backslashes * 2)}"`;
 }
 
 /** The command line Windows Task Scheduler runs, with every part quoted because a path has spaces. */
