@@ -12,7 +12,16 @@
  * is the one place the suite decides what a child process is not allowed to see.
  */
 const PROVIDER_CREDENTIALS = ['FOCUSLOOP_DEEPSEEK_API_KEY', 'FOCUSLOOP_OPENAI_API_KEY'];
-const BLOCKED_ENV_NAMES = new Set(PROVIDER_CREDENTIALS.map((key) => key.toUpperCase()));
+/*
+ * `ELECTRON_RUN_AS_NODE` is what lets the Electron binary stand in for a node runtime that is not
+ * installed, which is how a sandbox with no `node` on PATH starts a script at all. It must not reach
+ * the app: a child that inherits it boots as plain Node, so Playwright's own `--remote-debugging-port`
+ * argument is rejected as a bad option and the launch fails before any app code runs.
+ */
+const BLOCKED_ENV_NAMES = new Set([
+  ...PROVIDER_CREDENTIALS.map((key) => key.toUpperCase()),
+  'ELECTRON_RUN_AS_NODE',
+]);
 
 export function hermeticEnv(sourceEnv = process.env) {
   /*

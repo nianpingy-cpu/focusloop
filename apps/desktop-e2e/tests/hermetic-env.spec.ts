@@ -29,3 +29,16 @@ test('turns the distraction sensor off unless a spec asks for it', () => {
   expect(hermeticEnv({ FOCUSLOOP_DISTRACTION_SENSOR: '1' }).FOCUSLOOP_DISTRACTION_SENSOR).toBe('0');
   expect(hermeticEnv({}).FOCUSLOOP_DISTRACTION_SENSOR).toBe('0');
 });
+
+test('drops the variable that turns Electron into a plain node runtime', () => {
+  /*
+   * Regression: running the suite by pointing `ELECTRON_RUN_AS_NODE` at the Electron binary (the
+   * way a machine without `node` on PATH has to) used to hand that variable to the app, and the
+   * launch died with "bad option: --remote-debugging-port=0" before any app code ran. The rest of
+   * the host environment still has to survive.
+   */
+  const env = hermeticEnv({ ELECTRON_RUN_AS_NODE: '1', PATH: '/usr/bin' });
+
+  expect(Object.keys(env).some((key) => key.toUpperCase() === 'ELECTRON_RUN_AS_NODE')).toBe(false);
+  expect(env.PATH).toBe('/usr/bin');
+});
