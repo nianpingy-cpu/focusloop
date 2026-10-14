@@ -180,8 +180,6 @@ export const AMBIENT_SOUND_KEY = 'ambient-sound';
 /** The `app_meta` keys the daily reminder is stored under. */
 export const REMINDER_ENABLED_KEY = 'reminder-enabled';
 export const REMINDER_TIME_KEY = 'reminder-time';
-/** The local date the reminder last fired, so a restart does not fire it again the same day. */
-export const REMINDER_LAST_FIRED_KEY = 'reminder-last-fired';
 /** Whether the first-run questionnaire has been answered. */
 export const ONBOARDED_KEY = 'onboarded';
 
@@ -2317,15 +2315,6 @@ export class FocusLoopEngine {
   setOnboarded(onboarded: boolean): AppSettings {
     this.store.setMeta(ONBOARDED_KEY, onboarded ? 'true' : 'false');
     return this.getSettings();
-  }
-
-  /** The local date the daily reminder last fired, or `null` when it never has. */
-  getReminderLastFired(): string | null {
-    return this.store.getMeta(REMINDER_LAST_FIRED_KEY);
-  }
-
-  markReminderFired(date: string): void {
-    this.store.setMeta(REMINDER_LAST_FIRED_KEY, date);
   }
 
   // --------------------------------------------------- structural proposals
