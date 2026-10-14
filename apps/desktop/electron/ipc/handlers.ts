@@ -20,6 +20,8 @@ import {
   parseExecuteProposal,
   parseImportMaterial,
   parseInsightsRequest,
+  parseListMoods,
+  parseSaveMood,
   parseNoArgs,
   parseProposeStructuralChange,
   parseTutorAsk,
@@ -29,6 +31,10 @@ import {
   parseSessionId,
   parseSetLocale,
   parseSetAmbientSound,
+  parseSetOnboarded,
+  parseSetReminderEnabled,
+  parseSetReminderTime,
+  parseSetClockFormat,
   parseSaveProvider,
   parseProviderId,
   parseSelectModel,
@@ -301,6 +307,26 @@ export function createHandlers(service: FocusLoopService, router: EventRouter) {
       parse: parseSetAmbientSound,
       handle: (request) => engine.setAmbientSound(request.ambientSound),
     }),
+    defineHandler({
+      channel: IPC_CHANNELS.setReminderEnabled,
+      parse: parseSetReminderEnabled,
+      handle: (request) => engine.setReminderEnabled(request.reminderEnabled),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.setReminderTime,
+      parse: parseSetReminderTime,
+      handle: (request) => engine.setReminderTime(request.reminderTime),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.setOnboarded,
+      parse: parseSetOnboarded,
+      handle: (request) => engine.setOnboarded(request.onboarded),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.setClockFormat,
+      parse: parseSetClockFormat,
+      handle: (request) => engine.setClockFormat(request.clockFormat),
+    }),
     /*
      * The model key (#255), which goes to the service rather than the engine: it is a file the app
      * keeps, and swapping the provider is a wiring concern. The engine is told the *result* through
@@ -365,12 +391,39 @@ export function createHandlers(service: FocusLoopService, router: EventRouter) {
     defineHandler({
       channel: IPC_CHANNELS.deleteAllData,
       parse: parseDeleteAllData,
-      handle: () => service.deleteAllData(),
+      handle: async () => {
+        const outcome = await service.deleteAllData();
+        /*
+         * Deleting everything returns the app to a first-run state, which means the questionnaire would
+         * come back. A launch that asked to skip it (the e2e harness) keeps skipping: the flag belongs to
+         * the launch, not to the data, so it is re-applied after the wipe rather than left to the meta
+         * that was just cleared.
+         */
+        if (outcome.usable && process.env['FOCUSLOOP_ONBOARDING'] === '0') {
+          service.engine.setOnboarded(true);
+        }
+        return outcome;
+      },
     }),
     defineHandler({
       channel: IPC_CHANNELS.getInsights,
       parse: parseInsightsRequest,
       handle: (request) => engine.getInsights(request.range),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.getMood,
+      parse: parseNoArgs,
+      handle: () => engine.getMood(),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.listMoods,
+      parse: parseListMoods,
+      handle: (request) => engine.listMoods(request.limit),
+    }),
+    defineHandler({
+      channel: IPC_CHANNELS.saveMood,
+      parse: parseSaveMood,
+      handle: (request) => engine.saveMood(request),
     }),
     defineHandler({
       channel: IPC_CHANNELS.memorySummary,

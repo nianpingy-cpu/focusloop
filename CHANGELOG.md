@@ -8,6 +8,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **A daily wellbeing check-in, and a streak beside the heatmap.** The home page now asks how the day
+  feels — five faces and an optional sentence, one answer per local day, stored on this machine and
+  editable later. It is a different question from the learning state: the engine can see what the learner
+  is doing, and cannot infer how they are, so it asks. The dashboard gained the other half of that habit —
+  a day streak, counted from the same days the heatmap colours rather than from a seven-day window, which
+  would have capped a three-week streak at seven. Both come from reading Tiimo's public model (see
+  `analysis/tiimo-rea/REPORT.md`), and neither copies it: the check-in is a quiet card, not a modal, and
+  the streak is a label over data the app already had rather than a trophy to collect.
+- **The clock can be 24-hour or 12-hour.** A display preference in Settings, beside the theme, stored by
+  the store like the language. It changes how a time of day is written and nothing else — a duration
+  still reads `3:09` in both, because that is minutes and seconds, not a time of day.
+- **A daily reminder to start, and a first-run questionnaire that asks for it.** The app can now nudge
+  the learner once a day, at a time they choose, when no session is running — a reminder to _start_,
+  never to keep going, because the inside of a session already has the clock and the resume card and a
+  notification there is the interruption this product removes. It is owned by the renderer rather than
+  the main process, so the wording stays with the rest of the interface language. On a first run the app
+  asks two questions whose answers are real settings — whether and when to be nudged, and how it should
+  look — and writes them only if the learner accepts; "Later" changes nothing and still stops it asking
+  again. The e2e harness answers the questionnaire for every launch, as it does the distraction sensor,
+  because every spec is a fresh profile; one spec keeps it to exercise the flow.
 - **An answer can be a file, and the app reads it here.** A step's answer box, and the same box on a
   resume card, now carry an attach button beside the one that asks the tutor. Plain text, Markdown,
   PDF, Word (`.docx`) and photographs of notes are all accepted, and all four readers run inside the
@@ -303,6 +323,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   of a Chinese sentence. It hands over `durationMs` now and the renderer formats it with the same
   `formatSpan` the dashboard uses. The dead `m:ss` / `250 ms` formatters in `agent-core/dashboard.ts` went
   with it — the renderer's `format.ts` was the one actually in use.
+- **An empty provider account is reported as an empty account, not as a malformed reply.** The nightly
+  `llm-live` gate went red the day after its secrets were added and printed one line:
+  `{"provider":"compatible","ok":false,"reason":"bad-response"}` — which reads as a broken adapter, and
+  was in fact the endpoint answering **HTTP 402 Insufficient account balance**. `mapStatusToReason` had no
+  name for it: every status that was not 401/403/429 fell through to `bad-response`, the reason the retry
+  policy classifies as a deterministic contract violation, so a billing problem looked exactly like a
+  malformed body — on the completion path, during model discovery, and in the learner's own Test connection
+  button. `ProviderFailureReason` gains `quota-exceeded`, terminal like `unauthorized` because only a human
+  topping the account up clears it (429's window moves on its own); the completion, streaming and discovery
+  paths share one `mapStatusToReason` so a status cannot mean two things in one workspace; `ProviderError`
+  carries the numeric status it came from; and the smoke script prints it, so the same failure now reads
+  `{"reason":"quota-exceeded","status":402}`. Reproduced against the live endpoint before the change:
+  `/models` answers 200 while every completion answers 402 `insufficient_balance`, and the adapter reports
+  it as `quota-exceeded` carrying the status and no key, body or URL. The interface has a sentence for that
+  reason in both locales, so it sends the reader to the account balance rather than to the model ID.
+- **Three transitive advisories are pinned out of the tree.** Dependabot reports fourteen, and none of
+  them is reachable from the app's own code: `nx` pins `axios` (nine of the fourteen) and `smol-toml`,
+  and `source-map-js` arrives through vitest's coverage instrumentation. Three of the four packages
+  have published fixes inside the major the tree already resolves, so `pnpm-workspace.yaml` overrides
+  them and the lockfile follows — `axios` 1.18.1 → 1.20.0, `smol-toml` 1.6.1 → 1.9.1, `source-map-js`
+  1.2.1 → 1.2.2 — and dropping an entry is one line once its parent moves. The other two are left
+  alone on purpose: `brace-expansion`'s fix is 5.0.12 where the `minimatch` 3 that electron-builder's
+  asar tooling calls expects the 1.x API, and `sprintf-js` has no fix published at all (it is reached
+  through `mammoth`, which the document reader depends on). Forcing either would be a behaviour change
+  made to silence a report, so both stay open and are named here rather than quietly dismissed.
 - **Study time no longer depends on how often the app wrote an event.** The insights timeline capped
   every stretch at the idle threshold, so the same ten minutes of reading counted as ten with an event
   every two minutes and as two with only a start and an end, and a witnessed absence was credited in full

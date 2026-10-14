@@ -32,7 +32,8 @@ import type { InterventionDecision, InterventionOutcome } from './intervention';
 import type { RescueView } from './rescue';
 import type { InsightsRequest, InsightsSummary } from './insights';
 import type { MaterialDocument } from './material';
-import type { AppSettings, Locale, ThemePreference } from './settings';
+import type { ListMoodsRequest, MoodEntry, SaveMoodRequest } from './mood';
+import type { AppSettings, ClockFormat, Locale, ThemePreference } from './settings';
 import type { ResumeCardView } from './resume';
 import type { LearningSession, SessionProgress } from './session';
 import type { LearningState } from './state';
@@ -74,6 +75,9 @@ export const IPC_CHANNELS = {
   dismissResume: 'focusloop:resume:dismiss',
   getDashboard: 'focusloop:dashboard:get',
   getInsights: 'focusloop:insights:get',
+  getMood: 'focusloop:mood:get',
+  listMoods: 'focusloop:mood:list',
+  saveMood: 'focusloop:mood:save',
   memorySummary: 'focusloop:agent:memory-summary',
   memoryList: 'focusloop:agent:memory-list',
   memoryClear: 'focusloop:agent:memory-clear',
@@ -100,6 +104,10 @@ export const IPC_CHANNELS = {
   setTheme: 'focusloop:settings:set-theme',
   setShowMaterialText: 'focusloop:settings:set-material-text',
   setAmbientSound: 'focusloop:settings:set-ambient-sound',
+  setReminderEnabled: 'focusloop:settings:set-reminder-enabled',
+  setReminderTime: 'focusloop:settings:set-reminder-time',
+  setOnboarded: 'focusloop:settings:set-onboarded',
+  setClockFormat: 'focusloop:settings:set-clock-format',
   getModelSettings: 'focusloop:model:settings',
   getLlmSettings: 'focusloop:llm:settings',
   saveLlmProvider: 'focusloop:llm:save-provider',
@@ -345,6 +353,23 @@ export interface SetAmbientSoundRequest {
   readonly ambientSound: boolean;
 }
 
+export interface SetReminderEnabledRequest {
+  readonly reminderEnabled: boolean;
+}
+
+export interface SetReminderTimeRequest {
+  /** `HH:MM`, 24-hour. */
+  readonly reminderTime: string;
+}
+
+export interface SetOnboardedRequest {
+  readonly onboarded: boolean;
+}
+
+export interface SetClockFormatRequest {
+  readonly clockFormat: ClockFormat;
+}
+
 /**
  * Where the learner's data is. Both paths are the main process's answer, not the renderer's guess:
  * `directory` is `app.getPath('userData')` and `databasePath` is the file the store actually opened,
@@ -479,6 +504,10 @@ export interface FocusLoopApi {
   setTheme(request: SetThemeRequest): Promise<AppSettings>;
   setShowMaterialText(request: SetShowMaterialTextRequest): Promise<AppSettings>;
   setAmbientSound(request: SetAmbientSoundRequest): Promise<AppSettings>;
+  setReminderEnabled(request: SetReminderEnabledRequest): Promise<AppSettings>;
+  setReminderTime(request: SetReminderTimeRequest): Promise<AppSettings>;
+  setOnboarded(request: SetOnboardedRequest): Promise<AppSettings>;
+  setClockFormat(request: SetClockFormatRequest): Promise<AppSettings>;
 
   /** Runtime identity and non-secret provider configuration. */
   getModelSettings(): Promise<ModelSettings>;
@@ -505,6 +534,11 @@ export interface FocusLoopApi {
   deleteAllData(request: ConfirmDeleteDataRequest): Promise<DeleteDataResponse>;
 
   getInsights(request: InsightsRequest): Promise<InsightsSummary>;
+
+  /** The day's wellbeing check-in, and its history, newest first. */
+  getMood(): Promise<MoodEntry | null>;
+  listMoods(request: ListMoodsRequest): Promise<readonly MoodEntry[]>;
+  saveMood(request: SaveMoodRequest): Promise<MoodEntry>;
   /**
    * What agent memory exists for a session, per source (AG7.5): count, newest time, opaque clear.
    *

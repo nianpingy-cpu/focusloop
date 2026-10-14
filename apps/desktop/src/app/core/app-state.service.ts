@@ -1,14 +1,20 @@
 import { Injectable, effect, signal, computed } from '@angular/core';
 import {
   DEFAULT_AMBIENT_SOUND,
+  DEFAULT_CLOCK_FORMAT,
   DEFAULT_INSIGHT_RANGE,
   DEFAULT_LOCALE,
+  DEFAULT_ONBOARDED,
+  DEFAULT_REMINDER_ENABLED,
+  DEFAULT_REMINDER_TIME,
   DEFAULT_SHOW_MATERIAL_TEXT,
   DEFAULT_THEME,
 } from '@focusloop/shared-types';
 import type {
   AppSettings,
   AnswerSourceResponse,
+  ClockFormat,
+  MoodEntry,
   BridgeInfo,
   Course,
   DashboardSummary,
@@ -238,6 +244,20 @@ export class AppStateService {
    * on its own.
    */
   readonly ambientSound = signal<boolean>(DEFAULT_AMBIENT_SOUND);
+  /** The daily study reminder, and the local time it fires. `HH:MM`, 24-hour. */
+  readonly reminderEnabled = signal<boolean>(DEFAULT_REMINDER_ENABLED);
+  readonly reminderTime = signal<string>(DEFAULT_REMINDER_TIME);
+  /** Whether the first-run questionnaire has been answered, so it is offered once. */
+  readonly onboarded = signal<boolean>(DEFAULT_ONBOARDED);
+  /**
+   * Whether the stored settings have been read yet.
+   *
+   * The questionnaire must not flash on every launch before the answer arrives, so it is gated on this
+   * rather than on the settings' defaults — which look exactly like a first run until they load.
+   */
+  readonly settingsReady = signal(false);
+  /** `24h` writes `13:05`, `12h` writes `1:05 PM`. A display preference, stored by the store. */
+  readonly clockFormat = signal<ClockFormat>(DEFAULT_CLOCK_FORMAT);
   /**
    * Where the database is, as the main process resolved it.
    *
@@ -253,6 +273,14 @@ export class AppStateService {
    * silently reset it to "today" every time an event arrived would be a bug.
    */
   readonly todayInsights = signal<InsightsSummary | null>(null);
+  /**
+   * The day's wellbeing check-in and its recent history.
+   *
+   * Its own read, not part of the insights window: "how do I feel today" is a question about the day,
+   * not about whichever range the dashboard happens to be showing.
+   */
+  readonly moodToday = signal<MoodEntry | null>(null);
+  readonly moodHistory = signal<readonly MoodEntry[]>([]);
 
   readonly state = computed<LearningState>(() => this.snapshot()?.session.state ?? 'READY');
   readonly hasSession = computed(() => this.snapshot() !== null);
@@ -337,6 +365,10 @@ export class AppStateService {
         theme: DEFAULT_THEME,
         showMaterialText: DEFAULT_SHOW_MATERIAL_TEXT,
         ambientSound: DEFAULT_AMBIENT_SOUND,
+        reminderEnabled: DEFAULT_REMINDER_ENABLED,
+        reminderTime: DEFAULT_REMINDER_TIME,
+        onboarded: DEFAULT_ONBOARDED,
+        clockFormat: DEFAULT_CLOCK_FORMAT,
       };
     }
   }
@@ -374,6 +406,34 @@ export class AppStateService {
     await this.run(async () => {
       const settings = await this.api.setAmbientSound({ ambientSound });
       this.ambientSound.set(settings.ambientSound);
+    });
+  }
+
+  async setReminderEnabled(reminderEnabled: boolean): Promise<void> {
+    await this.run(async () => {
+      const settings = await this.api.setReminderEnabled({ reminderEnabled });
+      this.reminderEnabled.set(settings.reminderEnabled);
+    });
+  }
+
+  async setReminderTime(reminderTime: string): Promise<void> {
+    await this.run(async () => {
+      const settings = await this.api.setReminderTime({ reminderTime });
+      this.reminderTime.set(settings.reminderTime);
+    });
+  }
+
+  async setOnboarded(onboarded: boolean): Promise<void> {
+    await this.run(async () => {
+      const settings = await this.api.setOnboarded({ onboarded });
+      this.onboarded.set(settings.onboarded);
+    });
+  }
+
+  async setClockFormat(clockFormat: ClockFormat): Promise<void> {
+    await this.run(async () => {
+      const settings = await this.api.setClockFormat({ clockFormat });
+      this.clockFormat.set(settings.clockFormat);
     });
   }
 
@@ -480,6 +540,10 @@ export class AppStateService {
       this.locale.set(settings.locale);
       this.theme.set(settings.theme);
       this.showMaterialText.set(settings.showMaterialText);
+      this.reminderEnabled.set(settings.reminderEnabled);
+      this.reminderTime.set(settings.reminderTime);
+      this.onboarded.set(settings.onboarded);
+      this.clockFormat.set(settings.clockFormat);
 
       await this.refresh();
       await this.reloadInsightsQuietly();
@@ -838,6 +902,21 @@ export class AppStateService {
    * Re-aggregates the dashboard for a window. The main process owns the maths;
    * the renderer only decides which range the learner asked for.
    */
+  async loadMood(): Promise<void> {
+    await this.run(async () => {
+      this.moodToday.set(await this.api.getMood());
+      this.moodHistory.set(await this.api.listMoods({ limit: 14 }));
+    });
+  }
+
+  async saveMood(mood: number, note: string): Promise<void> {
+    await this.run(async () => {
+      const entry = await this.api.saveMood({ mood, note });
+      this.moodToday.set(entry);
+      this.moodHistory.set(await this.api.listMoods({ limit: 14 }));
+    });
+  }
+
   async loadInsights(range: InsightRange): Promise<void> {
     this.insightRange.set(range);
     await this.run(async () => {
