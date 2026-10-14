@@ -42,7 +42,13 @@ async function probe(t, stream) {
   assert.equal(typeof stdout, 'string');
   assert.ok(!stdout.includes('synthetic-secret-do-not-echo'));
   assert.ok(!stdout.includes('127.0.0.1'));
-  return { code, results: stdout.trim().split('\n').map((line) => JSON.parse(line)) };
+  return {
+    code,
+    results: stdout
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line)),
+  };
 }
 
 test('token-limited streaming is rejected with a safe phase and specific diagnostic', async (t) => {
