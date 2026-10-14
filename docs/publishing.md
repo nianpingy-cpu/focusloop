@@ -165,6 +165,53 @@ be proven before a release ships. Nothing in the live job prints a credential, a
 `scripts/test-llm-connection.mjs` emits one sanitized JSON object per line and exits non-zero on
 failure.
 
+### The wiki publishes with no secret at all
+
+`docs/wiki/` is published to the GitHub Wiki by `wiki-sync.yml` on every push to `main` that touches
+it. It used to require a `WIKI_SYNC_TOKEN` secret and, without one, did nothing but print a notice —
+and the secret was never needed. The job token can write to `<repo>.wiki.git` when the job is granted
+`contents: write` (GitHub has no wiki-only permission), so **the wiki needs no configuration**.
+
+`WIKI_SYNC_TOKEN` is therefore **optional, and an override rather than a requirement**: it is preferred
+when it works and the built-in token publishes when it does not. It exists so that a change to what
+GitHub lets the built-in token do is answered by pasting a credential rather than by a code change.
+
+That "when it works" is the whole design, and it was learned from a failure rather than reasoned out: an
+override that was preferred _unconditionally_ turned a working wiki into a failing workflow the moment a
+token GitHub did not accept was pasted in — the opposite of what insurance is for. Now a rejected
+override costs a **warning**, the run stays green, the wiki still publishes, and the run summary says
+which credential was used. A secret that is set but wrong is therefore visible without being fatal.
+
+**Deleting the secret returns the workflow to the built-in token entirely**, which is why the fallback
+is a one-liner rather than a revert:
+
+```bash
+gh secret set WIKI_SYNC_TOKEN --repo nianpingy-cpu/focusloop     # optional; paste a PAT
+gh secret delete WIKI_SYNC_TOKEN --repo nianpingy-cpu/focusloop  # remove it again
+```
+
+Before pasting one, check what you have. A rejected token is the failure this workflow tolerates, but it
+is still a token that does not work — and the way this went wrong once is worth avoiding: a secret was
+stored holding a **single character**, because the value was never checked between the paste and the
+`gh secret set`. This snippet refuses to store anything that is not plausibly a token, so the mistake
+cannot reach the workflow:
+
+```powershell
+$t = [System.Net.NetworkCredential]::new('', (Read-Host 'Paste the PAT' -AsSecureString)).Password.Trim()
+if ($t.Length -lt 20) { throw "That is $($t.Length) character(s) — the paste did not take. Nothing was stored." }
+"type: $(if ($t.StartsWith('github_pat_')) { 'fine-grained' } else { 'classic' }), $($t.Length) characters"
+$h = @{ Authorization = "Bearer $t"; Accept = 'application/vnd.github+json' }
+$repo = Invoke-RestMethod https://api.github.com/repos/nianpingy-cpu/focusloop -Headers $h
+if (-not $repo.permissions.push) { throw 'This token cannot push to this repository, so it cannot publish the wiki.' }
+gh secret set WIKI_SYNC_TOKEN --repo nianpingy-cpu/focusloop --body $t   # --body, so nothing else is in the value
+```
+
+Use a **dedicated** personal access token. A classic PAT with `repo` is what the wiki-publishing
+ecosystem documents; a fine-grained token is undocumented for wiki Git access, so treat it as
+unverified. Do not reuse the token your own `gh` CLI holds — that one carries `delete_repo` and
+`admin:org`, and anyone who can push a branch to this repository can read a repository secret, so
+reusing it would put account-wide reach behind a single workflow file.
+
 ## The application icon
 
 `apps/desktop/resources/icon.ico`, `icon.png` and `icon.icns` are committed assets, not build output.
