@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createServer } from 'node:http';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
-const script = new URL('./test-llm-connection.mjs', import.meta.url);
+const script = fileURLToPath(new URL('./test-llm-connection.mjs', import.meta.url));
 const frame = (choice) => `data: ${JSON.stringify({ choices: [choice] })}\n\n`;
 
 async function probe(t, stream) {
@@ -28,7 +29,7 @@ async function probe(t, stream) {
   let stdout;
   let code = 0;
   try {
-    ({ stdout } = await exec(process.execPath, [script.pathname, '--model', 'synthetic'], {
+    ({ stdout } = await exec(process.execPath, [script, '--model', 'synthetic'], {
       env: {
         ...process.env,
         OPENAI_COMPATA_API_KEY: 'synthetic-secret-do-not-echo',
