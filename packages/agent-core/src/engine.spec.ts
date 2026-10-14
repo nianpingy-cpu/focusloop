@@ -4,6 +4,7 @@ import {
   DEFAULT_RESUME_POLICY_CONFIG,
   LEARNER_ANSWER_CHARACTERS,
   TUTOR_LIMITS,
+  coerceClockFormat,
   type AIProvider,
   type CompletionRequest,
   type Course,
@@ -52,6 +53,7 @@ describe('FocusLoopEngine', () => {
         reminderEnabled: false,
         reminderTime: '09:00',
         onboarded: false,
+        clockFormat: '24h',
       });
     });
 
@@ -64,6 +66,7 @@ describe('FocusLoopEngine', () => {
         reminderEnabled: false,
         reminderTime: '09:00',
         onboarded: false,
+        clockFormat: '24h',
       });
       expect(ctx.engine.getSettings().locale).toBe('zh');
     });
@@ -78,6 +81,7 @@ describe('FocusLoopEngine', () => {
         reminderEnabled: false,
         reminderTime: '09:00',
         onboarded: false,
+        clockFormat: '24h',
       });
       expect(ctx.engine.getSettings()).toEqual({
         locale: 'zh',
@@ -87,6 +91,7 @@ describe('FocusLoopEngine', () => {
         reminderEnabled: false,
         reminderTime: '09:00',
         onboarded: false,
+        clockFormat: '24h',
       });
     });
 
@@ -99,6 +104,7 @@ describe('FocusLoopEngine', () => {
         reminderEnabled: false,
         reminderTime: '09:00',
         onboarded: false,
+        clockFormat: '24h',
       });
       // `app_meta` stores strings, so the value comes back as the word rather than the primitive.
       // A guard that only accepted a real boolean would silently fall back to the default, and the
@@ -116,9 +122,25 @@ describe('FocusLoopEngine', () => {
         reminderEnabled: false,
         reminderTime: '09:00',
         onboarded: false,
+        clockFormat: '24h',
       });
       // Stored as a word like the preference above, so it has to come back as one.
       expect(ctx.engine.getSettings().ambientSound).toBe(true);
+    });
+
+    it('remembers the clock format, and falls back when it cannot read one', () => {
+      expect(ctx.engine.setClockFormat('12h')).toEqual({
+        locale: 'en',
+        theme: 'system',
+        showMaterialText: true,
+        ambientSound: false,
+        reminderEnabled: false,
+        reminderTime: '09:00',
+        onboarded: false,
+        clockFormat: '12h',
+      });
+      expect(ctx.engine.getSettings().clockFormat).toBe('12h');
+      expect(coerceClockFormat('13h')).toBe('24h');
     });
 
     it('ignores a language nobody wrote wording for', () => {
@@ -149,6 +171,32 @@ describe('FocusLoopEngine', () => {
       expect(ctx.engine.getSettings().onboarded).toBe(false);
       expect(ctx.engine.setOnboarded(true).onboarded).toBe(true);
       expect(ctx.engine.getSettings().onboarded).toBe(true);
+    });
+  });
+
+  describe('mood', () => {
+    it('is empty until the day is answered, then holds one answer per day', () => {
+      expect(ctx.engine.getMood()).toBeNull();
+
+      const saved = ctx.engine.saveMood({ mood: 4, note: 'good day' });
+      expect(saved.mood).toBe(4);
+      expect(saved.note).toBe('good day');
+      expect(ctx.engine.getMood()).toEqual(saved);
+
+      // The second answer replaces the first rather than adding a second entry for the same day.
+      ctx.engine.saveMood({ mood: 2, note: '' });
+      expect(ctx.engine.getMood()?.mood).toBe(2);
+      expect(ctx.engine.listMoods()).toHaveLength(1);
+    });
+
+    it('refuses a value the screen does not offer', () => {
+      expect(() => ctx.engine.saveMood({ mood: 6, note: '' })).toThrowError(/between 1 and 5/);
+      expect(() => ctx.engine.saveMood({ mood: 0, note: '' })).toThrowError(/between 1 and 5/);
+    });
+
+    it('bounds the note rather than storing an essay', () => {
+      const saved = ctx.engine.saveMood({ mood: 3, note: 'x'.repeat(1_000) });
+      expect(saved.note).toHaveLength(280);
     });
   });
 

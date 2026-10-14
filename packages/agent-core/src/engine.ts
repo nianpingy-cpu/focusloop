@@ -96,15 +96,24 @@ import { buildWeeklyReflection } from './reflection';
 import { preferenceDecisionKey, preferenceFromProposal } from './preference-confirmation';
 import {
   DEFAULT_INSIGHT_RANGE,
+  MOOD_NOTE_MAX_CHARACTERS,
   coerceLocale,
   coerceAmbientSound,
+  coerceClockFormat,
   coerceOnboarded,
   coerceReminderEnabled,
   coerceReminderTime,
   coerceShowMaterialText,
   coerceTheme,
+  isMoodValue,
 } from '@focusloop/shared-types';
-import type { AppSettings, Locale } from '@focusloop/shared-types';
+import type {
+  AppSettings,
+  ClockFormat,
+  Locale,
+  MoodEntry,
+  SaveMoodRequest,
+} from '@focusloop/shared-types';
 import {
   DEFAULT_STATE_ENGINE_CONFIG,
   computeSessionProgress,
@@ -136,6 +145,7 @@ import {
 import { buildDashboardSummary, type EvaluatedRescue } from './dashboard';
 import {
   buildInsightsSummary,
+  localDateKey,
   recordedSessionMs,
   weekWindow,
   type InsightsSessionSource,
@@ -177,6 +187,9 @@ export const SHOW_MATERIAL_TEXT_KEY = 'show-material-text';
 /** The `app_meta` key the ambient-layer preference is stored under (#57). */
 export const AMBIENT_SOUND_KEY = 'ambient-sound';
 
+/** The `app_meta` key the 12h/24h clock preference is stored under. */
+export const CLOCK_FORMAT_KEY = 'clock-format';
+
 /** The `app_meta` keys the daily reminder is stored under. */
 export const REMINDER_ENABLED_KEY = 'reminder-enabled';
 export const REMINDER_TIME_KEY = 'reminder-time';
@@ -201,7 +214,9 @@ export const ONBOARDED_KEY = 'onboarded';
      * claims to. Refusing loudly is the point — a silently "incorrect" verdict for a choice that does
      * not exist would write a wrong answer into the learner's record for them.
      */
-    | 'quiz-not-answerable';
+    | 'quiz-not-answerable'
+    /** A wellbeing check-in whose value is not one of the five the screen offers. */
+    | 'bad-mood';
 
   constructor(code: EngineError['code'], message: string) {
     super(message);
@@ -2276,6 +2291,7 @@ export class FocusLoopEngine {
       theme: coerceTheme(this.store.getMeta(THEME_KEY)),
       showMaterialText: coerceShowMaterialText(this.store.getMeta(SHOW_MATERIAL_TEXT_KEY)),
       ambientSound: coerceAmbientSound(this.store.getMeta(AMBIENT_SOUND_KEY)),
+      clockFormat: coerceClockFormat(this.store.getMeta(CLOCK_FORMAT_KEY)),
       reminderEnabled: coerceReminderEnabled(this.store.getMeta(REMINDER_ENABLED_KEY)),
       reminderTime: coerceReminderTime(this.store.getMeta(REMINDER_TIME_KEY)),
       onboarded: coerceOnboarded(this.store.getMeta(ONBOARDED_KEY)),
@@ -2315,6 +2331,43 @@ export class FocusLoopEngine {
   setOnboarded(onboarded: boolean): AppSettings {
     this.store.setMeta(ONBOARDED_KEY, onboarded ? 'true' : 'false');
     return this.getSettings();
+  }
+
+  setClockFormat(clockFormat: ClockFormat): AppSettings {
+    this.store.setMeta(CLOCK_FORMAT_KEY, clockFormat);
+    return this.getSettings();
+  }
+
+  // ------------------------------------------------------------------- mood
+
+  /**
+   * The day's wellbeing check-in, or `null` when today has not been answered.
+   *
+   * The date is the *local* one, read from the engine's clock rather than sent by the renderer: the
+   * renderer's clock is the same machine, and one authority for "which day is this" is what keeps the
+   * check-in and the heatmap on the same calendar.
+   */
+  getMood(): MoodEntry | null {
+    return this.store.getMoodEntry(localDateKey(new Date(this.clock())));
+  }
+
+  listMoods(limit = 30): readonly MoodEntry[] {
+    return this.store.listMoodEntries(limit);
+  }
+
+  saveMood(request: SaveMoodRequest): MoodEntry {
+    if (!isMoodValue(request.mood)) {
+      throw new EngineError('bad-mood', `Mood must be an integer between 1 and 5.`);
+    }
+    const note = typeof request.note === 'string' ? request.note : '';
+    const entry: MoodEntry = {
+      date: localDateKey(new Date(this.clock())),
+      mood: request.mood,
+      note: note.slice(0, MOOD_NOTE_MAX_CHARACTERS),
+      updatedAt: this.clock(),
+    };
+    this.store.saveMoodEntry(entry);
+    return entry;
   }
 
   // --------------------------------------------------- structural proposals

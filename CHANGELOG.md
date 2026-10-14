@@ -8,6 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- **A daily wellbeing check-in, and a streak beside the heatmap.** The home page now asks how the day
+  feels — five faces and an optional sentence, one answer per local day, stored on this machine and
+  editable later. It is a different question from the learning state: the engine can see what the learner
+  is doing, and cannot infer how they are, so it asks. The dashboard gained the other half of that habit —
+  a day streak, counted from the same days the heatmap colours rather than from a seven-day window, which
+  would have capped a three-week streak at seven. Both come from reading Tiimo's public model (see
+  `analysis/tiimo-rea/REPORT.md`), and neither copies it: the check-in is a quiet card, not a modal, and
+  the streak is a label over data the app already had rather than a trophy to collect.
+- **The clock can be 24-hour or 12-hour.** A display preference in Settings, beside the theme, stored by
+  the store like the language. It changes how a time of day is written and nothing else — a duration
+  still reads `3:09` in both, because that is minutes and seconds, not a time of day.
 - **A daily reminder to start, and a first-run questionnaire that asks for it.** The app can now nudge
   the learner once a day, at a time they choose, when no session is running — a reminder to _start_,
   never to keep going, because the inside of a session already has the clock and the resume card and a

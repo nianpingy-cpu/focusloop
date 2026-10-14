@@ -316,6 +316,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.stateService.reminderTime.set(settings.reminderTime);
       this.stateService.onboarded.set(settings.onboarded);
       this.stateService.settingsReady.set(true);
+      this.stateService.clockFormat.set(settings.clockFormat);
     });
     void this.stateService.refresh();
     // Starts the daily reminder's timer. Its first check runs before settings have loaded, which is

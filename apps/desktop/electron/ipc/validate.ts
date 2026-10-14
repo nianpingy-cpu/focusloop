@@ -1,8 +1,11 @@
 import {
   isAgentProposalKind,
+  isClockFormat,
   isInsightRange,
   isLocale,
+  isMoodValue,
   isReminderTime,
+  MOOD_NOTE_MAX_CHARACTERS,
   isStuckReason,
   isThemePreference,
   isTutorMode,
@@ -20,6 +23,8 @@ import {
   type EndSessionRequest,
   type ImportMaterialRequest,
   type InsightsRequest,
+  type ListMoodsRequest,
+  type SaveMoodRequest,
   type LearningEvent,
   type QuizAnswerRequest,
   type ResumeDecisionRequest,
@@ -30,6 +35,7 @@ import {
   type SetOnboardedRequest,
   type SetReminderEnabledRequest,
   type SetReminderTimeRequest,
+  type SetClockFormatRequest,
   type SetLocaleRequest,
   parseProviderConfig,
   parseProviderConnection,
@@ -359,6 +365,41 @@ export function parseSetOnboarded(channel: string, value: unknown): SetOnboarded
     fail(channel, `onboarded must be a boolean, received ${typeof onboarded}`);
   }
   return { onboarded };
+}
+
+/** The clock's format, checked against the closed set rather than coerced. */
+export function parseSetClockFormat(channel: string, value: unknown): SetClockFormatRequest {
+  const record = asRecord(channel, value);
+  const clockFormat = asString(channel, record, 'clockFormat');
+  if (!isClockFormat(clockFormat)) fail(channel, `unsupported clock format "${clockFormat}"`);
+  return { clockFormat };
+}
+
+/** The history window: a count of days, bounded so a caller cannot ask the store for everything. */
+export function parseListMoods(channel: string, value: unknown): ListMoodsRequest {
+  const record = asRecord(channel, value);
+  const limit = record['limit'];
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 0 || limit > 366) {
+    fail(channel, `limit must be an integer between 0 and 366, received ${String(limit)}`);
+  }
+  return { limit };
+}
+
+/**
+ * A check-in, refused rather than clamped when it is out of range: the screen only offers five values,
+ * so a sixth means the request did not come from the screen it claims to. The note, being free text, is
+ * bounded at the boundary the same way a learner answer is.
+ */
+export function parseSaveMood(channel: string, value: unknown): SaveMoodRequest {
+  const record = asRecord(channel, value);
+  const mood = record['mood'];
+  if (!isMoodValue(mood)) fail(channel, `mood must be an integer between 1 and 5`);
+  const note = record['note'];
+  if (typeof note !== 'string') fail(channel, `note must be a string, received ${typeof note}`);
+  if (note.length > MOOD_NOTE_MAX_CHARACTERS) {
+    fail(channel, `note must be at most ${MOOD_NOTE_MAX_CHARACTERS} characters`);
+  }
+  return { mood: mood as number, note };
 }
 
 export function parseSaveProvider(channel: string, value: unknown): SaveProviderRequest {
