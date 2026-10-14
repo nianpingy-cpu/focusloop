@@ -115,7 +115,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   to import ("Drop a file, or paste the text first."). The last of the three is also what the paste box is
   for, and it is not decoration: it is the only way in for material that is not a file — notes copied out
   of a page, a chat or a PDF viewer — which is what the file chooser was later added on top of, so its
-  label now says so ("Or paste text instead of a file").
+  label now says so ("Or paste text instead of a file"). The line under the button reports the import
+  that was just sent and nothing earlier: it is cleared as the import goes out rather than left standing
+  until the next answer arrives, because a line still carrying the previous import's counts describes
+  material the form no longer holds — which is what a second import showed while its own answer was in
+  flight, and what an import that came back with nothing left behind as its result.
 - **The dashboard keeps to the numbers, and the record has a screen of its own.** The plan's rows are
   all the same height: the estimate is written on each row rather than drawn as a length, which is what
   made a five-task plan read as a chart and a two-minute task as a hairline — and an even column is what

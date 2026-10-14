@@ -49,6 +49,26 @@ test('the home page starts a session, browses courses, and takes material in', a
     const cards = page.locator('[data-testid=course-card]');
     const cardTitle = async (index: number): Promise<string> =>
       (await cards.nth(index).locator('h3').innerText()).trim();
+    /**
+     * What the import that was just sent reported, polled rather than read once.
+     *
+     * `import-summary` is one element every import fills in, so a read straight after the click can
+     * land on the previous import's answer: the macOS runner read the second hand-typed import as the
+     * first one's "typed notes: 0 concepts, 0 micro tasks", and the same read taken 400ms early
+     * reproduces it here. Polling for the words the new import produces is what binds the assertion to
+     * the press it belongs to — no earlier import can have produced them.
+     */
+    const importAnswer = async (pattern: RegExp): Promise<void> => {
+      await expect
+        .poll(
+          async () => {
+            const summary = page.getByTestId('import-summary');
+            return (await summary.count()) === 0 ? '' : (await summary.innerText()).trim();
+          },
+          { timeout: 10_000 },
+        )
+        .toMatch(pattern);
+    };
     const currentCard = page.locator('.card--accent');
     const banner = page.locator('.banner--error');
     const notice = page.getByTestId('import-pick-notice');
@@ -154,10 +174,7 @@ test('the home page starts a session, browses courses, and takes material in', a
 
     // 5. And the import goes through, says what it made, and adds the course it made it into.
     await submit.click();
-    await expect(page.getByTestId('import-summary')).toBeVisible({ timeout: 10_000 });
-    expect(await page.getByTestId('import-summary').innerText()).toMatch(
-      /^Sweep notes: \d+ concepts?, \d+ micro tasks?$/,
-    );
+    await importAnswer(/^Sweep notes: \d+ concepts?, \d+ micro tasks?$/);
     await expect(banner).toHaveCount(0);
     await expect.poll(async () => cards.count(), { timeout: 5_000 }).toBe(beforeImport + 1);
 
@@ -225,10 +242,7 @@ test('the home page starts a session, browses courses, and takes material in', a
     await name.fill('pasted-material.md');
     await text.fill('# Pasted\n\nMaterial typed in by hand.\n');
     await submit.click();
-    await expect(page.getByTestId('import-summary')).toBeVisible({ timeout: 10_000 });
-    expect((await page.getByTestId('import-summary').innerText()).trim()).toMatch(
-      /^Pasted: \d+ concepts?, \d+ micro tasks?$/,
-    );
+    await importAnswer(/^Pasted: \d+ concepts?, \d+ micro tasks?$/);
     await expect.poll(async () => cards.count(), { timeout: 5_000 }).toBe(withHeading + 1);
     await expect(cards.last().locator('h3')).toHaveText('Pasted');
 
@@ -284,7 +298,9 @@ test('the home page starts a session, browses courses, and takes material in', a
     await expect(submit).toBeEnabled();
     await expect(banner).toHaveCount(0);
 
-    // A file already imported is not imported twice: same text, same content hash, same course.
+    // A file already imported is not imported twice: same text, same content hash, same course — so
+    // the second press reports the course it already had rather than counts of its own, which is the
+    // answer this press is waited for before the list is counted.
     await page.getByTestId('import-pick-file').setInputFiles({
       name: 'sweep-notes.md',
       mimeType: 'text/markdown',
@@ -292,7 +308,7 @@ test('the home page starts a session, browses courses, and takes material in', a
     });
     const beforeRepeat = await cards.count();
     await submit.click();
-    await expect(page.getByTestId('import-summary')).toBeVisible({ timeout: 10_000 });
+    await importAnswer(/^Sweep notes: 0 concepts, 0 micro tasks$/);
     expect(await cards.count()).toBe(beforeRepeat);
 
     /*

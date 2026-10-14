@@ -416,6 +416,15 @@ export class HomePage {
   }
 
   protected importMaterial(): void {
+    /*
+     * The last answer goes before the new import is sent.
+     *
+     * The line under the button answers "what did that press make", and it was left standing until the
+     * next answer arrived: while an import was in flight the counts on screen belonged to the press
+     * before it, and an import that came back empty or not at all left those counts standing as if
+     * they were its own. Clearing it keeps the line to the one import it describes.
+     */
+    this.importSummary.set(null);
     void this.state.importMaterial(this.fileName(), this.content()).then((result) => {
       this.importSummary.set(
         result === null
