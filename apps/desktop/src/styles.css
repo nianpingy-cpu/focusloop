@@ -2612,6 +2612,24 @@ code {
   color: var(--focus-accent);
 }
 
+/*
+ * The quiet reminder: one bounded line above the step's answer, not a card and not a modal. It is a
+ * question, so it takes a muted surface and leaves the accent — and the clock — alone.
+ */
+.focus-idle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .focus-clock {
   position: relative;
   display: grid;

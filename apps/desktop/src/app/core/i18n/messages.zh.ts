@@ -269,6 +269,8 @@ export const zh: Record<MessageKey, string> = {
   'focus.elapsed': '已用时',
   'focus.progress': '进度',
   'focus.progress.hint': '进度条数的是完成的任务；圆环是这一步的计划时间。两者不必一致。',
+  'focus.idle.reminder': '还在吗？计时仍在继续。',
+  'focus.idle.dismiss': '继续',
   'focus.started': '开始时间',
   'focus.currentTask': '当前微任务',
   'focus.taskMeta': '约 {minutes} 分钟',

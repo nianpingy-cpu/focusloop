@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { DEFAULT_STATE_ENGINE_CONFIG } from '@focusloop/learning-state';
 import { ProviderError, createProviderSelection } from '@focusloop/llm-provider';
 import {
   DEFAULT_RESUME_POLICY_CONFIG,
@@ -1347,6 +1348,56 @@ describe('FocusLoopEngine', () => {
       expect(later).toBeLessThan(14 * 86_400_000);
       // And the dashboard agrees with the focus screen, because both read the same rebuilt timeline.
       expect(ctx.engine.getDashboard().sessionDurationMs).toBe(later);
+    });
+
+    it('ends a session nothing has been observed in for the idle timeout', () => {
+      /*
+       * The rule that makes a natural elapsed time finite. A session is not ended by closing the app,
+       * so without this one left open overnight kept "open for 14 hours" until the learner pressed stop.
+       */
+      const timeout = DEFAULT_STATE_ENGINE_CONFIG.sessionIdleTimeoutMs;
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+      ctx.clock.advance(timeout + 1);
+      ctx.engine.tick();
+
+      expect(ctx.engine.getCurrentSession()).toBeNull();
+      const summary = ctx.engine.getDashboard();
+      expect(summary.sessionId).toBe(session.id);
+      // The wall clock stops at the moment it was ended, and the study time is what it always was.
+      expect(summary.sessionElapsedMs).toBeLessThanOrEqual(timeout + 1);
+      expect(summary.sessionElapsedMs).toBeGreaterThan(0);
+    });
+
+    it('reports the quiet marker on a snapshot without moving the state', () => {
+      const { session } = ctx.engine.startSession(DEMO_COURSE_ID);
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'TASK_STARTED',
+        source: 'user',
+        payload: { taskId: 'rbt-t1' },
+      });
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'IDLE_STARTED',
+        source: 'system',
+        payload: {},
+      });
+      expect(ctx.engine.getCurrentSession()?.idleSince).not.toBeNull();
+      expect(ctx.engine.getCurrentSession()?.session.state).toBe('FOCUSED');
+
+      ctx.engine.dispatch({
+        sessionId: session.id,
+        type: 'IDLE_ENDED',
+        source: 'system',
+        payload: { idleMs: 5_000 },
+      });
+      expect(ctx.engine.getCurrentSession()?.idleSince).toBeNull();
     });
 
     it('reports the current session', () => {

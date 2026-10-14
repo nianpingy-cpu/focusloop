@@ -553,6 +553,7 @@ export class AppStateService {
         },
         courseTitle: this.courses().find((course) => course.id === courseId)?.title ?? null,
         checkpoints: [],
+        idleSince: null,
       });
       this.resumeCard.set(null);
       this.decision.set(null);

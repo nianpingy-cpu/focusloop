@@ -339,14 +339,21 @@ cannot read as a day of study. The consequence is that a window's `totalMs` is t
 behind as study time, not the wall-clock its sessions were open; the labels that read it say so, as does
 `docs/wiki/project-features.md` §D2.
 
-**3. One session is measured by the same rule as a window.** That rule was once only the dashboard's:
-the focus screen's `elapsed` and the dashboard's `session duration` were `startedAt` → `now`, and a
-session is not ended by closing the app. A session left open over a weekend reported the weekend — a
-learner who had worked for twenty minutes was shown `21219:30`, in a field that counted minutes past
-any length. Both now read `recordedSessionMs`: the credited segments of `buildStateTimeline`, summed.
-So `progress.elapsedMs` (the strip, and the Home screen's line under a running session) and
-`DashboardSummary.sessionDurationMs` are the time the app can stand behind, and a closed session still
-keeps its whole span, because pressing stop is itself a witness.
+**3. One session is measured by the same rule as a window, and its wall clock is a separate number.**
+That rule was once only the dashboard's: the focus screen's `elapsed` and the dashboard's `session
+duration` were `startedAt` → `now`, and a session is not ended by closing the app. A session left open
+over a weekend reported the weekend — a learner who had worked for twenty minutes was shown `21219:30`,
+in a field that counted minutes past any length. Both now read `recordedSessionMs`: the study stretches
+of `buildStateTimeline`, summed. So `progress.elapsedMs` (the strip, and the Home screen's line under a
+running session) and `DashboardSummary.sessionDurationMs` are study time, and a session the learner
+ended has its last stretch bounded by that end event, so it is credited as observed rather than as an
+unwitnessed tail.
+
+The sitting's wall clock is its own field, `DashboardSummary.sessionElapsedMs`, shown as "Session
+duration" — "how long was I here" is a different question from "how long did I work" and they no longer
+share a number. To keep that value finite, the engine ends a session that has produced no observation
+for `sessionIdleTimeoutMs` (four hours) with reason `timeout` on the next tick, so a session left open
+overnight stops counting at the timeout instead of growing until someone presses stop.
 
 Two further details are easy to get wrong and are pinned by tests:
 

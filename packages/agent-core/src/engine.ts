@@ -108,6 +108,7 @@ import {
   createInitialState,
   evaluateTimeBasedState,
   reduceState,
+  resolveStateEngineConfig,
   type StateEngineConfig,
   type StateEngineState,
 } from '@focusloop/learning-state';
@@ -931,6 +932,8 @@ export class FocusLoopEngine {
       progress,
       courseTitle: course?.title ?? null,
       checkpoints: this.store.listCheckpoints(record.session.id),
+      // An observation for the shell's "still there?" reminder; it moves no state and stops no clock.
+      idleSince: record.engineState.idleSince,
     };
   }
 
@@ -1091,6 +1094,37 @@ export class FocusLoopEngine {
     if (record === null) return null;
 
     const now = at ?? this.clock();
+
+    /*
+     * A session that has produced nothing for hours is over, and saying so is what keeps its elapsed
+     * time finite. A session is not ended by closing the app, so "2 weeks ago" and "20 minutes ago"
+     * looked the same on the dashboard until now; the first tick after such a gap ends the session with
+     * `timeout`, and the learner starts the next one from a clean position.
+     */
+    const { sessionIdleTimeoutMs } = resolveStateEngineConfig(this.stateConfig);
+    const nowMs = Date.parse(now);
+    const lastObservedMs = Date.parse(record.engineState.lastEventAt);
+    if (
+      Number.isFinite(nowMs) &&
+      Number.isFinite(lastObservedMs) &&
+      nowMs - lastObservedMs > sessionIdleTimeoutMs
+    ) {
+      const timedOut = this.dispatch({
+        sessionId: record.session.id,
+        type: 'SESSION_ENDED',
+        source: 'system',
+        payload: { reason: 'timeout' },
+        at: now,
+      });
+      const ended = this.requireSession(record.session.id);
+      this.store.saveSession({
+        session: { ...ended.session, endedAt: timedOut.event.at },
+        engineState: ended.engineState,
+      });
+      this.transcript.forget(record.session.id);
+      return timedOut;
+    }
+
     const result = evaluateTimeBasedState(record.engineState, now, this.stateConfig);
     if (result.transition === null) return null;
 

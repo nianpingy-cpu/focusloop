@@ -185,6 +185,7 @@ export function buildDashboardSummary(input: BuildDashboardInput): DashboardSumm
       sessionId: null,
       courseTitle: null,
       sessionDurationMs: 0,
+      sessionElapsedMs: 0,
       tasksCompleted: 0,
       tasksTotal: 0,
       interruptCount: 0,
@@ -222,6 +223,7 @@ export function buildDashboardSummary(input: BuildDashboardInput): DashboardSumm
     sessionId: session.id,
     courseTitle: course?.title ?? null,
     sessionDurationMs: durationMs,
+    sessionElapsedMs: wallClockMs,
     tasksCompleted: session.completedTaskIds.length,
     tasksTotal: course?.microTasks.length ?? 0,
     interruptCount: Math.max(0, input.checkpointCount),
@@ -239,17 +241,9 @@ export function buildDashboardSummary(input: BuildDashboardInput): DashboardSumm
   };
 }
 
-/** Milliseconds as `m:ss`, used by the dashboard and the focus workspace. */
-export function formatDuration(ms: number): string {
-  const safe = Number.isFinite(ms) && ms > 0 ? ms : 0;
-  const totalSeconds = Math.floor(safe / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
-
-export function formatLatency(ms: number | null): string {
-  if (ms === null) return '—';
-  if (ms < 1000) return `${ms} ms`;
-  return `${(ms / 1000).toFixed(1)} s`;
-}
+/*
+ * Duration and latency formatting used to live here too, as `m:ss` / `250 ms` strings. The renderer
+ * owns that now (`apps/desktop/src/app/core/format.ts` and `formatSpan` in `insights-view.ts`), because
+ * a duration a learner reads is wording, and wording belongs with the interface language. What is left
+ * here is the arithmetic; nothing in this file writes a sentence.
+ */

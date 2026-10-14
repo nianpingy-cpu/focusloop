@@ -304,6 +304,8 @@ const en = {
   'focus.progress': 'Progress',
   'focus.progress.hint':
     "The bar counts finished tasks; the ring is this step's planned time. They need not match.",
+  'focus.idle.reminder': 'Still there? Your clock is still running.',
+  'focus.idle.dismiss': 'Keep going',
   'focus.started': 'Started',
   'focus.currentTask': 'Current micro task',
   'focus.taskMeta': 'about {minutes} min',

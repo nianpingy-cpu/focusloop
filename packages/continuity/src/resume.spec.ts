@@ -107,7 +107,7 @@ describe('buildResumeCard', () => {
     expect(card.lastContext.params).toMatchObject({
       concept: 'Concept one',
       goal: 'Practise one',
-      duration: '30s',
+      durationMs: '30000',
     });
   });
 
@@ -208,7 +208,8 @@ describe('buildResumeCard', () => {
       recentEvents: [left],
       now: T1,
     });
-    expect(card.lastContext.params['duration']).toBe('5 min');
+    // Milliseconds, not a finished string: the renderer chooses the unit and the language.
+    expect(card.lastContext.params['durationMs']).toBe(String(5 * 60 * 1000));
     expect(classifyResumeGap(null)).toBe('medium');
     expect(classifyResumeGap(-1)).toBe('medium');
     expect(classifyResumeGap(Number.NaN)).toBe('medium');

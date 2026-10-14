@@ -10,8 +10,6 @@ import { RESCUE_ACTIONS } from '@focusloop/shared-types';
 import {
   buildDashboardSummary,
   emptyResumeOutcomeSummary,
-  formatDuration,
-  formatLatency,
   summarizeRescueOutcomes,
   summarizeResumeOutcomes,
 } from './dashboard';
@@ -201,6 +199,8 @@ describe('buildDashboardSummary', () => {
       now: '2026-01-01T09:00:00.000Z',
     });
     expect(summary.sessionDurationMs).toBe(120_000);
+    // The sitting's wall clock is a separate number from its study time, and both stop at the end.
+    expect(summary.sessionElapsedMs).toBe(120_000);
   });
 
   it('reports task progress against the course', () => {
@@ -279,20 +279,6 @@ describe('buildDashboardSummary', () => {
       reengageRate: 1,
       progressRate: 0,
     });
-  });
-});
-
-describe('formatting helpers', () => {
-  it('formats durations as m:ss', () => {
-    expect(formatDuration(0)).toBe('0:00');
-    expect(formatDuration(65_000)).toBe('1:05');
-    expect(formatDuration(Number.NaN)).toBe('0:00');
-  });
-
-  it('formats latencies for humans', () => {
-    expect(formatLatency(null)).toBe('—');
-    expect(formatLatency(250)).toBe('250 ms');
-    expect(formatLatency(2_500)).toBe('2.5 s');
   });
 });
 

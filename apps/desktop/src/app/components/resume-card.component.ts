@@ -5,6 +5,7 @@ import { AppStateService } from '../core/app-state.service';
 import { I18nService } from '../core/i18n/i18n.service';
 import type { MessageKey } from '../core/i18n/messages.en';
 import { focusableWithin, nextIndex } from '../core/focus-trap';
+import { formatMessage } from '../core/insights-view';
 import {
   answerTooLong,
   canCheckAnswer,
@@ -370,7 +371,8 @@ export class ResumeCardComponent implements OnDestroy {
   }
 
   protected context(view: ResumeCardView): string {
-    return this.i18n.translate(view.card.lastContext);
+    // The gap comes over as `durationMs`; this is where it becomes "3 minutes" in the learner's language.
+    return formatMessage(view.card.lastContext, this.t);
   }
 
   protected nextAction(view: ResumeCardView): string {

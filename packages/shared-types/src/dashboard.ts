@@ -52,7 +52,14 @@ export interface RescueOutcomeSummary {
 export interface DashboardSummary {
   readonly sessionId: string | null;
   readonly courseTitle: string | null;
+  /** The time the learner was on task — study time, not the window the session was open. */
   readonly sessionDurationMs: number;
+  /**
+   * The session's wall clock, `startedAt` → `endedAt` (or now). A different question from study time:
+   * this is how long the sitting lasted, including breaks and away time. A session left with no
+   * observation for `sessionIdleTimeoutMs` is ended, so this stops rather than growing for a fortnight.
+   */
+  readonly sessionElapsedMs: number;
   readonly tasksCompleted: number;
   readonly tasksTotal: number;
   readonly interruptCount: number;

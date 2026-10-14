@@ -274,13 +274,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
   study clock stopped. The idle events are still recorded — an agent reading the session should know they
   went quiet — but they change no learning state, and only an observed departure (the window losing focus)
   now escalates to `INTERRUPTED`. The resume card follows: it is built from a real departure, not from a
-  quiet stretch, so a reader is not told they were away.
+  quiet stretch, so a reader is not told they were away. Because quiet is still worth acknowledging, the
+  running step now shows one muted line — "Still there? Your clock is still running." — with a Keep-going
+  button; it is a question, not a verdict, and it never stops the clock. Any input clears it from the
+  engine side, and the dismissal is local and forgotten as soon as the quiet stretch ends.
 - **A focus commitment survives a reload or restart.** The three-minute commitment lived only in memory, so
   a learner who reloaded at 2:50 was handed a fresh three minutes, and closing the app lost it entirely.
   The service stores it under the renderer's own key and restores it against the session and task it was
   started for; the stored value carries the absolute end time, so a restore recomputes what is left from
   the clock rather than trusting a remainder that stopped moving, and a timer that ran out while the app
   was closed comes back expired rather than reset.
+- **A session left with nothing observed for hours is ended, so its elapsed time stops.** A session is not
+  ended by closing the app, so one left open over a weekend kept a natural elapsed time that grew to a
+  fortnight. The first tick after a gap longer than `sessionIdleTimeoutMs` (four hours) ends it with reason
+  `timeout`, which bounds both the sitting's wall clock and the study time the dashboard reads. The
+  dashboard now shows the two as separate numbers: "Session duration" is that wall clock and the window's
+  hero is study time, so "how long was I here" and "how long did I work" can no longer be confused.
+- **The resume card's "away for X" is written by the shell, not the domain.** The domain used to format
+  the gap itself ("3 min"), which could not know the locale, so a Chinese card said "3 min" in the middle
+  of a Chinese sentence. It hands over `durationMs` now and the renderer formats it with the same
+  `formatSpan` the dashboard uses. The dead `m:ss` / `250 ms` formatters in `agent-core/dashboard.ts` went
+  with it — the renderer's `format.ts` was the one actually in use.
 - **Study time no longer depends on how often the app wrote an event.** The insights timeline capped
   every stretch at the idle threshold, so the same ten minutes of reading counted as ten with an event
   every two minutes and as two with only a start and an end, and a witnessed absence was credited in full

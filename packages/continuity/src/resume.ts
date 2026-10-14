@@ -184,17 +184,15 @@ function describeLastContext(
 
   if (interruption.gapMs <= 0) return message('resume.context.moment', base);
 
+  /*
+   * `durationMs`, not a pre-formatted "3 min". A duration is a number, and the language it is written
+   * in — and the unit that reads best — belongs to the shell. The renderer turns this into text with the
+   * same `formatSpan` the dashboard uses, so "away for 3 minutes" and "3m" are one decision, not two.
+   */
   return message('resume.context.away', {
     ...base,
-    duration: formatDuration(interruption.gapMs),
+    durationMs: String(Math.max(0, Math.round(interruption.gapMs))),
   });
-}
-
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.round(ms / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const minutes = Math.round(totalSeconds / 60);
-  return `${minutes} min`;
 }
 
 /** Learner text — the step, the idea — bounded, or `null` when there is not one to show. */

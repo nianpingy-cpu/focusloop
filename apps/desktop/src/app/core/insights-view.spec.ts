@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DailyActivity, StateShare } from '@focusloop/shared-types';
+import type { DailyActivity, LocalizedMessage, StateShare } from '@focusloop/shared-types';
 import {
   STATE_COLORS,
   acceptedPercent,
@@ -7,6 +7,7 @@ import {
   busiestDay,
   donutSegments,
   focusRatio,
+  formatMessage,
   formatSpan,
   heatLevel,
   heatmapLeadingBlanks,
@@ -223,6 +224,31 @@ describe('formatSpan', () => {
 
   it('never renders a negative span', () => {
     expect(formatSpan(-5_000, t)).toBe('0s');
+  });
+});
+
+describe('formatMessage', () => {
+  const t = (key: string, params: Record<string, string> = {}): string => {
+    if (key !== 'resume.context.away') return key;
+    return `away ${params['duration']}`;
+  };
+
+  it('writes a millisecond span the way the dashboard writes spans', () => {
+    const message: LocalizedMessage = {
+      key: 'resume.context.away',
+      params: { concept: 'c', goal: 'g', durationMs: `${3 * 60_000}` },
+    };
+    // `formatMessage` fills `duration` from `durationMs`; the `t` above is the English shorthand.
+    expect(
+      formatMessage(message, (key, params = {}) =>
+        key === 'unit.m' ? `${params['m']}m` : t(key, params),
+      ),
+    ).toBe('away 3m');
+  });
+
+  it('leaves a message with no span alone', () => {
+    const message: LocalizedMessage = { key: 'resume.context.plain', params: { concept: 'c' } };
+    expect(formatMessage(message, t)).toBe('resume.context.plain');
   });
 });
 

@@ -259,6 +259,13 @@ export interface SessionSnapshot {
   readonly progress: SessionProgress;
   readonly courseTitle: string | null;
   readonly checkpoints: readonly LearningCheckpoint[];
+  /**
+   * When the learner last went quiet, or `null` while they are interacting.
+   *
+   * An *observation*, not a state: the shell uses it to offer a gentle "still there?" reminder, and it
+   * deliberately does not move the learning state or stop the study clock. `IDLE_ENDED` clears it.
+   */
+  readonly idleSince: string | null;
 }
 
 export interface ResumeDecisionRequest {

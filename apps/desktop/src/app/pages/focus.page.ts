@@ -230,6 +230,26 @@ const NOTICE_GAP = 16;
                 </div>
 
                 <!--
+                  The quiet reminder. Not a state change and not a card: going quiet is not evidence of
+                  leaving, so this asks rather than concludes, and the study clock keeps running while it
+                  is up. Any input clears it from the engine side; the button is for a learner who is
+                  reading and does not want the line in the way.
+                -->
+                @if (reminding()) {
+                  <p class="focus-idle" role="status" data-testid="idle-reminder">
+                    <span>{{ t('focus.idle.reminder') }}</span>
+                    <button
+                      type="button"
+                      class="btn btn--small btn--quiet"
+                      data-testid="idle-reminder-dismiss"
+                      (click)="dismissIdleReminder()"
+                    >
+                      {{ t('focus.idle.dismiss') }}
+                    </button>
+                  </p>
+                }
+
+                <!--
                   What the step asks the learner to produce, and the one place they can say it.
 
                   Without this the only thing a completion carried was the task id: the checkpoint's
@@ -656,6 +676,27 @@ export class FocusPage implements OnDestroy, OnInit {
   protected readonly railAttr = computed(() => (this.rail() ? '' : null));
   protected readonly plan = computed(() => buildPlan(this.openTasks()));
   protected readonly nextTask = computed<MicroTask | null>(() => this.openTasks()[0] ?? null);
+
+  /**
+   * The gentle "still there?" line, and only for a running step.
+   *
+   * `idleSince` is an observation the engine records; this reads it without acting on it, and the
+   * dismissal is local (and forgotten as soon as the engine clears the marker), so the reminder can
+   * neither stop the clock nor outlive the quiet stretch that raised it.
+   */
+  private readonly idleReminderDismissed = signal(false);
+  protected readonly reminding = computed(
+    () =>
+      (this.snapshot()?.idleSince ?? null) !== null &&
+      this.phase() === 'active' &&
+      !this.idleReminderDismissed(),
+  );
+  protected dismissIdleReminder(): void {
+    this.idleReminderDismissed.set(true);
+  }
+  private readonly resetIdleReminder = effect(() => {
+    if ((this.snapshot()?.idleSince ?? null) === null) this.idleReminderDismissed.set(false);
+  });
 
   /** A learner accepted a BREAK plan, so pause the local focus clock until Continue. */
   private readonly followRescueTimer = effect(() => {

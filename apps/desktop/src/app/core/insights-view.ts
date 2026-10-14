@@ -4,7 +4,12 @@
  * Pure functions only, so the donut maths is unit-tested instead of being
  * verified by looking at a screen.
  */
-import type { DailyActivity, LearningState, StateShare } from '@focusloop/shared-types';
+import type {
+  DailyActivity,
+  LearningState,
+  LocalizedMessage,
+  StateShare,
+} from '@focusloop/shared-types';
 import type { MessageKey } from './i18n/i18n.service';
 
 /** Injected so these helpers stay free of Angular DI and unit-testable. */
@@ -154,6 +159,23 @@ export function formatSpan(ms: number, t: Translate): string {
   return hours === 0
     ? t('unit.m', { m: `${minutes}` })
     : t('unit.hm', { h: `${hours}`, m: `${minutes}` });
+}
+
+/**
+ * A message the domain emitted, with any millisecond span written the way the dashboard writes spans.
+ *
+ * The domain hands over `durationMs` rather than a finished "3 min": it cannot know the locale, and a
+ * second formatter over there would drift from this one. The resume card's "away for {duration}" is
+ * the only shape that needs it today, and it is measured with the same `formatSpan` as every other
+ * duration on the dashboard.
+ */
+export function formatMessage(message: LocalizedMessage, t: Translate): string {
+  const raw = message.params['durationMs'];
+  if (raw === undefined) return t(message.key as MessageKey, message.params);
+  const ms = Number(raw);
+  const params = { ...message.params };
+  if (Number.isFinite(ms)) params['duration'] = formatSpan(ms, t);
+  return t(message.key as MessageKey, params);
 }
 
 /** `6/15` — the short date label on a heatmap cell and the busiest day. */

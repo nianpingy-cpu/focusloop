@@ -59,6 +59,7 @@ function snapshotWith(patch: Partial<SessionSnapshot['session']> = {}): SessionS
     },
     courseTitle: 'Rotations',
     checkpoints: [],
+    idleSince: null,
   };
 }
 

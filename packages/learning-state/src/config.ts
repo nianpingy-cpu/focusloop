@@ -22,6 +22,17 @@ export interface StateEngineConfig {
    * (a measurement decision). The two are allowed to differ now, which is the point.
    */
   readonly presenceTimeoutMs: number;
+  /**
+   * How long a session may go without a single observation before it is over.
+   *
+   * A session is not ended by closing the app, so one left open over a weekend kept a natural elapsed
+   * time that grew to a fortnight. This is the rule that ends it: on the first tick after the gap, a
+   * session whose last event is older than this is ended with reason `timeout`, so its elapsed time —
+   * and a fresh one's — stop being ambiguous. Deliberately long, because a learner reading with no
+   * input still produces one observation (the idle report) and must not have their session ended
+   * underneath them mid-chapter.
+   */
+  readonly sessionIdleTimeoutMs: number;
   /** Time in READY with no task started before INITIATION_FRICTION. */
   readonly initiationFrictionThresholdMs: number;
   /** Consecutive incorrect quizzes before CONFUSED. */
@@ -37,6 +48,7 @@ export const DEFAULT_STATE_ENGINE_CONFIG: StateEngineConfig = {
   tabLeftThresholdMs: 20_000,
   idleThresholdMs: 120_000,
   presenceTimeoutMs: 120_000,
+  sessionIdleTimeoutMs: 4 * 60 * 60_000,
   initiationFrictionThresholdMs: 45_000,
   consecutiveIncorrectThreshold: 2,
   helpRequestOverloadThreshold: 3,

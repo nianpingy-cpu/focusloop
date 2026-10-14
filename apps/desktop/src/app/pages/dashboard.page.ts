@@ -392,8 +392,13 @@ export class DashboardPage {
     return `${day.date} · ${this.span(day.durationMs)}`;
   }
 
+  /**
+   * This sitting's wall clock, not its study time. The window's hero is where study time lives; keeping
+   * the two apart is the whole point of having both — "how long was I here" and "how long did I work"
+   * are different questions and used to share one number.
+   */
   protected duration(): string {
-    return formatDuration(this.summary()?.sessionDurationMs ?? 0);
+    return formatDuration(this.summary()?.sessionElapsedMs ?? 0);
   }
 
   protected latency(): string {
