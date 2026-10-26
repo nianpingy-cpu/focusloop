@@ -56,10 +56,10 @@ jobs:
       # they run; these are the queries that read what they say — a `run:` block expanding
       # `${{ github.event.* }}` out of a pull request title is a class nothing else in the
       # repository can see. `build-mode: none`: there is nothing to compile for either language.
-      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           languages: javascript-typescript, actions
 
-      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           category: '/language:javascript-typescript,actions'
