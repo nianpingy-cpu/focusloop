@@ -36,7 +36,7 @@
     "mammoth": "^1.13.0",
     "pdf-parse": "^2.4.5",
     "tesseract.js": "^7.0.0",
-    "ws": "^8.22.0"
+    "ws": "^8.22.1"
   },
   "devDependencies": {
     "@angular/build": "^20.3.41",
